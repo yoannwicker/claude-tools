@@ -49,12 +49,19 @@ commité) ou branche courante. Les outils autorisés sont listés dans le frontm
 
 ### Skill `/worktree`
 
-`/worktree [list | clear]` : liste les worktrees du dépôt courant avec un verdict
+`/worktree [list | clear | release]` : liste les worktrees du dépôt courant avec un verdict
 (`scan.sh`), et avec `clear` supprime après confirmation ceux qui sont libres. Libre =
 ni dépôt principal, ni worktree de la session, ni verrouillé, sans modifications locales,
 et sans aucun processus de l'utilisateur dont le cwd est dedans (lecture de
 `/proc/*/cwd` : couvre les sessions Claude, les shells et les terminaux IDE). Suppression
 par `git worktree remove` sans `--force`, branches conservées, puis `git worktree prune`.
+
+`release` libère le worktree de la session (typiquement une fois la PR terminée, que
+`clear` ignore) : refus s'il est verrouillé ou a des modifications non commitées,
+confirmation s'il a des commits non poussés ou pas d'upstream ; la session le quitte
+(`ExitWorktree` en mode `keep` — `remove` supprimerait aussi la branche — ou `cd` vers
+le dépôt principal si elle a été lancée dedans), puis `git worktree remove` depuis le
+dépôt principal. La branche est conservée.
 Prérequis : Linux (`/proc`).
 
 Prochains skills : un sous-titre par skill, même gabarit (déclencheur, ce qu'il fait,
