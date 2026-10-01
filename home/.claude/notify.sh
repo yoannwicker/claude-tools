@@ -8,7 +8,9 @@ event=$($jq -r '.hook_event_name // empty' <<<"$in")
 type=$($jq -r '.notification_type // empty' <<<"$in")
 msg=$($jq -r '.message // .error // empty' <<<"$in")
 session_id=$($jq -r '.session_id // empty' <<<"$in")
-where=$(basename "$($jq -r '.cwd // empty' <<<"$in")")
+cwd=$($jq -r '.cwd // empty' <<<"$in")
+transcript=$($jq -r '.transcript_path // empty' <<<"$in")
+where=$(basename "$cwd")
 urgency=normal
 ws_label=
 agent=
@@ -17,6 +19,16 @@ if [ "$event" = UserPromptSubmit ]; then
   [ -n "$session_id" ] && setsid -f bash ~/.claude/notify-click.sh --clear-session "$session_id" </dev/null >/dev/null 2>&1
   exit 0
 fi
+
+# Session title (the one Claude shows in the terminal, or a /rename) and
+# branch, so notifications of different sessions do not all read the same
+session_title=
+branch=
+if [ -f "$transcript" ]; then
+  session_title=$(grep -oE '"(customTitle|aiTitle)":"[^"]*"' "$transcript" | tail -1 | sed 's/^"[a-zA-Z]*":"//; s/"$//')
+  branch=$(grep -oE '"gitBranch":"[^"]*"' "$transcript" | tail -1 | sed 's/^"gitBranch":"//; s/"$//')
+fi
+[ -n "$cwd" ] && branch=$(git -C "$cwd" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "$branch")
 
 # tty of the gnome-terminal tab hosting this session: the highest ancestor
 # that still has one (the herdr client under herdr, the shell otherwise)
@@ -61,9 +73,10 @@ case "$event:$type" in
   *)                              title="🔔 Claude Code" ;;
 esac
 
-body=$(printf '%s\n%s' "$agent" "$msg" | sed '/^$/d')
-[ "$event" = Stop ] && [ -z "$body" ] && body="C'est fini"
-$jq -n --arg title "$title${where:+ · $where}" --arg body "$body" --arg urgency "$urgency" \
+context="$where${branch:+ · $branch}"
+[ -z "$session_title" ] && [ -n "$agent" ] && session_title=$agent
+body=$(printf '%s\n%s' "$context" "$msg" | sed '/^$/d')
+$jq -n --arg title "$title · ${session_title:-$where}" --arg body "$body" --arg urgency "$urgency" \
   --arg pane_id "$HERDR_PANE_ID" --arg herdr "${HERDR_BIN_PATH:-herdr}" --arg ws_label "$ws_label" \
   --arg tty "$tty" --arg where "$where" --arg session_id "$session_id" --arg event "$event" \
   '$ARGS.named' |
