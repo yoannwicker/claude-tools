@@ -12,7 +12,7 @@ spécifique) est dans [TOOLS.md](TOOLS.md).
 Tout d'un coup (liens + scripts `setup/`) :
 
 ```bash
-git clone <ce-repo> ~/workspace_perso/claude-tools
+git clone git@github.com:yoannwicker/claude-tools.git ~/workspace_perso/claude-tools
 cd ~/workspace_perso/claude-tools && ./install.sh
 ```
 
