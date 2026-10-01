@@ -20,7 +20,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 
 | Outil | Commande | Prérequis |
 |---|---|---|
-| Claude Code (settings, status line, skills `/pr`, `/worktree`) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
+| Claude Code (settings, status line, règles, skills `/pr`, `/worktree`) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
 | mise (outils globaux) | `./setup/10-mise.sh` | `curl` |
 | herdr (+ intégrations Claude/Copilot) | `./setup/20-herdr.sh` | `curl` ; Linux ou macOS |
 | Notifications desktop (hooks + extension GNOME) | `./install.sh link && ./setup/30-gnome.sh` | GNOME Shell 46, `python3-gi`, `gdbus`, `xprop`, gnome-terminal |
@@ -59,7 +59,7 @@ utilisateur), `~/.claude/projects/` (transcripts, mémoire), `~/.claude/plugins/
 ```
 install.sh          link | setup | status | adopt | capture (défaut : link + setup)
 home/               miroir de $HOME, un lien par fichier
-  .claude/          settings.json, statusline-*.sh, notify*.sh, claude-notify.py, skills/{pr,worktree}/
+  .claude/          settings.json, statusline-*.sh, notify*.sh, claude-notify.py, rules/, skills/{pr,worktree}/
   .config/          herdr/config.toml, mise/config.toml
   .local/           bin/{cl,dot}, share/gnome-shell/extensions/claude-notify@ywicker/
 setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 40-mcp, 50-cl

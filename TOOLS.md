@@ -9,7 +9,7 @@ installation · fonctionnalités et configuration spécifique.
 (`~/.claude`), pas la configuration des projets (`.claude/` dans chaque repo).
 
 **Fichiers** : `home/.claude/settings.json`, `statusline-command.sh`, `statusline-ps1.sh`,
-`notify.sh`, `notify-click.sh`, `claude-notify.py`, `skills/pr/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`, `home/.local/bin/cl`.
+`notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/{build-brief,jetbrains-mcp}.md`, `skills/pr/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`, `home/.local/bin/cl`.
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line,
 notifications) ; `gh` authentifié (skill `/pr`, badge PR de la status line) ; Linux +
@@ -30,6 +30,17 @@ IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [MCP IntelliJ](#m
   machine sans herdr (voir [herdr](#herdr)).
 - `statusLine` → `statusline-command.sh`, rafraîchie toutes les 10 s.
 - `autoContinueAtUsageLimit = false`, `inputNeededNotifEnabled = true`.
+
+### Règles (`~/.claude/rules/`)
+
+Instructions chargées dans toutes les sessions, reprises de `~/.copilot/instructions/`
+(noms d'outils adaptés à Claude) :
+
+- `build-brief.md` : toute commande Gradle passe par `build-brief` (`build-brief ./gradlew …`),
+  Gradle brut seulement dans les exceptions listées. Prérequis : `build-brief` dans le PATH.
+- `jetbrains-mcp.md` : recherche, refactoring et diff via les outils `mcp__intellij__*`
+  plutôt que `grep`/`find`, sauf MCP injoignable ou projet non ouvert dans l'IDE
+  (voir [MCP IntelliJ](#mcp-intellij)).
 
 ### Lanceur `cl`
 
