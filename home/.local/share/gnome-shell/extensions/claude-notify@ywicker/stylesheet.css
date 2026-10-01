@@ -1,0 +1,22 @@
+.claude-notify-icon {
+  font-size: 15px;
+}
+.claude-notify-icon.dim {
+  color: rgba(255, 255, 255, 0.45);
+}
+.claude-notify-count {
+  background-color: #e01b24;
+  color: white;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 0 5px;
+  margin-left: 2px;
+}
+.claude-notify-title {
+  font-weight: bold;
+}
+.claude-notify-body {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+}

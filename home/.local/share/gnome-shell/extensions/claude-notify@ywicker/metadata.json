@@ -1,0 +1,7 @@
+{
+  "uuid": "claude-notify@ywicker",
+  "name": "Claude Notify",
+  "description": "Pastille des notifications Claude Code en attente ; un clic ramène sur la session.",
+  "shell-version": ["46"],
+  "version": 1
+}
