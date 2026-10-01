@@ -9,7 +9,7 @@ installation · fonctionnalités et configuration spécifique.
 (`~/.claude`), pas la configuration des projets (`.claude/` dans chaque repo).
 
 **Fichiers** : `home/.claude/settings.json`, `statusline-command.sh`, `statusline-ps1.sh`,
-`notify.sh`, `notify-click.sh`, `claude-notify.py`, `skills/pr/SKILL.md`.
+`notify.sh`, `notify-click.sh`, `claude-notify.py`, `skills/pr/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`.
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line,
 notifications) ; `gh` authentifié (skill `/pr`, badge PR de la status line) ; Linux +
@@ -46,6 +46,16 @@ uniquement), la charge en contexte (description, revue, checks, commentaires), p
 demande toujours où se placer : worktree dédié (recommandé s'il y a du travail local non
 commité) ou branche courante. Les outils autorisés sont listés dans le frontmatter du
 `SKILL.md`. Prérequis : `gh` authentifié sur le compte qui voit le repo.
+
+### Skill `/worktree`
+
+`/worktree [list | clear]` : liste les worktrees du dépôt courant avec un verdict
+(`scan.sh`), et avec `clear` supprime après confirmation ceux qui sont libres. Libre =
+ni dépôt principal, ni worktree de la session, ni verrouillé, sans modifications locales,
+et sans aucun processus de l'utilisateur dont le cwd est dedans (lecture de
+`/proc/*/cwd` : couvre les sessions Claude, les shells et les terminaux IDE). Suppression
+par `git worktree remove` sans `--force`, branches conservées, puis `git worktree prune`.
+Prérequis : Linux (`/proc`).
 
 Prochains skills : un sous-titre par skill, même gabarit (déclencheur, ce qu'il fait,
 prérequis).
