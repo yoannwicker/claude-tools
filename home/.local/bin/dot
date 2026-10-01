@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# dot — met à jour la config versionnée et les outils (mise, herdr, claude). À lancer de temps en temps.
+set -u
+repo=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../.." && pwd)
+say() { printf '\n\033[0;34m%s\033[0m\n' "$*"; }
+
+say "Dérive de la config (à committer dans $repo) :"
+git -C "$repo" status --short
+if git -C "$repo" remote get-url origin >/dev/null 2>&1; then
+  say "git pull"; git -C "$repo" pull --ff-only
+fi
+
+say "Liens :"
+"$repo/install.sh" status || echo "→ ./install.sh link (ou adopt/capture) pour corriger"
+
+if command -v mise >/dev/null 2>&1; then
+  say "mise"; mise self-update --yes 2>/dev/null || true; mise upgrade --yes || true
+fi
+if command -v herdr >/dev/null 2>&1; then
+  say "herdr"
+  if [ "${HERDR_ENV:-}" = "1" ]; then
+    echo "session herdr en cours : lancer \`herdr update\` depuis un terminal hors herdr"
+  else
+    herdr update || true
+  fi
+  bash "$repo/setup/20-herdr.sh"
+fi
+if command -v claude >/dev/null 2>&1; then
+  say "claude"; claude update || true
+fi
