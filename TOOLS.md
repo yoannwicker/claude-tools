@@ -9,7 +9,7 @@ installation · fonctionnalités et configuration spécifique.
 (`~/.claude`), pas la configuration des projets (`.claude/` dans chaque repo).
 
 **Fichiers** : `home/.claude/settings.json`, `statusline-command.sh`, `statusline-ps1.sh`,
-`notify.sh`, `notify-click.sh`, `claude-notify.py`, `skills/pr/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`.
+`notify.sh`, `notify-click.sh`, `claude-notify.py`, `skills/pr/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`, `home/.local/bin/cl`.
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line,
 notifications) ; `gh` authentifié (skill `/pr`, badge PR de la status line) ; Linux +
@@ -30,6 +30,29 @@ IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [MCP IntelliJ](#m
   machine sans herdr (voir [herdr](#herdr)).
 - `statusLine` → `statusline-command.sh`, rafraîchie toutes les 10 s.
 - `autoContinueAtUsageLimit = false`, `inputNeededNotifEnabled = true`.
+
+### Lanceur `cl`
+
+`cl [projet] [arguments claude…]` : équivalent de `cop` pour Claude. Cherche `projet`
+dans les espaces de travail configurés : nom exact, sinon correspondance partielle
+insensible à la casse, sinon menu de tous les projets (menu aussi dès que plusieurs
+correspondent ; un nom présent dans deux espaces s'affiche `nom (espace)`). Puis `cd` et
+`exec claude` avec les arguments restants (`cl babel -c`, `cl vira --resume`). Script et
+non fonction shell : le terminal revient dans son dossier d'origine à la sortie.
+
+Espaces de travail : propres à chaque machine, donc dans `~/.config/cl/workspaces` (un
+chemin par ligne, non versionné). `setup/50-cl.sh` les fait choisir à l'installation :
+il propose les dossiers de `$HOME` qui contiennent des dépôts git (numéros pour cocher,
+chemin pour en ajouter un) ; sans terminal (relancé par `./install.sh setup`) il garde la
+config existante, sinon retient les `~/workspace*`. Ensuite, en chemin :
+
+- `cl --list` : espaces configurés avec leur nombre de projets (`absent` si disparu) ;
+- `cl --add [chemin…]` : ajoute (dossier courant par défaut) ;
+- `cl --remove <chemin|numéro>…` : retire (numéros de `--list`) ;
+- `cl --setup` : refait la sélection interactive.
+
+`CL_WORKSPACE=dir1:dir2` remplace la config le temps d'une commande ; sans config, repli
+sur `~/workspace`.
 
 ### Status line
 

@@ -24,6 +24,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | mise (outils globaux) | `./setup/10-mise.sh` | `curl` |
 | herdr (+ intégrations Claude/Copilot) | `./setup/20-herdr.sh` | `curl` ; Linux ou macOS |
 | Notifications desktop (hooks + extension GNOME) | `./install.sh link && ./setup/30-gnome.sh` | GNOME Shell 46, `python3-gi`, `gdbus`, `xprop`, gnome-terminal |
+| Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
 | MCP IntelliJ | `./setup/40-mcp.sh` | `claude`, IntelliJ avec le serveur MCP sur le port 64342 |
 
 Sans GNOME : garder `./install.sh link` et retirer les hooks `notify.sh` de
@@ -35,6 +36,10 @@ demander une déconnexion/reconnexion de session.
 
 - `git status` dans ce repo montre ce qui a changé dans ma config (les fichiers de
   `$HOME` sont des liens vers `home/`) : relire, committer.
+- `cl <projet> [args claude…]` (lié dans `~/.local/bin`) : ouvre Claude Code sur un
+  projet des espaces de travail choisis à l'installation (nom exact, sinon partiel
+  insensible à la casse, sinon menu). `cl --list | --add [chemin] | --remove <n>` pour les
+  faire évoluer, `cl --setup` pour refaire la sélection.
 - `dot` (lié dans `~/.local/bin`) : dérive git, état des liens, `mise upgrade`,
   `herdr update`, `claude update`.
 - `./install.sh adopt <fichier>` : versionner un nouveau fichier de `$HOME` (déplacé dans
@@ -56,7 +61,8 @@ install.sh          link | setup | status | adopt | capture (défaut : link + se
 home/               miroir de $HOME, un lien par fichier
   .claude/          settings.json, statusline-*.sh, notify*.sh, claude-notify.py, skills/{pr,worktree}/
   .config/          herdr/config.toml, mise/config.toml
-  .local/           bin/dot, share/gnome-shell/extensions/claude-notify@ywicker/
-setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 40-mcp
+  .local/           bin/{cl,dot}, share/gnome-shell/extensions/claude-notify@ywicker/
+setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 40-mcp, 50-cl
 TOOLS.md            détail par outil
+AGENTS.md           consignes pour les agents (CLAUDE.md l'importe)
 ```

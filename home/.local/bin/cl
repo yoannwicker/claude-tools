@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# cl — ouvre Claude Code sur un projet des espaces de travail : cl [projet] [arguments claude…]
+#   nom exact, sinon correspondance partielle insensible à la casse, sinon menu de tous les projets.
+#   cl --list | --add [chemin…] | --remove <chemin|numéro>… | --setup | --help
+#   Espaces : $CL_WORKSPACE (séparés par « : »), sinon ~/.config/cl/workspaces, sinon ~/workspace.
+set -u
+repo=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../.." && pwd)
+conf=${XDG_CONFIG_HOME:-$HOME/.config}/cl/workspaces
+
+usage() { sed -n '2,5p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+pretty() { case "$1" in "$HOME"/*) printf '~/%s' "${1#"$HOME"/}" ;; *) printf '%s' "$1" ;; esac; }
+
+# Espaces configurés (chemins absolus, existants ou non), un par ligne.
+configured() {
+  [ -f "$conf" ] || return 0
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line%%#*}; line=${line%"${line##*[![:space:]]}"}; line=${line#"${line%%[![:space:]]*}"}
+    [ -z "$line" ] && continue
+    case "$line" in "~") line=$HOME ;; "~/"*) line=$HOME/${line#"~/"} ;; esac
+    printf '%s\n' "$line"
+  done < "$conf"
+}
+
+save() { mkdir -p "$(dirname "$conf")"; printf '%s\n' "$@" > "$conf"; }
+
+count() { find "$1" -maxdepth 1 -mindepth 1 -type d ! -name '.*' 2>/dev/null | wc -l; }
+
+cmd_list() {
+  local -a ws; mapfile -t ws < <(configured)
+  [ ${#ws[@]} -eq 0 ] && { echo "Aucun espace configuré ($(pretty "$conf")) : cl --add <chemin> ou cl --setup"; return 0; }
+  local i
+  for i in "${!ws[@]}"; do
+    if [ -d "${ws[$i]}" ]; then
+      printf '%2d) %s  (%s projets)\n' $((i + 1)) "$(pretty "${ws[$i]}")" "$(count "${ws[$i]}")"
+    else
+      printf '%2d) %s  (absent)\n' $((i + 1)) "$(pretty "${ws[$i]}")"
+    fi
+  done
+}
+
+cmd_add() {
+  [ $# -eq 0 ] && set -- "$PWD"
+  local -a ws; mapfile -t ws < <(configured)
+  local p abs w dup
+  for p in "$@"; do
+    case "$p" in "~") p=$HOME ;; "~/"*) p=$HOME/${p#"~/"} ;; esac
+    [ -d "$p" ] || { echo "pas un dossier : $p" >&2; continue; }
+    abs=$(cd "$p" && pwd -P)
+    dup=""
+    for w in "${ws[@]}"; do [ "$w" = "$abs" ] && dup=1; done
+    if [ -n "$dup" ]; then echo "déjà présent : $(pretty "$abs")"; continue; fi
+    ws+=("$abs"); echo "ajouté : $(pretty "$abs")"
+  done
+  if [ ${#ws[@]} -gt 0 ]; then save "${ws[@]}"; fi
+}
+
+cmd_remove() {
+  [ $# -eq 0 ] && { echo "usage : cl --remove <chemin|numéro>…" >&2; return 2; }
+  local -a ws keep; mapfile -t ws < <(configured)
+  local -A drop=()
+  local a i abs found
+  for a in "$@"; do
+    found=""
+    if [[ $a =~ ^[0-9]+$ ]] && [ "$a" -ge 1 ] && [ "$a" -le ${#ws[@]} ]; then
+      drop[$((a - 1))]=1; found=1
+    else
+      case "$a" in "~") a=$HOME ;; "~/"*) a=$HOME/${a#"~/"} ;; esac
+      abs=$a; [ -d "$a" ] && abs=$(cd "$a" && pwd -P)
+      for i in "${!ws[@]}"; do
+        [ "${ws[$i]}" = "$abs" ] || [ "${ws[$i]}" = "${a%/}" ] && { drop[$i]=1; found=1; }
+      done
+    fi
+    [ -z "$found" ] && echo "non configuré : $a" >&2
+  done
+  keep=()
+  for i in "${!ws[@]}"; do
+    if [ -n "${drop[$i]:-}" ]; then echo "retiré : $(pretty "${ws[$i]}")"; else keep+=("${ws[$i]}"); fi
+  done
+  if [ ${#keep[@]} -gt 0 ]; then save "${keep[@]}"; else save; fi
+}
+
+case "${1:-}" in
+  --help|-h) usage; exit 0 ;;
+  --list)    cmd_list; exit ;;
+  --add)     shift; cmd_add "$@"; exit ;;
+  --remove)  shift; cmd_remove "$@"; exit ;;
+  --setup)   exec bash "$repo/setup/50-cl.sh" ;;
+  --*)       echo "option inconnue : $1" >&2; usage >&2; exit 2 ;;
+esac
+
+query=${1:-}
+[ $# -gt 0 ] && shift
+
+if [ -n "${CL_WORKSPACE:-}" ]; then
+  IFS=: read -r -a candidates <<< "$CL_WORKSPACE"
+elif [ -s "$conf" ]; then
+  mapfile -t candidates < <(configured)
+else
+  candidates=("$HOME/workspace")
+fi
+workspaces=()
+for w in "${candidates[@]}"; do
+  if [ -d "$w" ]; then workspaces+=("$w"); else echo "espace absent ignoré : $(pretty "$w")" >&2; fi
+done
+if [ ${#workspaces[@]} -eq 0 ]; then
+  echo "Erreur : aucun espace de travail disponible. Lancer cl --setup ou cl --add <chemin>." >&2
+  exit 1
+fi
+
+# Projets : chemins complets des sous-dossiers de chaque espace.
+mapfile -t all < <(for w in "${workspaces[@]}"; do
+  find "$w" -maxdepth 1 -mindepth 1 -type d ! -name '.*' -printf '%f\t%p\n'
+done | LC_ALL=C sort -f | cut -f2)
+declare -A seen=()
+for p in "${all[@]}"; do n=${p##*/}; seen[$n]=$(( ${seen[$n]:-0} + 1 )); done
+
+label() { local n=${1##*/}; if [ "${seen[$n]}" -gt 1 ]; then printf '%s (%s)\n' "$n" "$(basename "$(dirname "$1")")"; else printf '%s\n' "$n"; fi; }
+
+pick() {
+  local prompt=$1; shift
+  local -a labels=(); local p
+  for p in "$@"; do labels+=("$(label "$p")"); done
+  PS3=$prompt
+  select lbl in "${labels[@]}"; do
+    [ -n "$lbl" ] && { selected=${@:REPLY:1}; break; }
+  done
+}
+
+choose() { if [ $# -eq 1 ]; then selected=$1; elif [ $# -gt 1 ]; then pick "Plusieurs projets trouvés, choisissez : " "$@"; fi; }
+
+selected=""
+if [ -n "$query" ]; then
+  exact=(); partial=()
+  q=${query,,}
+  for p in "${all[@]}"; do
+    n=${p##*/}
+    [ "$n" = "$query" ] && exact+=("$p")
+    [[ ${n,,} == *"$q"* ]] && partial+=("$p")
+  done
+  if [ ${#exact[@]} -gt 0 ]; then choose "${exact[@]}"; else choose "${partial[@]}"; fi
+fi
+
+[ -z "$selected" ] && pick "Choisissez un projet : " "${all[@]}"
+
+[ -z "$selected" ] && exit 0
+cd "$selected" || exit 1
+exec claude "$@"
