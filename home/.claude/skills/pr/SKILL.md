@@ -1,7 +1,7 @@
 ---
 name: pr
 description: Rechercher une PR GitHub (numéro ou mots-clés), la charger en contexte et se placer dessus (branche courante ou worktree)
-argument-hint: <numéro | recherche>
+argument-hint: [numéro | recherche]
 allowed-tools: Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr diff:*), Bash(gh pr checkout:*), Bash(git status:*), Bash(git worktree list:*), Bash(git worktree add:*), Bash(git rev-parse:*), Bash(git fetch origin:*), Bash(git show-ref:*), Bash(git check-ignore:*), Bash(mise trust:*), EnterWorktree
 ---
 
@@ -10,15 +10,29 @@ Argument : `$ARGUMENTS`
 ## 1. Trouver la PR
 
 - Argument numérique (`83`, `#83`) → PR n°83, passer à l'étape 2.
-- Argument vide → `gh pr list --limit 20` (PR ouvertes).
-- Sinon → `gh pr list --limit 20 --search "$ARGUMENTS"` (PR ouvertes, brouillons inclus ;
-  jamais les fermées ou mergées).
+- Argument vide → `gh pr list --limit 50 --search "sort:updated-desc" --json number,title,headRefName,author,isDraft,updatedAt`
+  (PR ouvertes, les plus récemment modifiées d'abord).
+- Sinon → `gh pr list --limit 50 --search "$ARGUMENTS" --json number,title,headRefName,author,isDraft,updatedAt`
+  (PR ouvertes, brouillons inclus ; jamais les fermées ou mergées).
+
+On récupère jusqu'à 50 PR pour connaître le total, mais on n'en montre que 10 au plus
+(4 options + 6 dans la liste) ; les autres sont seulement comptées.
 
 Pour une liste :
 - 0 résultat → le dire et proposer une recherche plus large, s'arrêter.
-- 1 résultat → passer à l'étape 2.
-- Plusieurs → afficher un tableau (#, titre, état, branche, date) et attendre que je tape
-  le numéro choisi (pas de sélecteur).
+- 1 résultat → passer directement à l'étape 2, sans rien demander.
+- Plusieurs → sélecteur `AskUserQuestion` (header « PR »), une option par PR :
+  label `#<n> <titre tronqué>`, description `<branche> · <auteur> · <date>` (+ « draft »
+  si brouillon), sans « (Recommended) ».
+  - Le sélecteur est limité à 4 options : les 4 premières PR (dans l'ordre renvoyé par
+    `gh`) sont les options. Jusqu'à 4 résultats, la question est « Quelle PR charger ? ».
+    Au-delà, la question commence par une liste compacte des suivantes (PR 5 à 10) :
+    une ligne par PR, sans ligne vide entre elles, au format
+    `#<n> <titre tronqué à ~60 caractères>`. S'il y a plus de 10 résultats, ajouter
+    obligatoirement une dernière ligne `… et <k> autres PR` (k = total − 10 ; si `gh` a
+    renvoyé 50 résultats, écrire `… et 40+ autres PR`). Puis une ligne vide et « Quelle
+    PR charger ? (« Other » permet de taper le numéro d'une PR de la liste ci-dessus) ».
+  - Le numéro choisi (option ou saisie dans « Other ») → étape 2.
 
 ## 2. Charger la PR en contexte
 

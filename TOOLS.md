@@ -75,10 +75,13 @@ nom du worktree, durée de session. `statusline-ps1.sh` est la variante minimale
 
 ### Skill `/pr`
 
-`/pr <numéro | mots-clés>` : trouve une PR GitHub (`gh pr list`/`view`, PR ouvertes
-uniquement), la charge en contexte (description, revue, checks, commentaires), puis
-demande toujours où se placer : worktree dédié (recommandé s'il y a du travail local non
-commité) ou branche courante. Les outils autorisés sont listés dans le frontmatter du
+`/pr [numéro | mots-clés]` : trouve une PR GitHub (`gh pr list`/`view`, PR ouvertes
+uniquement ; sans argument, les plus récemment modifiées d'abord) — une seule
+correspondance est ouverte directement, plusieurs sont proposées dans un sélecteur (les 4
+premières ; les 6 suivantes listées dans la question, à taper dans « Other », plus le
+nombre de PR restantes) —, la charge en contexte (description, revue, checks,
+commentaires), puis demande toujours où se placer : worktree dédié (recommandé s'il y a
+du travail local non commité) ou branche courante. Les outils autorisés sont listés dans le frontmatter du
 `SKILL.md`. Prérequis : `gh` authentifié sur le compte qui voit le repo.
 
 ### Skill `/worktree`
