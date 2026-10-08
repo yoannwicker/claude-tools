@@ -26,6 +26,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Notifications desktop (hooks + extension GNOME) | `./install.sh link && ./setup/30-gnome.sh` | GNOME Shell 46, `python3-gi`, `gdbus`, `xprop`, gnome-terminal |
 | Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
 | MCP IntelliJ | `./setup/40-mcp.sh` | `claude`, IntelliJ avec le serveur MCP sur le port 64342 |
+| Plugin `pr-comments` (fils de review non résolus) | `./setup/60-plugins.sh` | `claude` ≥ 2.1.287, `gh` authentifié, `jq` |
 
 Sans GNOME : garder `./install.sh link` et retirer les hooks `notify.sh` de
 `home/.claude/settings.json` (événements `Stop`, `StopFailure`, `Notification`,
@@ -40,6 +41,9 @@ demander une déconnexion/reconnexion de session.
   projet des espaces de travail choisis à l'installation (nom exact, sinon partiel
   insensible à la casse, sinon menu). `cl --list | --add [chemin] | --remove <n>` pour les
   faire évoluer, `cl --setup` pour refaire la sélection.
+- Fils de review non résolus de mes PR (et de celles que je relis) : ligne `💬` au-dessus
+  du prompt, `c` ou `/pr-review` pour les parcourir, les envoyer à Claude, répondre,
+  résoudre (plugin `pr-comments`).
 - `dot` (lié dans `~/.local/bin`) : dérive git, état des liens, `mise upgrade`,
   `herdr update`, `claude update`.
 - `./install.sh adopt <fichier>` : versionner un nouveau fichier de `$HOME` (déplacé dans
@@ -62,7 +66,9 @@ home/               miroir de $HOME, un lien par fichier
   .claude/          settings.json, statusline-*.sh, notify*.sh, claude-notify.py, rules/, skills/{pr,worktree}/
   .config/          herdr/config.toml, mise/config.toml
   .local/           bin/{cl,dot}, share/gnome-shell/extensions/claude-notify@ywicker/
-setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 40-mcp, 50-cl
+.claude-plugin/     marketplace.json : ce dépôt comme marketplace locale « claude-tools »
+plugins/            plugins Claude Code (pr-comments/, repris d'aguiddir/claude-config)
+setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 40-mcp, 50-cl, 60-plugins
 TOOLS.md            détail par outil
 AGENTS.md           consignes pour les agents (CLAUDE.md l'importe)
 ```

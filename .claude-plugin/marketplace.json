@@ -1,0 +1,14 @@
+{
+  "name": "claude-tools",
+  "owner": {
+    "name": "ywicker"
+  },
+  "description": "Plugins de claude-tools",
+  "plugins": [
+    {
+      "name": "pr-comments",
+      "source": "./plugins/pr-comments",
+      "description": "A pane to work through the review threads of your PRs and the current branch's: hand some to Claude, reply, resolve"
+    }
+  ]
+}

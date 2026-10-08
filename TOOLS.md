@@ -9,7 +9,8 @@ installation · fonctionnalités et configuration spécifique.
 (`~/.claude`), pas la configuration des projets (`.claude/` dans chaque repo).
 
 **Fichiers** : `home/.claude/settings.json`, `statusline-command.sh`, `statusline-ps1.sh`,
-`notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/{build-brief,jetbrains-mcp}.md`, `skills/pr/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`, `home/.local/bin/cl`.
+`notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/{build-brief,jetbrains-mcp}.md`, `skills/pr/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`, `home/.local/bin/cl` ; plugins :
+`.claude-plugin/marketplace.json`, `plugins/pr-comments/`, `setup/60-plugins.sh`.
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line,
 notifications) ; `gh` authentifié (skill `/pr`, badge PR de la status line) ; Linux +
@@ -103,6 +104,45 @@ Prérequis : Linux (`/proc`).
 
 Prochains skills : un sous-titre par skill, même gabarit (déclencheur, ce qu'il fait,
 prérequis).
+
+### Plugin `pr-comments` (fils de review non résolus)
+
+Mod repris de [aguiddir/claude-config](https://github.com/aguiddir/claude-config)
+(`plugins/pr-comments`, commit `bac6e75`, licence MIT déclarée dans son `plugin.json`),
+copié tel quel dans `plugins/pr-comments/`. Une ligne au-dessus du prompt liste les PR
+ouvertes du dépôt qui ont des fils de review non résolus, en deux groupes : à traiter
+(les tiennes et celle de la branche courante) et en relecture (relecture demandée ou déjà
+faite) — `💬 à traiter #89 (9) · en relecture #73 (10)`. `c` dans un prompt vide (tant que
+de nouveaux fils sont arrivés depuis le dernier prompt envoyé), sinon `/pr-review [n]`,
+ouvre un panneau qui montre un fil à la fois : le diff concerné et toute la conversation,
+avec les badges `↩ répondu` (l'auteur de la PR a le dernier mot) et `obsolète`.
+
+Touches du panneau (adaptées à l'AZERTY, main gauche) : `z`/`s` fil précédent/suivant,
+`q`/`d` PR précédente/suivante, `x` marquer, `a` tout (dé)marquer (**a**ll), `f` mettre
+les fils marqués (ou celui affiché) dans le prompt pour Claude (**f**ix ; sur ta PR : un
+commit `--fixup` par commit corrigé puis push ; sur celle d'un autre : correction locale
+sans commit ni push ; si la PR n'est pas sur la branche courante, Claude est prié de s'y
+placer d'abord), `r` répondre (**r**etour, publié sur GitHub à Entrée), `v` résoudre le
+fil sur GitHub (**v**alider), `o` ouvrir dans le navigateur, `e`/Esc fermer (**e**xit).
+La barre d'aide groupe la navigation (`z: ↑ s: ↓ fil · q: ← d: → PR`) au-dessus des
+actions. Pas de flèches : un bouton de mod n'accepte qu'une lettre ou un chiffre, et dans
+un panneau les flèches font défiler.
+
+Écarts avec l'original : ces raccourcis (l'original : `n`/`p`, `t`, `q` sur QWERTY) et la
+PR précédente (`q`), absente de l'original.
+Réponses et résolutions passent par `gh` sans autre confirmation que la touche.
+GitHub est interrogé chaque minute pour la liste (1 point GraphQL sur 5000/h), les fils
+d'une PR seulement quand elle a changé, après une écriture, ou toutes les dix minutes.
+
+Installation : `./setup/60-plugins.sh` déclare ce dépôt comme marketplace locale
+`claude-tools` (`.claude-plugin/marketplace.json`) et installe `pr-comments@claude-tools`
+(activé dans `settings.json`, `enabledPlugins`). Le plugin est lu directement depuis
+`plugins/pr-comments/` : une modification y prend effet au démarrage de session suivant ou
+avec `/reload-plugins`. `marketplace add` écrit le chemin absolu du dépôt dans
+`extraKnownMarketplaces` du `settings.json` versionné ; le script l'en retire (la
+marketplace reste connue via `~/.claude/plugins/known_marketplaces.json`).
+Tests : `claude plugin test plugins/pr-comments`.
+Prérequis : `gh` authentifié, Claude Code ≥ 2.1.287, `jq` (nettoyage de `settings.json`).
 
 ### Notifications desktop
 
