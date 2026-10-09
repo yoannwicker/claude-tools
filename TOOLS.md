@@ -110,9 +110,11 @@ prérequis).
 Mod repris de [aguiddir/claude-config](https://github.com/aguiddir/claude-config)
 (`plugins/pr-comments`, commit `bac6e75`, licence MIT déclarée dans son `plugin.json`),
 copié tel quel dans `plugins/pr-comments/`. Une ligne au-dessus du prompt liste les PR
-ouvertes du dépôt qui ont des fils de review non résolus, en deux groupes : à traiter
-(les tiennes et celle de la branche courante) et en relecture (relecture demandée ou déjà
-faite) — `💬 à traiter #89 (9) · en relecture #73 (10)`. `c` dans un prompt vide (tant que
+ouvertes du dépôt qui ont des fils de review non résolus, en groupes : à traiter
+(les tiennes et celle de la branche courante), en relecture (relecture demandée ou déjà
+faite) et à relire (relecture demandée, encore aucun fil, sans compteur) —
+`💬 à traiter #89 (9) · en relecture #73 (10) · à relire #108`. Une PR à relire passe en
+dernier ; son panneau donne le lien GitHub (`o`) et rappelle `/pr <n>` pour s'y placer. `c` dans un prompt vide (tant que
 de nouveaux fils sont arrivés depuis le dernier prompt envoyé), sinon `/pr-review [n]`,
 ouvre un panneau qui montre un fil à la fois : le diff concerné et toute la conversation,
 avec les badges `↩ répondu` (l'auteur de la PR a le dernier mot) et `obsolète`.
@@ -128,8 +130,9 @@ La barre d'aide groupe la navigation (`z: ↑ s: ↓ fil · q: ← d: → PR`) a
 actions. Pas de flèches : un bouton de mod n'accepte qu'une lettre ou un chiffre, et dans
 un panneau les flèches font défiler.
 
-Écarts avec l'original : ces raccourcis (l'original : `n`/`p`, `t`, `q` sur QWERTY) et la
-PR précédente (`q`), absente de l'original.
+Écarts avec l'original : ces raccourcis (l'original : `n`/`p`, `t`, `q` sur QWERTY), la
+PR précédente (`q`) et le groupe « à relire », absents de l'original (qui n'affiche que
+les PR ayant des fils non résolus).
 Réponses et résolutions passent par `gh` sans autre confirmation que la touche.
 GitHub est interrogé chaque minute pour la liste (1 point GraphQL sur 5000/h), les fils
 d'une PR seulement quand elle a changé, après une écriture, ou toutes les dix minutes.

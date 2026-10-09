@@ -84,9 +84,10 @@ const poll = async ($: EngineInterface) => {
   // takes a PR off the band, nor makes its threads look new.
   const before = await read($, prs)
   const shown = new Map(before.map(p => [p.number, p.threads]))
-  const found: Pr[] = entries
-    .map(({ updatedAt, ...e }) => ({ ...e, threads: details.get(e.number)?.threads ?? shown.get(e.number) ?? [] }))
-    .filter(p => p.threads.length > 0)
+  const all: Pr[] = entries.map(({ updatedAt, ...e }) => ({ ...e, threads: details.get(e.number)?.threads ?? shown.get(e.number) ?? [] }))
+  // Those with threads, then those whose review is asked and not yet begun
+  // (`à relire`), last so that the pane opens on threads.
+  const found = [...all.filter(p => p.threads.length > 0), ...all.filter(p => p.threads.length === 0 && p.isRequested)]
   const seen = new Set(before.flatMap(p => p.threads.map(t => t.id)))
   await update($, branch, () => head)
   await update($, prs, () => found)
@@ -229,17 +230,19 @@ const closeOrCancel = async ($: EngineInterface) => {
   await update($, reply, () => null)
 }
 
+// The thread shown, else (a PR to review without threads) the PR itself.
 const openWeb = async ($: EngineInterface) => {
-  const t = await current($)
-  if (t) await run($, ['xdg-open', t.url])
+  const url = (await current($))?.url ?? (await pane($))?.url
+  if (url) await run($, ['xdg-open', url])
 }
 
-const count = (p: Pr) => `#${p.number} (${p.threads.length})`
+// A PR without threads (its review asked, not begun) by its number alone.
+const count = (p: Pr) => (p.threads.length ? `#${p.number} (${p.threads.length})` : `#${p.number}`)
 
 type TextElement = ReturnType<EngineInterface['ui']['resolve']>['Text']
 
-// `à traiter #89 (9) · en relecture #73 (10)`, an empty group left out, the
-// PR the pane shows (when given) marked.
+// `à traiter #89 (9) · en relecture #73 (10) · à relire #108`, an empty
+// group left out, the PR the pane shows (when given) marked.
 const prGroups = (Text: TextElement, list: readonly Pr[], shown?: number) => {
   const group = (label: string, ps: readonly Pr[], color: string) =>
     ps.length === 0
@@ -254,15 +257,12 @@ const prGroups = (Text: TextElement, list: readonly Pr[], shown?: number) => {
             </Text>
           )),
         ]
-  const todo = group('à traiter', list.filter(p => !p.isReview), 'yellow')
-  const review = group('en relecture', list.filter(p => p.isReview), 'cyan')
-  return (
-    <Text>
-      {todo}
-      {todo.length > 0 && review.length > 0 ? <Text dimColor> · </Text> : ''}
-      {review}
-    </Text>
-  )
+  const groups = [
+    group('à traiter', list.filter(p => !p.isReview), 'yellow'),
+    group('en relecture', list.filter(p => p.isReview && p.threads.length > 0), 'cyan'),
+    group('à relire', list.filter(p => p.isReview && p.threads.length === 0), 'magenta'),
+  ].filter(g => g.length > 0)
+  return <Text>{groups.flatMap((g, k) => (k > 0 ? [<Text dimColor> · </Text>, ...g] : g))}</Text>
 }
 
 export const register: Register = on => {
@@ -283,10 +283,10 @@ export const register: Register = on => {
     const number = Number(e.args.trim().replace(/^#/, ''))
     if (number) {
       if (!(await read($, prs)).some(p => p.number === number))
-        return { text: `PR #${number} : aucun fil non résolu, ou ni à toi, ni en relecture, ni sur la branche courante.` }
+        return { text: `PR #${number} : aucun fil non résolu ni relecture demandée, ou ni à toi, ni en relecture, ni sur la branche courante.` }
       await showPr($, number)
     }
-    return { text: (await openPane($)) ? 'Review ouverte.' : 'Aucun fil de review non résolu sur tes PR, celles que tu relis ou la branche courante.' }
+    return { text: (await openPane($)) ? 'Review ouverte.' : 'Aucun fil de review non résolu sur tes PR, celles que tu relis ou la branche courante, ni relecture demandée.' }
   })
 
   // A letter typed at the prompt never presses a band Button: `c`, in an
@@ -354,7 +354,39 @@ export const register: Register = on => {
     const all = await read($, prs)
     const p = await pane($)
     const list = p?.threads ?? []
-    if (!p || list.length === 0) return <Text dimColor>Plus aucun fil non résolu. Esc pour fermer.</Text>
+    if (!p) return <Text dimColor>Plus aucun fil non résolu. Esc pour fermer.</Text>
+    // A PR whose review is asked and not begun: no thread to walk, only the
+    // way to it and to the other PRs.
+    if (list.length === 0)
+      return (
+        <Box flexDirection="column">
+          <Text wrap="truncate-end">
+            <Text bold>PR #{p.number}</Text> {cleanTitle(p.title)}
+          </Text>
+          <Text wrap="truncate-end" dimColor>
+            {all.length > 1 ? '' : 'à relire · '}
+            branche {p.branch} · PR de @{p.author}
+          </Text>
+          {all.length > 1 && <Text wrap="truncate-end">{prGroups(Text, all, p.number)}</Text>}
+          <Box marginTop={1}>
+            <Text>Ta relecture est demandée, aucun fil pour l'instant. </Text>
+            <Link href={p.url} label="↗ GitHub" />
+          </Box>
+          <Text dimColor>/pr {p.number} pour la charger et s'y placer.</Text>
+          {!e.props.isFocused && (
+            <Text color="yellow">Le panneau n'a pas le clavier : ctrl+x tab ou un clic, et les touches marchent.</Text>
+          )}
+          <Box marginTop={1} flexWrap="wrap">
+            {all.length > 1 && <Button key="prevPr" label="←" hotkey="q" plain onPress={() => void stepPr($, -1)} />}
+            {all.length > 1 && <Text> </Text>}
+            {all.length > 1 && <Button key="pr" label="→" hotkey="d" plain onPress={() => void stepPr($, 1)} />}
+            {all.length > 1 && <Text dimColor> PR  ·  </Text>}
+            <Button key="web" label="web" hotkey="o" plain onPress={() => void openWeb($)} />
+            <Text> </Text>
+            <Button key="close" label="fermer" hotkey="e" plain role="dismiss" onPress={() => void closeOrCancel($)} />
+          </Box>
+        </Box>
+      )
     const i = Math.min(await read($, at), list.length - 1)
     const t = list[i]!
     const head = await read($, branch)

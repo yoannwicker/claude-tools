@@ -341,6 +341,23 @@ test('PRs under review form their own group on the band and say so in the pane',
   await ui.unmount()
 })
 
+test('a PR whose review is asked shows without threads, in its own group, after those with threads', async ($, on) => {
+  const { world, clock, pane } = await setUp($, on)
+  world.reviewing = [prJson(108, 'feat/c', [], 'brondon'), prJson(73, 'feat/z', [node('q', false, 'pourquoi ce choix ?')], 'amercadal')]
+  await clock.advance(60_000)
+  const band = await $.ui.mount({ plugin: 'pr-comments', surface: 'terminal', component: 'AbovePrompt', props: { hasSurvey: false } as never })
+  expect(await band.find({ text: /à traiter #7 \(2\) · en relecture #73 \(1\) · à relire #108/ })).toBeDefined()
+  await band.unmount()
+  // Last in the list: d from PR 73 goes to it, round from PR 7.
+  await $.command.run({ command: 'pr-review', args: '108' } as never)
+  const ui = await pane()
+  expect(await ui.find({ text: /Ta relecture est demandée/ })).toBeDefined()
+  expect(await ui.find({ text: /\/pr 108/ })).toBeDefined()
+  await ui.press({ key: 'pr' })
+  expect(await ui.find({ text: /PR #7 PR 7/ })).toBeDefined()
+  await ui.unmount()
+})
+
 test("a PR's threads are asked only when it changed, after a write, or every tenth poll", async ($, on) => {
   const { world, clock, pane } = await setUp($, on)
   expect(world.details[7]).toBe(1)

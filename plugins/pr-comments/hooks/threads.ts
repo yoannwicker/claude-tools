@@ -46,12 +46,13 @@ export type Entry = Omit<Pr, 'threads'> & { updatedAt: string }
 export const toEntries = (json: ListJson): Entry[] => {
   const d = json.data
   const seen = new Set<number>()
-  const take = (nodes: EntryJson[], isReview: boolean) =>
+  const take = (nodes: EntryJson[], isReview: boolean, isRequested = false) =>
     nodes
       .filter((p): p is EntryJson & { number: number } => typeof p.number === 'number' && !seen.has(p.number) && !!seen.add(p.number))
       .map(p => ({
         number: p.number,
         isReview,
+        isRequested,
         // A deleted account has no author, and is nobody's.
         isMine: !!p.author && p.author.login === d?.viewer?.login,
         author: p.author?.login ?? 'ghost',
@@ -62,7 +63,9 @@ export const toEntries = (json: ListJson): Entry[] => {
       }))
   return [
     ...take([...(d?.repository?.pullRequests.nodes ?? []), ...(d?.mine?.nodes ?? [])], false),
-    ...take([...(d?.requested?.nodes ?? []), ...(d?.reviewed?.nodes ?? [])], true),
+    // Asked first: a PR both asked and already reviewed (asked again) is asked.
+    ...take(d?.requested?.nodes ?? [], true, true),
+    ...take(d?.reviewed?.nodes ?? [], true),
   ]
 }
 

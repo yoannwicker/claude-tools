@@ -21,6 +21,9 @@ export type Pr = {
   number: number
   isReview: boolean
   isMine: boolean
+  // The user's review is asked: such a PR shows even without a thread,
+  // in the band's `à relire` group.
+  isRequested: boolean
   author: string
   title: string
   url: string
