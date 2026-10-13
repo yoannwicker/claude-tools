@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Pr, Thread } from '../types'
-import { DETAIL, LIST, MINE, REPLY, RESOLVE, REQUESTED, REVIEWED, cleanTitle, excerpt, hunkTail, reviewHeader, reviewPrompt, shortWhere, toEntries, toThreads, where } from './threads'
+import type { Pr, Review, Thread } from '../types'
+import { DETAIL, LIST, MINE, REPLY, RESOLVE, REQUESTED, REVIEWED, cleanTitle, excerpt, fillTemplate, hunkTail, reviewHeader, reviewPrompt, shortWhere, toEntries, toThreads, where } from './threads'
 
 const PANE = 'pr-review'
 const prs = atom({ plugin: 'pr-comments', key: 'prs' } as const, [])
@@ -15,6 +15,8 @@ const marked = atom({ plugin: 'pr-comments', key: 'marked' } as const, [])
 const reply = atom({ plugin: 'pr-comments', key: 'reply' } as const, null)
 const busy = atom({ plugin: 'pr-comments', key: 'busy' } as const, null)
 const armed = atom({ plugin: 'pr-comments', key: 'armed' } as const, false)
+const reviews = atom({ plugin: 'pr-comments', key: 'reviews' } as const, {})
+const showReview = atom({ plugin: 'pr-comments', key: 'showReview' } as const, false)
 // GitHub allows 5000 GraphQL points an hour: the list costs 1, and so does
 // each changed PR's threads.
 const POLL_MS = 60_000
@@ -141,6 +143,7 @@ const showPr = async ($: EngineInterface, number: number) => {
   await update($, at, () => 0)
   await update($, marked, () => [])
   await update($, reply, () => null)
+  await update($, showReview, () => false)
 }
 
 // The next (d = 1) or previous (d = -1) PR in the list, round at either end.
@@ -236,14 +239,39 @@ const openWeb = async ($: EngineInterface) => {
   if (url) await run($, ['xdg-open', url])
 }
 
-// A PR without threads (its review asked, not begun) by its number alone.
-const count = (p: Pr) => (p.threads.length ? `#${p.number} (${p.threads.length})` : `#${p.number}`)
+// `c`: a subagent reviews the PR shown in the background, prompted by the
+// `reviewPrompt` option; its report comes back as its turn.complete, kept
+// by PR number for the pane (`l`). One at a time per PR.
+const startReview = async ($: EngineInterface, template: string) => {
+  const p = await pane($)
+  if (!p) return
+  const key = String(p.number)
+  if ((await read($, reviews))[key]?.status === 'running') return $.ui.toast(`🔎 revue de la PR #${p.number} déjà en cours`)
+  const set = (r: Review) => update($, reviews, all => ({ ...all, [key]: r }))
+  await set({ status: 'running', agentId: null, report: '' })
+  // `{ model, agentId }` once started, or `{ deny }`; read by field, as the
+  // result crosses from the host (`in` does not see its fields).
+  const r: { agentId?: string; deny?: string } = await $.agent
+    .spawn({ prompt: fillTemplate(template, p), description: `Revue PR #${p.number}` })
+    .catch((err: unknown) => ({ deny: String(err) }))
+  if (r.deny) return set({ status: 'failed', agentId: null, report: `sous-agent refusé : ${r.deny}` })
+  if (!r.agentId) return set({ status: 'failed', agentId: null, report: 'sous-agent non démarré' })
+  await set({ status: 'running', agentId: r.agentId, report: '' })
+  $.ui.toast(`🔎 revue de la PR #${p.number} lancée en arrière-plan`)
+}
+
+const REVIEW_MARK: Record<Review['status'], string> = { running: ' ⏳', done: ' 🔎', failed: ' ✗' }
+
+// A PR without threads (its review asked, not begun) by its number alone;
+// its background review, if any, marked.
+const count = (p: Pr, rv: Record<string, Review>) =>
+  `${p.threads.length ? `#${p.number} (${p.threads.length})` : `#${p.number}`}${rv[String(p.number)] ? REVIEW_MARK[rv[String(p.number)]!.status] : ''}`
 
 type TextElement = ReturnType<EngineInterface['ui']['resolve']>['Text']
 
 // `à traiter #89 (9) · en relecture #73 (10) · à relire #108`, an empty
 // group left out, the PR the pane shows (when given) marked.
-const prGroups = (Text: TextElement, list: readonly Pr[], shown?: number) => {
+const prGroups = (Text: TextElement, list: readonly Pr[], rv: Record<string, Review>, shown?: number) => {
   const group = (label: string, ps: readonly Pr[], color: string) =>
     ps.length === 0
       ? []
@@ -253,7 +281,7 @@ const prGroups = (Text: TextElement, list: readonly Pr[], shown?: number) => {
             <Text color={color} bold={p.number === shown}>
               {k > 0 ? ' ' : ''}
               {p.number === shown ? '▸' : ''}
-              {count(p)}
+              {count(p, rv)}
             </Text>
           )),
         ]
@@ -265,7 +293,9 @@ const prGroups = (Text: TextElement, list: readonly Pr[], shown?: number) => {
   return <Text>{groups.flatMap((g, k) => (k > 0 ? [<Text dimColor> · </Text>, ...g] : g))}</Text>
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const template = String(options.reviewPrompt ?? '')
+
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     void tick($)
@@ -320,6 +350,22 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // A review subagent's end: its report kept for the pane, a toast to say so.
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (!e.agentId) return r
+    const found = Object.entries(await read($, reviews)).find(([, v]) => v.agentId === e.agentId && v.status === 'running')
+    if (!found) return r
+    const [key] = found
+    const isDone = e.reason === 'answer'
+    await update($, reviews, all => ({
+      ...all,
+      [key]: { status: isDone ? 'done' : 'failed', agentId: e.agentId ?? null, report: isDone ? e.answer : `sous-agent arrêté (${e.reason})` },
+    }))
+    $.ui.toast(isDone ? `🔎 revue de la PR #${key} prête : /pr-review ${key} puis l` : `✗ revue de la PR #${key} : échec (${e.reason})`)
+    return r
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
     const list = await read($, prs)
@@ -332,7 +378,7 @@ export const register: Register = on => {
         <Box>
           <Text wrap="truncate-end">
             <Text color="yellow">💬 </Text>
-            {prGroups(Text, list)}
+            {prGroups(Text, list, await read($, reviews))}
             {'  '}
           </Text>
           {/* The hotkey only while `c` is caught; else a click, or /pr-review. */}
@@ -355,6 +401,60 @@ export const register: Register = on => {
     const p = await pane($)
     const list = p?.threads ?? []
     if (!p) return <Text dimColor>Plus aucun fil non résolu. Esc pour fermer.</Text>
+    const rv = await read($, reviews)
+    const review = rv[String(p.number)]
+    const isReading = (await read($, showReview)) && !!review && review.status !== 'running'
+    // The background review's state, under the PR's header.
+    const reviewLine = !review ? null : review.status === 'running' ? (
+      <Text color="cyan">⏳ revue en cours dans un sous-agent…</Text>
+    ) : review.status === 'failed' ? (
+      <Text color="red">✗ revue : {review.report}</Text>
+    ) : isReading ? null : (
+      <Text color="green">🔎 revue prête : l pour la lire</Text>
+    )
+    // `c` (code review) and `l` (lire), on every view of the pane.
+    const reviewButtons = [
+      <Button key="review" label={review && review.status !== 'running' ? 'relancer la revue' : 'revue'} hotkey="c" plain onPress={() => void startReview($, template)} />,
+      <Text> </Text>,
+      ...(review?.status === 'done'
+        ? [<Button key="read" label={isReading ? 'fermer la revue' : 'lire la revue'} hotkey="l" plain onPress={() => void update($, showReview, v => !v)} />, <Text> </Text>]
+        : []),
+    ]
+    const prButtons =
+      all.length > 1
+        ? [
+            <Button key="prevPr" label="←" hotkey="q" plain onPress={() => void stepPr($, -1)} />,
+            <Text> </Text>,
+            <Button key="pr" label="→" hotkey="d" plain onPress={() => void stepPr($, 1)} />,
+            <Text dimColor> PR  ·  </Text>,
+          ]
+        : []
+    const noKeyboard = !e.props.isFocused && (
+      <Text color="yellow">Le panneau n'a pas le clavier : ctrl+x tab ou un clic, et les touches marchent.</Text>
+    )
+    // The report of the PR's review, in place of its threads, until `l` again.
+    if (isReading)
+      return (
+        <Box flexDirection="column">
+          <Text wrap="truncate-end">
+            <Text bold>PR #{p.number}</Text> {cleanTitle(p.title)}
+          </Text>
+          {all.length > 1 && <Text wrap="truncate-end">{prGroups(Text, all, rv, p.number)}</Text>}
+          <Box marginTop={1}>
+            <Text bold>🔎 Revue (sous-agent) </Text>
+            <Link href={p.url} label="↗ GitHub" />
+          </Box>
+          <Markdown text={clean(review!.report || '(compte rendu vide)')} />
+          {noKeyboard}
+          <Box marginTop={1} flexWrap="wrap">
+            {prButtons}
+            {reviewButtons}
+            <Button key="web" label="web" hotkey="o" plain onPress={() => void openWeb($)} />
+            <Text> </Text>
+            <Button key="close" label="fermer" hotkey="e" plain role="dismiss" onPress={() => void closeOrCancel($)} />
+          </Box>
+        </Box>
+      )
     // A PR whose review is asked and not begun: no thread to walk, only the
     // way to it and to the other PRs.
     if (list.length === 0)
@@ -367,20 +467,17 @@ export const register: Register = on => {
             {all.length > 1 ? '' : 'à relire · '}
             branche {p.branch} · PR de @{p.author}
           </Text>
-          {all.length > 1 && <Text wrap="truncate-end">{prGroups(Text, all, p.number)}</Text>}
+          {all.length > 1 && <Text wrap="truncate-end">{prGroups(Text, all, rv, p.number)}</Text>}
           <Box marginTop={1}>
             <Text>Ta relecture est demandée, aucun fil pour l'instant. </Text>
             <Link href={p.url} label="↗ GitHub" />
           </Box>
-          <Text dimColor>/pr {p.number} pour la charger et s'y placer.</Text>
-          {!e.props.isFocused && (
-            <Text color="yellow">Le panneau n'a pas le clavier : ctrl+x tab ou un clic, et les touches marchent.</Text>
-          )}
+          <Text dimColor>/pr {p.number} pour la charger et s'y placer, c pour une revue en arrière-plan.</Text>
+          {reviewLine}
+          {noKeyboard}
           <Box marginTop={1} flexWrap="wrap">
-            {all.length > 1 && <Button key="prevPr" label="←" hotkey="q" plain onPress={() => void stepPr($, -1)} />}
-            {all.length > 1 && <Text> </Text>}
-            {all.length > 1 && <Button key="pr" label="→" hotkey="d" plain onPress={() => void stepPr($, 1)} />}
-            {all.length > 1 && <Text dimColor> PR  ·  </Text>}
+            {prButtons}
+            {reviewButtons}
             <Button key="web" label="web" hotkey="o" plain onPress={() => void openWeb($)} />
             <Text> </Text>
             <Button key="close" label="fermer" hotkey="e" plain role="dismiss" onPress={() => void closeOrCancel($)} />
@@ -413,7 +510,8 @@ export const register: Register = on => {
           {p.branch === head ? 'branche courante' : `branche ${p.branch}`}
           {p.isMine ? '' : ` · PR de @${p.author}`}
         </Text>
-        {all.length > 1 && <Text wrap="truncate-end">{prGroups(Text, all, p.number)}</Text>}
+        {all.length > 1 && <Text wrap="truncate-end">{prGroups(Text, all, rv, p.number)}</Text>}
+        {reviewLine}
         <Box marginTop={1} flexDirection="column">
           {list.map((x, n) => (
             <Text wrap="truncate-end" dimColor={n !== i && x.isAnswered}>
@@ -477,6 +575,7 @@ export const register: Register = on => {
           <Text> </Text>
           <Button key="fix" label={marks.length ? `corriger (${marks.length})` : 'corriger'} hotkey="f" plain onPress={() => void fix($)} />
           <Text> </Text>
+          {reviewButtons}
           <Button key="answer" label="répondre" hotkey="r" plain onPress={() => void startReply($)} />
           <Text> </Text>
           <Button key="resolve" label="résoudre" hotkey="v" plain onPress={() => void resolve($)} />

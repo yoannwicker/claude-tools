@@ -4,5 +4,13 @@
   "author": { "name": "aguiddir" },
   "repository": "https://github.com/aguiddir/claude-config",
   "license": "MIT",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "reviewPrompt": {
+      "type": "string",
+      "title": "Prompt de revue (touche c)",
+      "description": "Ce que fait le sous-agent lancé par c dans le panneau. {number}, {title}, {url}, {branch} et {author} sont remplacés par ceux de la PR.",
+      "default": "Fais une revue de code de la PR #{number} « {title} » de @{author} ({url}, branche {branch}) : invoque l'outil Skill avec le skill code-review et les arguments `high {number}`, sans --comment ni --fix. Ne modifie aucun fichier et n'écris rien sur GitHub. Rends un compte rendu en français : les constats du plus grave au moins grave, chacun avec fichier:ligne, le problème et le correctif proposé ; « aucun constat » s'il n'y en a pas."
+    }
+  }
 }

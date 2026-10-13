@@ -358,6 +358,22 @@ test('a PR whose review is asked shows without threads, in its own group, after 
   await ui.unmount()
 })
 
+// The kit leaves out what only the engine sets, as the subagent's id: the
+// report's way back (its turn.complete, by that id) is not testable here.
+test('c reviews the PR in a background subagent with the prompt option', { options: { reviewPrompt: 'Relis #{number} « {title} » de @{author} ({branch}, {url}) {inconnu}' } }, async ($, on) => {
+  const spawned: { prompt: string; description: string }[] = []
+  on('agent.spawn', (_$, e) => (spawned.push({ prompt: e.prompt, description: e.description }), { model: 'opus' }))
+  const { pane } = await setUp($, on)
+  const ui = await pane()
+  expect(await ui.find({ text: /revue/ })).toBeDefined()
+  await ui.press({ key: 'review' })
+  expect(spawned).toEqual([{ prompt: 'Relis #7 « PR 7 » de @me (feat/x, https://gh/pr/7) {inconnu}', description: 'Revue PR #7' }])
+  // No id back: said so on the pane, `c` offered again.
+  expect(await ui.find({ text: /✗ revue : sous-agent non démarré/ })).toBeDefined()
+  expect(await ui.find({ text: /relancer la revue/ })).toBeDefined()
+  await ui.unmount()
+})
+
 test("a PR's threads are asked only when it changed, after a write, or every tenth poll", async ($, on) => {
   const { world, clock, pane } = await setUp($, on)
   expect(world.details[7]).toBe(1)

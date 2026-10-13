@@ -130,9 +130,21 @@ La barre d'aide groupe la navigation (`z: ↑ s: ↓ fil · q: ← d: → PR`) a
 actions. Pas de flèches : un bouton de mod n'accepte qu'une lettre ou un chiffre, et dans
 un panneau les flèches font défiler.
 
+Revue en arrière-plan : `c` (**c**ode review), sur n'importe quelle PR du panneau, lance
+un sous-agent (`$.agent.spawn`) avec le prompt de l'option `reviewPrompt` du plugin
+(`/config`, ou `pluginConfigs` dans `settings.json`), où `{number}`, `{title}`, `{url}`,
+`{branch}` et `{author}` sont remplacés. Par défaut, il invoque `code-review high <n>`
+sans `--comment` ni `--fix` et rend ses constats en français, sans rien modifier. Une
+revue à la fois par PR ; la ligne `💬` marque la PR `⏳` (en cours), `🔎` (prête) ou `✗`
+(échec), un toast prévient à la fin, et `l` (**l**ire) affiche le compte rendu dans le
+panneau à la place des fils (`l` à nouveau pour revenir, `c` pour relancer). Le compte
+rendu reste dans le plugin, pas dans la conversation : l'envoyer à Claude passe par un
+copier-coller.
+
 Écarts avec l'original : ces raccourcis (l'original : `n`/`p`, `t`, `q` sur QWERTY), la
-PR précédente (`q`) et le groupe « à relire », absents de l'original (qui n'affiche que
-les PR ayant des fils non résolus).
+PR précédente (`q`), le groupe « à relire » et la revue en arrière-plan (`c`/`l`, option
+`reviewPrompt`), absents de l'original (qui n'affiche que les PR ayant des fils non
+résolus).
 Réponses et résolutions passent par `gh` sans autre confirmation que la touche.
 GitHub est interrogé chaque minute pour la liste (1 point GraphQL sur 5000/h), les fils
 d'une PR seulement quand elle a changé, après une écriture, ou toutes les dix minutes.

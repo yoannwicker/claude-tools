@@ -170,5 +170,12 @@ export const excerpt = (t: Thread, max = 90) => {
   return plain.length > max ? `${plain.slice(0, max - 1)}…` : plain
 }
 
+// The review prompt (the `reviewPrompt` option) for one PR: {number},
+// {title}, {url}, {branch} and {author} replaced, any other brace left as is.
+export const fillTemplate = (template: string, pr: Pr) => {
+  const values: Record<string, string> = { number: String(pr.number), title: cleanTitle(pr.title), url: pr.url, branch: pr.branch, author: pr.author }
+  return template.replace(/\{(\w+)\}/g, (all, name: string) => values[name] ?? all)
+}
+
 // The PR's title without its trailing tags (`[DEPLOY_PR][poso75]`).
 export const cleanTitle = (title: string) => title.replace(/(\s*\[[^\]]*\])+\s*$/, '').trim()

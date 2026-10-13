@@ -31,6 +31,8 @@ export type Pr = {
   threads: Thread[]
 }
 
+export type Review = { status: 'running' | 'done' | 'failed'; agentId: string | null; report: string }
+
 declare module 'claude-code' {
   interface PluginState {
     'pr-comments': {
@@ -54,6 +56,11 @@ declare module 'claude-code' {
       // Whether `c` typed in an empty prompt is caught: from threads not
       // seen before to the next prompt sent.
       armed: boolean
+      // The background reviews `c` started, by PR number: the subagent's id,
+      // and its report once done (failed: why it did not run or end).
+      reviews: Record<string, Review>
+      // Whether the pane shows the shown PR's review report (`l`).
+      showReview: boolean
     }
   }
 }
