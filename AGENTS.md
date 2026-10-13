@@ -10,7 +10,7 @@ mode, prérequis) met à jour la doc **dans le même commit** que le code.
   prérequis, configuration spécifique. Respecter le gabarit de l'outil concerné ;
   un nouvel outil reçoit sa section selon le *Gabarit pour un nouvel outil*.
 - **[SHELL.md](SHELL.md)** — même règle que `TOOLS.md` pour les outils shell hors Claude
-  (ex. `home/.local/bin/gpr`, `home/.config/shell/`), même gabarit.
+  (ex. `home/.local/bin/{gpr,gbr}`, `home/.local/lib/`, `home/.config/shell/`), même gabarit.
 - **[README.md](README.md)** — seulement si la vue d'ensemble change :
   - installation ajoutée, supprimée ou modifiée (tableau *À la carte*, scripts `setup/`,
     commandes d'`install.sh`) ;

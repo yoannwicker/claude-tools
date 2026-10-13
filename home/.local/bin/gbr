@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# gbr — branches git : trouver, afficher, se placer dessus. Socle du skill Claude /br.
+#   gbr [nom | recherche]   interactif : menu, affichage, puis où se placer
+#   gbr list [recherche]    branches locales et origin dédoublonnées, hors branche par
+#                           défaut, dernier commit d'abord (50 max), une par ligne :
+#                           nom<TAB>où (local|origin|local+origin)<TAB>date<TAB>auteur<TAB>suivi
+#   gbr view <branche>      état vs la branche par défaut, commits, fichiers, PR liée
+#   gbr where <branche>     situation locale, en clé=valeur : branch, local, remote,
+#                           current, worktree, dirty
+#   gbr worktree <branche>  crée ou réutilise <racine>/.claude/worktrees/<branche, / → ->,
+#                           n'écrit que son chemin sur stdout
+#   gbr checkout <branche>  bascule le dossier courant sur la branche (git switch)
+# Un nom peut être donné avec ou sans « origin/ ». La fonction gbr de
+# ~/.config/shell/git-tools.sh enveloppe le mode interactif pour faire le cd final.
+set -uo pipefail
+PROG=gbr
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib/git-tools.sh" || exit 1
+
+has_local()  { git show-ref --verify --quiet "refs/heads/$1"; }
+has_remote() { git show-ref --verify --quiet "refs/remotes/origin/$1"; }
+
+# br <nom> : nom de branche normalisé (sans origin/), qui doit exister.
+br() {
+    local b=${1:-}
+    b=${b#origin/}
+    [[ -n "$b" ]] || die "nom de branche attendu."
+    has_local "$b" || has_remote "$b" || die "branche inconnue : $b"
+    echo "$b"
+}
+
+default_branch() {
+    local d
+    if d=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null); then
+        echo "${d#origin/}"; return
+    fi
+    for d in main master; do
+        if has_local "$d" || has_remote "$d"; then echo "$d"; return; fi
+    done
+    echo main
+}
+
+# ref <branche> : la branche locale si elle existe, sinon origin/<branche>.
+ref() { if has_local "$1"; then echo "$1"; else echo "origin/$1"; fi; }
+
+cmd_list() {
+    local q def
+    q=$(tr '[:upper:]' '[:lower:]' <<<"$*")
+    def=$(default_branch)
+    git fetch --quiet --prune origin 2>/dev/null || true
+    git for-each-ref --sort=-committerdate \
+        --format='%(refname)%09%(committerdate:short)%09%(authorname)%09%(upstream:track)' \
+        refs/heads refs/remotes/origin |
+    awk -F'\t' -v def="$def" -v q="$q" '
+        {
+            if ($1 ~ /^refs\/heads\//) { name = substr($1, 12); kind = "local" }
+            else                       { name = substr($1, 21); kind = "origin" }
+            if (name == "HEAD" || name == def) next
+            if (q != "" && index(tolower(name), q) == 0) next
+            if (!(name in where)) { order[++n] = name; date[name] = $2; author[name] = $3; where[name] = kind }
+            else if (where[name] != kind) where[name] = "local+origin"
+            if (kind == "local") track[name] = $4
+        }
+        END {
+            for (i = 1; i <= n && i <= 50; i++) {
+                b = order[i]
+                printf "%s\t%s\t%s\t%s\t%s\n", b, where[b], date[b], author[b], track[b]
+            }
+        }'
+}
+
+cmd_view() {
+    local b base r ahead behind
+    b=$(br "${1:-}") || exit 1
+    base=$(default_branch)
+    has_remote "$base" && base="origin/$base"
+    r=$(ref "$b")
+    read -r behind ahead < <(git rev-list --left-right --count "$base...$r")
+
+    echo "branche : $b ($(has_local "$b" && echo locale)$(has_local "$b" && has_remote "$b" && echo " + ")$(has_remote "$b" && echo origin))"
+    if has_local "$b"; then
+        local up
+        up=$(git for-each-ref --format='%(upstream:short) %(upstream:track)' "refs/heads/$b")
+        [[ -n "${up// }" ]] && echo "suivi : $up"
+    fi
+    echo "dernier commit : $(git log -1 --format='%cr, %an' "$r")"
+    echo "par rapport à $base : $ahead commit(s) d'avance, $behind de retard"
+    if command -v gh >/dev/null; then
+        gh pr list --head "$b" --state all --json number,title,state,url \
+            --jq '.[] | "PR #\(.number) [\(.state)] \(.title) — \(.url)"' 2>/dev/null
+    fi
+    echo
+    echo "commits ($base..$r, 30 derniers) :"
+    git log --oneline --no-decorate -30 "$base..$r"
+    echo
+    git diff --stat "$base...$r" | tail -n 20
+}
+
+cmd_where() {
+    local b
+    b=$(br "${1:-}") || exit 1
+    echo "branch=$b"
+    echo "local=$(has_local "$b" && echo yes || echo no)"
+    echo "remote=$(has_remote "$b" && echo yes || echo no)"
+    echo "current=$(git rev-parse --abbrev-ref HEAD)"
+    echo "worktree=$(wt_of "$b")"
+    echo "dirty=$(git status --porcelain | wc -l)"
+}
+
+# wt_name <branche> / refspec <branche> : dossier du worktree et ce qu'il faut fetcher.
+wt_name() { echo "${1//\//-}"; }
+refspec() { if has_remote "$1"; then echo "$1"; fi; }
+
+cmd_worktree() {
+    local b
+    b=$(br "${1:-}") || exit 1
+    wt_add "$(wt_name "$b")" "$b" "$(refspec "$b")"
+}
+
+cmd_checkout() {
+    local b
+    b=$(br "${1:-}") || exit 1
+    git switch "$b" && git status -sb
+}
+
+cmd_interactive() {
+    local query="$*" b=""
+
+    # 1. Trouver la branche : nom exact, sinon recherche
+    if [[ -n "$query" ]] && { has_local "${query#origin/}" || has_remote "${query#origin/}"; }; then
+        b=${query#origin/}
+    else
+        local out lines=()
+        out=$(cmd_list "$query") || exit 1
+        [[ -n "$out" ]] && mapfile -t lines < <(awk -F'\t' '{
+            printf "%s  (%s · %s · %s%s)\n", $1, $2, $3, $4, ($5 != "" ? " " $5 : "") }' <<<"$out")
+        case ${#lines[@]} in
+            0) die "aucune branche${query:+ pour « $query »}." ;;
+            1) b=${lines[0]} ;;
+            *) b=$(pick "Branche" "${lines[@]}"); [[ -z "$b" ]] && exit 0 ;;
+        esac
+        b=${b%%  *}
+    fi
+
+    # 2. L'afficher, 3. se placer dessus
+    cmd_view "$b"
+    echo
+    place "$b" "$(wt_name "$b")" "$(refspec "$b")" cmd_checkout "$b"
+}
+
+case "${1:-}" in
+    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+esac
+in_repo
+
+case "${1:-}" in
+    list)     shift; cmd_list "$@" ;;
+    view)     shift; cmd_view "$@" ;;
+    where)    shift; cmd_where "$@" ;;
+    worktree) shift; cmd_worktree "$@" ;;
+    checkout) shift; cmd_checkout "$@" ;;
+    *)        cmd_interactive "$@" ;;
+esac

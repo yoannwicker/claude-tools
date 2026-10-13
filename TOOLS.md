@@ -9,7 +9,7 @@ installation · fonctionnalités et configuration spécifique.
 (`~/.claude`), pas la configuration des projets (`.claude/` dans chaque repo).
 
 **Fichiers** : `home/.claude/settings.json`, `statusline-command.sh`, `statusline-ps1.sh`,
-`notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/{build-brief,jetbrains-mcp}.md`, `skills/pr/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`, `home/.local/bin/cl` ; plugins :
+`notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/{build-brief,jetbrains-mcp}.md`, `skills/{pr,br}/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`, `home/.local/bin/cl` ; plugins :
 `.claude-plugin/marketplace.json`, `plugins/pr-comments/`, `setup/60-plugins.sh`.
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line,
@@ -86,6 +86,16 @@ du travail local non commité) ou branche courante. Les outils autorisés sont l
 `SKILL.md`. Toutes les opérations passent par le script `gpr` (sous-commandes `list`,
 `view`, `where`, `worktree`, `checkout`, voir [SHELL.md](SHELL.md#gpr--pr-github)).
 Prérequis : `gpr` lié dans `~/.local/bin`, `gh` authentifié sur le compte qui voit le repo.
+
+### Skill `/br`
+
+`/br [nom | mots-clés]` : même parcours que `/pr` pour une branche git, locale ou
+`origin` (nom exact pris directement, sinon recherche dans le nom et sélecteur ; sans
+argument, dernier commit d'abord), la charge en contexte (avance/retard sur la branche
+par défaut, commits propres, fichiers, PR liée), puis demande toujours où se placer :
+worktree dédié ou branche courante. Toutes les opérations passent par le script `gbr`
+(voir [SHELL.md](SHELL.md#gbr--branches-git)). Prérequis : `gbr` lié dans
+`~/.local/bin` ; `gh` facultatif (PR liée).
 
 ### Skill `/worktree`
 
