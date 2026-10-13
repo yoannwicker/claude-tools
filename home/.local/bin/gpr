@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# gpr — PR GitHub : trouver, afficher, se placer dessus. Socle du skill Claude /pr.
+#   gpr [-c] [numéro | recherche]  interactif : menu, affichage, puis où se placer
+#   gpr list [recherche]           PR ouvertes (50 max ; sans recherche, récentes d'abord),
+#                                  une par ligne : n<TAB>titre<TAB>branche<TAB>auteur<TAB>draft<TAB>date
+#   gpr view [-c] <n>              description, revue, taille, checks (-c : + commentaires)
+#   gpr where <n>                  situation locale, en clé=valeur : branch, local_branch,
+#                                  fork, current, worktree, dirty
+#   gpr worktree <n>               crée ou réutilise <racine>/.claude/worktrees/pr-<n>,
+#                                  n'écrit que son chemin sur stdout
+#   gpr checkout <n>               bascule le dossier courant sur la PR (gh pr checkout)
+# La fonction gpr de ~/.config/shell/git-tools.sh enveloppe le mode interactif : le script
+# écrit le dossier où aller dans $GPR_CD_FILE et la fonction y fait le cd.
+set -uo pipefail
+
+die() { echo "gpr : $*" >&2; exit 1; }
+
+num() {
+    [[ "${1:-}" =~ ^#?([0-9]+)$ ]] || die "numéro de PR attendu, reçu « ${1:-} »"
+    echo "${BASH_REMATCH[1]}"
+}
+
+# pr_ref <n> : renseigne branch, fork, local_branch, refspec (PR de fork : branche pr-<n>).
+pr_ref() {
+    local info
+    info=$(gh pr view "$1" --json headRefName,isCrossRepository \
+        --jq '"\(.headRefName)\t\(.isCrossRepository)"') || exit 1
+    IFS=$'\t' read -r branch fork <<<"$info"
+    local_branch=$branch refspec=$branch
+    if [[ "$fork" == "true" ]]; then local_branch="pr-$1"; refspec="pull/$1/head:pr-$1"; fi
+}
+
+# wt_of <branche> : chemin du worktree où <branche> est checkoutée (vide sinon).
+wt_of() {
+    git worktree list --porcelain | awk -v b="branch refs/heads/$1" '
+        /^worktree / { p = substr($0, 10) }
+        $0 == b      { print p; exit }'
+}
+
+cmd_list() {
+    local search="$*"
+    [[ -z "$search" ]] && search="sort:updated-desc"
+    gh pr list --limit 50 --search "$search" \
+        --json number,title,headRefName,author,isDraft,updatedAt \
+        --jq '.[] | [.number, .title, .headRefName, .author.login,
+                     (if .isDraft then "draft" else "" end), .updatedAt[0:10]] | @tsv'
+}
+
+cmd_view() {
+    local comments=0
+    if [[ "${1:-}" == "-c" ]]; then comments=1; shift; fi
+    local n; n=$(num "${1:-}") || exit 1
+    if (( comments )); then gh pr view "$n" --comments || exit 1
+    else gh pr view "$n" || exit 1
+    fi
+    echo
+    gh pr checks "$n" 2>&1 || true
+}
+
+cmd_where() {
+    local n; n=$(num "${1:-}") || exit 1
+    pr_ref "$n"
+    echo "branch=$branch"
+    echo "local_branch=$local_branch"
+    echo "fork=$fork"
+    echo "current=$(git rev-parse --abbrev-ref HEAD)"
+    echo "worktree=$(wt_of "$local_branch")"
+    echo "dirty=$(git status --porcelain | wc -l)"
+}
+
+cmd_worktree() {
+    local n; n=$(num "${1:-}") || exit 1
+    pr_ref "$n"
+    local path common root
+    path=$(wt_of "$local_branch")
+    if [[ -n "$path" ]]; then echo "$path"; return; fi
+
+    common=$(git rev-parse --path-format=absolute --git-common-dir) || exit 1
+    root=$(dirname "$common")
+    path="$root/.claude/worktrees/pr-$n"
+    {
+        git fetch origin "$refspec" || exit 1
+        if ! git -C "$root" check-ignore -q .claude/worktrees/x; then
+            mkdir -p "$common/info"
+            echo ".claude/worktrees/" >> "$common/info/exclude"
+        fi
+        if git show-ref --verify --quiet "refs/heads/$local_branch"; then
+            git worktree add "$path" "$local_branch" || exit 1
+        else
+            git worktree add --track -b "$local_branch" "$path" "origin/$local_branch" || exit 1
+        fi
+        if [[ -f "$path/mise.toml" || -f "$path/.mise.toml" ]] && command -v mise >/dev/null; then
+            (cd "$path" && mise trust)
+        fi
+    } >&2
+    echo "$path"
+}
+
+cmd_checkout() {
+    local n; n=$(num "${1:-}") || exit 1
+    gh pr checkout "$n" && git status -sb
+}
+
+cmd_interactive() {
+    local comments=() n="" query
+    if [[ "${1:-}" == "-c" ]]; then comments=(-c); shift; fi
+    query="$*"
+
+    # 1. Trouver la PR
+    if [[ "$query" =~ ^#?[0-9]+$ ]]; then
+        n=$(num "$query")
+    else
+        local out lines=() PS3="PR : " choice
+        out=$(cmd_list "$query") || exit 1
+        [[ -n "$out" ]] && mapfile -t lines < <(awk -F'\t' '{
+            printf "#%s  %s  (%s · %s%s)\n", $1, substr($2, 1, 60), $3, $4, ($5 != "" ? " · draft" : "") }' <<<"$out")
+        case ${#lines[@]} in
+            0) die "aucune PR ouverte${query:+ pour « $query »}." ;;
+            1) n=${lines[0]%%  *} ;;
+            *) select choice in "${lines[@]}"; do
+                   [[ -n "$choice" ]] && { n=${choice%%  *}; break; }
+               done
+               [[ -z "$n" ]] && exit 0 ;;
+        esac
+        n=${n#\#}
+    fi
+
+    # 2. L'afficher
+    cmd_view "${comments[@]}" "$n"
+    echo
+
+    # 3. Se placer dessus
+    pr_ref "$n"
+    local dir=""
+    if [[ "$(git rev-parse --abbrev-ref HEAD)" == "$local_branch" ]]; then
+        echo "Déjà sur $local_branch ici."
+    else
+        local wt wt_label="Worktree" opts PS3="Se placer sur la PR : " choice
+        wt=$(wt_of "$local_branch")
+        [[ -n "$wt" ]] && wt_label="Worktree existant ($wt)"
+        if [[ -n "$(git status --porcelain)" ]]; then
+            echo "Travail local non commité ici :"
+            git status --short
+            opts=("$wt_label" "Branche courante (attention : modifs en cours)" "Rester ici")
+        else
+            opts=("Branche courante" "$wt_label" "Rester ici")
+        fi
+        select choice in "${opts[@]}"; do [[ -n "$choice" ]] && break; done
+        case "$choice" in
+            Worktree*) dir=$(cmd_worktree "$n") || exit 1 ;;
+            Branche*)  cmd_checkout "$n" || exit 1 ;;
+        esac
+    fi
+
+    if [[ -n "$dir" ]]; then
+        if [[ -n "${GPR_CD_FILE:-}" ]]; then echo "$dir" > "$GPR_CD_FILE"
+        else echo "cd $dir"
+        fi
+    fi
+    echo "→ $(git -C "${dir:-.}" rev-parse --abbrev-ref HEAD) · ${dir:-$PWD}"
+}
+
+case "${1:-}" in
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
+esac
+git rev-parse --git-dir >/dev/null 2>&1 || die "pas dans un dépôt git."
+
+case "${1:-}" in
+    list)     shift; cmd_list "$@" ;;
+    view)     shift; cmd_view "$@" ;;
+    where)    shift; cmd_where "$@" ;;
+    worktree) shift; cmd_worktree "$@" ;;
+    checkout) shift; cmd_checkout "$@" ;;
+    *)        cmd_interactive "$@" ;;
+esac

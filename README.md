@@ -5,7 +5,8 @@ Configuration locale versionnée de mes outils de développement assisté par IA
 skills), [herdr](https://herdr.dev), l'extension GNOME `claude-notify` et les outils
 `mise` globaux — appliquée dans `$HOME` par symlinks via `install.sh`.
 Le détail de chaque outil (fonctionnalités, prérequis, installation, configuration
-spécifique) est dans [TOOLS.md](TOOLS.md).
+spécifique) est dans [TOOLS.md](TOOLS.md) ; les outils shell hors Claude (`gpr`) dans
+[SHELL.md](SHELL.md).
 
 ## Installer
 
@@ -63,12 +64,14 @@ utilisateur), `~/.claude/projects/` (transcripts, mémoire), `~/.claude/plugins/
 ```
 install.sh          link | setup | status | adopt | capture (défaut : link + setup)
 home/               miroir de $HOME, un lien par fichier
+  .bash_aliases     charge .config/shell/*.sh (outils shell, voir SHELL.md)
   .claude/          settings.json, statusline-*.sh, notify*.sh, claude-notify.py, rules/, skills/{pr,worktree}/
-  .config/          herdr/config.toml, mise/config.toml
-  .local/           bin/{cl,dot}, share/gnome-shell/extensions/claude-notify@ywicker/
+  .config/          herdr/config.toml, mise/config.toml, shell/git-tools.sh
+  .local/           bin/{cl,dot,gpr}, share/gnome-shell/extensions/claude-notify@ywicker/
 .claude-plugin/     marketplace.json : ce dépôt comme marketplace locale « claude-tools »
 plugins/            plugins Claude Code (pr-comments/, repris d'aguiddir/claude-config)
 setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 40-mcp, 50-cl, 60-plugins
 TOOLS.md            détail par outil
+SHELL.md            outils shell hors Claude (gpr)
 AGENTS.md           consignes pour les agents (CLAUDE.md l'importe)
 ```

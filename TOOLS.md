@@ -83,7 +83,9 @@ premières ; les 6 suivantes listées dans la question, à taper dans « Other �
 nombre de PR restantes) —, la charge en contexte (description, revue, checks,
 commentaires), puis demande toujours où se placer : worktree dédié (recommandé s'il y a
 du travail local non commité) ou branche courante. Les outils autorisés sont listés dans le frontmatter du
-`SKILL.md`. Prérequis : `gh` authentifié sur le compte qui voit le repo.
+`SKILL.md`. Toutes les opérations passent par le script `gpr` (sous-commandes `list`,
+`view`, `where`, `worktree`, `checkout`, voir [SHELL.md](SHELL.md#gpr--pr-github)).
+Prérequis : `gpr` lié dans `~/.local/bin`, `gh` authentifié sur le compte qui voit le repo.
 
 ### Skill `/worktree`
 

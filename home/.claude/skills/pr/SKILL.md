@@ -2,21 +2,25 @@
 name: pr
 description: Rechercher une PR GitHub (numéro ou mots-clés), la charger en contexte et se placer dessus (branche courante ou worktree)
 argument-hint: [numéro | recherche]
-allowed-tools: Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh pr diff:*), Bash(gh pr checkout:*), Bash(git status:*), Bash(git worktree list:*), Bash(git worktree add:*), Bash(git rev-parse:*), Bash(git fetch origin:*), Bash(git show-ref:*), Bash(git check-ignore:*), Bash(mise trust:*), EnterWorktree
+allowed-tools: Bash(gpr:*), EnterWorktree
 ---
 
 Argument : `$ARGUMENTS`
 
+Tout passe par le script `gpr` (`~/.local/bin/gpr`, `gpr --help`), que l'utilisateur
+emploie aussi dans son terminal : ne pas refaire à la main avec `gh`/`git` ce qu'une
+sous-commande fait déjà.
+
 ## 1. Trouver la PR
 
 - Argument numérique (`83`, `#83`) → PR n°83, passer à l'étape 2.
-- Argument vide → `gh pr list --limit 50 --search "sort:updated-desc" --json number,title,headRefName,author,isDraft,updatedAt`
-  (PR ouvertes, les plus récemment modifiées d'abord).
-- Sinon → `gh pr list --limit 50 --search "$ARGUMENTS" --json number,title,headRefName,author,isDraft,updatedAt`
-  (PR ouvertes, brouillons inclus ; jamais les fermées ou mergées).
+- Sinon → `gpr list $ARGUMENTS` (sans argument : PR ouvertes les plus récemment modifiées
+  d'abord ; avec : recherche GitHub, brouillons inclus, jamais les fermées ou mergées).
+  Une PR par ligne, colonnes séparées par des tabulations :
+  `numéro titre branche auteur draft date`.
 
-On récupère jusqu'à 50 PR pour connaître le total, mais on n'en montre que 10 au plus
-(4 options + 6 dans la liste) ; les autres sont seulement comptées.
+`gpr list` renvoie jusqu'à 50 PR pour connaître le total, mais on n'en montre que 10 au
+plus (4 options + 6 dans la liste) ; les autres sont seulement comptées.
 
 Pour une liste :
 - 0 résultat → le dire et proposer une recherche plus large, s'arrêter.
@@ -24,20 +28,20 @@ Pour une liste :
 - Plusieurs → sélecteur `AskUserQuestion` (header « PR »), une option par PR :
   label `#<n> <titre tronqué>`, description `<branche> · <auteur> · <date>` (+ « draft »
   si brouillon), sans « (Recommended) ».
-  - Le sélecteur est limité à 4 options : les 4 premières PR (dans l'ordre renvoyé par
-    `gh`) sont les options. Jusqu'à 4 résultats, la question est « Quelle PR charger ? ».
+  - Le sélecteur est limité à 4 options : les 4 premières PR (dans l'ordre renvoyé) sont
+    les options. Jusqu'à 4 résultats, la question est « Quelle PR charger ? ».
     Au-delà, la question commence par une liste compacte des suivantes (PR 5 à 10) :
     une ligne par PR, sans ligne vide entre elles, au format
     `#<n> <titre tronqué à ~60 caractères>`. S'il y a plus de 10 résultats, ajouter
-    obligatoirement une dernière ligne `… et <k> autres PR` (k = total − 10 ; si `gh` a
-    renvoyé 50 résultats, écrire `… et 40+ autres PR`). Puis une ligne vide et « Quelle
-    PR charger ? (« Other » permet de taper le numéro d'une PR de la liste ci-dessus) ».
+    obligatoirement une dernière ligne `… et <k> autres PR` (k = total − 10 ; si
+    `gpr list` a renvoyé 50 lignes, écrire `… et 40+ autres PR`). Puis une ligne vide et
+    « Quelle PR charger ? (« Other » permet de taper le numéro d'une PR de la liste
+    ci-dessus) ».
   - Le numéro choisi (option ou saisie dans « Other ») → étape 2.
 
 ## 2. Charger la PR en contexte
 
-`gh pr view <n> --json number,title,state,isDraft,author,headRefName,baseRefName,url,body,reviewDecision,statusCheckRollup,additions,deletions,changedFiles`
-puis `gh pr view <n> --comments`.
+`gpr view -c <n>` : description, état, revue, taille, commentaires, puis checks.
 
 Présenter un résumé court : titre, état/draft, auteur, `head → base`, décision de revue,
 checks en échec éventuels, taille (+/−, fichiers), points clés de la description et des
@@ -45,46 +49,37 @@ commentaires non résolus. Garder tout cela en contexte pour la suite.
 
 ## 3. Se placer sur la PR — toujours demander
 
-Avant de poser la question : `git status --porcelain`, branche courante
-(`git rev-parse --abbrev-ref HEAD`) et `git worktree list`.
+Avant de poser la question : `gpr where <n>`, qui renvoie en `clé=valeur` la branche de
+la PR (`branch`), la branche locale à utiliser (`local_branch`, `pr-<n>` pour une PR de
+fork), la branche courante (`current`), le worktree déjà ouvert sur la branche
+(`worktree`, vide sinon) et le nombre de fichiers modifiés ici (`dirty`).
 
-Poser **systématiquement** la question avec `AskUserQuestion` (header « Checkout ») :
+Si `current` = `local_branch` : ne pas poser la question, le dire et passer à l'étape 4.
+
+Sinon, poser **systématiquement** la question avec `AskUserQuestion` (header « Checkout ») :
 - **Worktree** — créer/réutiliser un worktree dédié. Le marquer « (Recommended) » et le
-  mettre en premier s'il y a du travail local non commité.
-- **Branche courante** — basculer ce checkout sur la branche de la PR. Si du travail local
-  est en cours, l'indiquer clairement dans la description (le checkout peut échouer ou
-  embarquer les modifs) ; ne jamais stasher ni jeter de modifs sans accord explicite.
-  Le marquer « (Recommended) » s'il n'y a rien en cours.
+  mettre en premier si `dirty` > 0. Si `worktree` n'est pas vide, le signaler et proposer
+  ce worktree existant plutôt qu'un nouveau.
+- **Branche courante** — basculer ce checkout sur la branche de la PR. Si `dirty` > 0,
+  l'indiquer clairement dans la description (le checkout peut échouer ou embarquer les
+  modifs) ; ne jamais stasher ni jeter de modifs sans accord explicite. Le marquer
+  « (Recommended) » si `dirty` = 0.
 - **Rester ici** — ne rien changer, juste garder la PR en contexte.
 
-Si la branche de la PR est déjà la branche courante ici, ne pas poser la question : le
-dire et passer à l'étape 4. Si elle est checkoutée dans un autre worktree, le signaler
-dans la question et proposer ce worktree existant plutôt qu'un nouveau.
-
 ### Worktree
-Choisir « Worktree » vaut autorisation : enchaîner toutes les étapes sans redemander,
-jusqu'à ce que la session soit placée dans le worktree.
+Choisir « Worktree » vaut autorisation : enchaîner sans redemander.
 
-Si un worktree existe déjà sur la branche de la PR : passer directement à l'étape 5 avec
-son chemin.
-
-1. `git fetch origin <headRefName>` (PR depuis un fork : `git fetch origin
-   pull/<n>/head:pr-<n>` et utiliser `pr-<n>` comme branche).
-2. Chemin : `<racine du dépôt principal>/.claude/worktrees/pr-<n>` (emplacement que
-   `EnterWorktree` accepte aussi pour les bascules suivantes).
-3. Si `git check-ignore -q .claude/worktrees/x` échoue : ajouter la ligne
-   `.claude/worktrees/` à `.git/info/exclude` (exclusion locale, rien de commité).
-4. Si la branche locale existe (`git show-ref --verify --quiet refs/heads/<branche>`) :
-   `git worktree add <chemin> <branche>`, sinon
-   `git worktree add --track -b <branche> <chemin> origin/<branche>`.
-5. **Basculer la session** : appeler l'outil `EnterWorktree` avec `path: <chemin>` (charger
+1. `gpr worktree <n>` : réutilise le worktree existant, sinon le crée dans
+   `<racine du dépôt principal>/.claude/worktrees/pr-<n>` (fetch, exclusion locale,
+   branche suivie, `mise trust`). Sa sortie standard est le chemin, seul.
+2. **Basculer la session** : appeler l'outil `EnterWorktree` avec `path: <chemin>` (charger
    son schéma via ToolSearch `select:EnterWorktree` si besoin). Ne pas se contenter d'un
    `cd`.
-6. Si un `mise.toml` est présent : `mise trust` dans le worktree.
-7. Rappeler en une ligne que `ExitWorktree` (action `keep`) ramène au dossier d'origine.
+3. Rappeler en une ligne que `ExitWorktree` (action `keep`) ramène au dossier d'origine.
 
 ### Branche courante
-`gh pr checkout <n>`, puis `git status -sb` pour confirmer (à jour / en retard sur origin).
+`gpr checkout <n>` (`gh pr checkout` puis `git status -sb` pour confirmer à jour / en
+retard sur origin).
 
 ## 4. Enchaîner
 
