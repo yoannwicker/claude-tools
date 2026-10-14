@@ -8,10 +8,11 @@ installation · fonctionnalités et configuration spécifique.
 **Rôle** : agent de code en terminal ; ce repo porte sa configuration utilisateur
 (`~/.claude`), pas la configuration des projets (`.claude/` dans chaque repo).
 
-**Fichiers** : `home/.claude/settings.json`, `statusline-command.sh`, `statusline-ps1.sh`,
+**Fichiers** : `profiles/*.json` (le `settings.json`, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh`,
 `notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/build-brief.md`, `skills/{pr,br}/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`, `home/.local/bin/cl` ; plugins :
-`.claude-plugin/marketplace.json`, `plugins/pr-comments/`, `plugins/intellij/`,
-`setup/60-plugins.sh`.
+`.claude-plugin/marketplace.json`, `plugins/{pr-comments,intellij,profiles}/`,
+`setup/60-plugins.sh` ; profils : `plugins/profiles/bin/claude-profile` (lié dans `~/.local/bin`),
+`profiles/*.json`, `home/.config/shell/claude-profile.sh`.
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line,
 notifications) ; `gh` authentifié (skill `/pr`, badge PR de la status line) ; Linux +
@@ -22,6 +23,10 @@ IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [MCP IntelliJ](#m
 (`~/.claude.json`, `.credentials.json`, `projects/`, `plugins/`).
 
 ### `settings.json`
+
+Pas de `settings.json` versionné dans `home/` : `~/.claude/settings.json` est un lien vers
+celui du profil par défaut, généré depuis `profiles/<nom>.json` (voir [Profils](#profils)).
+Réglages communs aux profils versionnés (`vidal`, `basic`) :
 
 - Modèle par défaut `opus` ; niveaux d'effort par modèle (`modelSettings` : `high` pour
   `claude-fable-5-1`, `medium` pour `claude-opus-5-5`) ; thème `dark`.
@@ -67,12 +72,118 @@ config existante, sinon retient les `~/workspace*`. Ensuite, en chemin :
 `CL_WORKSPACE=dir1:dir2` remplace la config le temps d'une commande ; sans config, repli
 sur `~/workspace`.
 
+`cl` lance Claude par `claude-profile run`, et `cl -P <profil> [projet] …` par
+`claude-profile switch <profil>` : `/profile` peut ensuite relancer la session dans un autre
+profil (voir [Profils](#profils)).
+
+### Profils
+
+Un **profil** est un dossier de config généré depuis `~/.claude`, où **seul
+`settings.json` diffère**, sur lequel Claude est lancé avec `CLAUDE_CONFIG_DIR`. Le profil
+par défaut est celui de `claude` lancé sans profil : `~/.claude/settings.json` est un lien
+vers son `settings.json` généré.
+
+- Définition : `profiles/<nom>.json`, un `settings.json` **complet** (plus une clé
+  `description`, retirée à la génération) qui devient tel quel celui du profil : rien
+  n'est partagé entre profils, une modification commune (un hook, la statusline) est à
+  reporter dans chaque profil. `claude-profile new` part d'une copie du profil par défaut.
+  Ce qui change d'un profil à l'autre est surtout `enabledPlugins` : les éléments
+  activables (MCP, consignes, skills) sont des plugins du marketplace `claude-tools`,
+  installés une fois et allumés ou éteints par profil ; `profiles@claude-tools` doit y
+  rester activé (sinon pas de `/profile`, `generate` prévient).
+- Dossier généré : `~/.claude-profiles/<nom>/` (non versionné) — un lien par entrée de
+  `~/.claude` (dossiers liés en entier : historique `projects/`, `plugins/`, rules,
+  skills…), `.claude.json` lié à `~/.claude.json`, `settings.json` généré. Session
+  connectée, sans onboarding ni confiance redemandée ; `--continue` reprend une
+  conversation commencée dans un autre profil.
+- Identifiants : `.credentials.json` est un lien, mais Claude Code réécrit ses fichiers
+  par renommage, ce qui peut remplacer le lien par un fichier (jetons rafraîchis dans le
+  profil). À chaque génération, un tel fichier plus récent que celui de `~/.claude` le
+  remplace, puis le lien est reposé.
+- Un `settings.json` modifié dans un profil (`/config`, `claude plugin enable`) est
+  écrasé à la génération suivante : reporter le changement dans `profiles/<nom>.json`.
+- Profil par défaut (`claude-profile default <nom>`, posé à `vidal` par
+  `setup/60-plugins.sh` s'il n'y en a pas) : `~/.claude/settings.json` devient un lien vers
+  `~/.claude-profiles/<nom>/settings.json` (un fichier ordinaire à sa place est sauvegardé en
+  `settings.json.bak.<date>`), donc `claude` lancé sans profil, et `claude-profile current`
+  hors `CLAUDE_CONFIG_DIR`, est sur `<nom>`.
+
+Commande `claude-profile` (`plugins/profiles/bin/claude-profile`, `jq` requis) : dans Claude, le `bin/`
+du plugin est dans le PATH de l'outil Bash ; pour le terminal, `setup/60-plugins.sh` la
+lie dans `~/.local/bin`.
+
+- `claude-profile list` : profils, `*` sur celui de la session, dossier généré ou non,
+  `par défaut` sur le profil par défaut ;
+- `claude-profile current` : profil de la session (d'après `CLAUDE_CONFIG_DIR`, sinon le
+  profil par défaut) ;
+- `claude-profile default [<nom>]` : affiche le profil par défaut, ou en fait `<nom>` (il
+  est généré) ; les sessions lancées sans profil le prennent à leur prochaine relance ;
+- `claude-profile show [<nom>]` : ce qui est actif sur un profil (celui de la session par
+  défaut) — plugins activés (`+`) ou non (`-`, ou `?` pour un plugin installé que le profil
+  ne mentionne pas), modèle, réglages qui diffèrent du profil par défaut ;
+- `claude-profile new <nom> [description…]` : crée `profiles/<nom>.json`, copie du profil
+  par défaut (noms réservés : `default`, `show`, `create`) ;
+- `claude-profile plugin <nom> <plugin>@<marketplace> on|off` : active ou désactive un plugin
+  dans `enabledPlugins` du profil, puis le régénère (le profil par défaut : effet immédiat
+  sur `~/.claude/settings.json`) ;
+- `claude-profile generate <nom>|--all` : (re)génère le dossier (liens à jour, orphelins
+  retirés, `settings.json` recopié du profil) ;
+- `claude-profile switch <nom> [arguments claude…]` : régénère puis lance
+  `CLAUDE_CONFIG_DIR=~/.claude-profiles/<nom> claude …` (le profil par défaut : `claude`
+  sans la variable) ; deux terminaux peuvent tourner sur deux profils ;
+- `claude-profile run [arguments claude…]` : lance `claude` sans toucher au profil courant ;
+- `claude-profile request <nom> <session>` : demande de bascule, déposée par `/profile`.
+
+Bascule depuis une session : le dossier de config est fixé au lancement, il faut donc un
+nouveau processus. `switch` et `run` lancent `claude` dans une boucle et exportent
+`CLAUDE_PROFILE_SWITCH_FILE` ; `/profile <nom>` y écrit la demande (`claude-profile request`)
+puis quitte la session (`/exit`) ; la boucle régénère `<nom>` et relance
+`claude --resume <session>` (session neuve si la session quittée était encore vide), soit
+la même conversation dans le nouveau profil. Pour que `claude` tapé à la main passe par
+la boucle, `home/.config/shell/claude-profile.sh` (chargé par `~/.bash_aliases`) le
+définit comme fonction appelant `claude-profile run` ; `cl` y passe aussi. Lancé autrement
+(IDE, lanceur graphique, `command claude`), `/profile` donne la relance manuelle :
+`/exit` puis `claude-profile switch <nom> --continue`.
+
+Profils versionnés : `vidal` (config complète : `pr-comments`, `intellij`, `profiles` ;
+par défaut à l'installation) et `basic` (le même sans `pr-comments`).
+
+### Plugin `profiles` (`/profile`)
+
+`plugins/profiles/`, activé dans tous les profils :
+
+- commande `/profile` (mod, `hooks/register.tsx`) :
+  - sans argument : boîte de dialogue listant les profils (`claude-profile list`, l'actuel
+    présélectionné) ; Entrée relance la conversation dans celui choisi, Échap annule ; là
+    où elle ne peut s'afficher, la liste en texte ;
+  - `<nom>` : vérifie et génère le profil, dépose la demande de bascule puis quitte, la
+    boucle de `claude-profile switch`/`run` relançant la conversation dans `<nom>` (voir
+    [Profils](#profils)) ; hors boucle, donne la relance manuelle ;
+  - `show [<nom>]` : vue d'un profil (`claude-profile show` : plugins, modèle, écarts avec
+    le profil par défaut), choisi dans la même liste sans `<nom>`, ouverte en lecture
+    seule : `m` passe en édition, `b` bascule dans le profil, Échap ferme. En
+    édition, chaque plugin est un bouton `[x]`/`[ ]` qu'Entrée bascule dans un brouillon
+    (`*` : modifié) ; `v` valide (`claude-profile plugin` pour chaque changement, profil
+    régénéré), `a` annule, Échap ferme sans appliquer. Une modification du profil de la
+    session vaut à sa prochaine relance ;
+  - `default [<profil>]` : choisit le profil par défaut (`claude-profile default`) dans la
+    même liste (le profil par défaut présélectionné) ou celui donné ;
+  - `create <nom> [description]` : crée le profil (`claude-profile new`, copie du profil
+    par défaut),
+    le génère et ouvre sa vue en édition pour choisir ses plugins.
+
+  Logique pure (lecture de `list`/`show`, réponse à une bascule) dans `hooks/switch.ts`,
+  testée par `claude plugin test plugins/profiles` ; `types/index.d.ts` déclare l'état du
+  mod (brouillon de chaque vue en édition) ;
+- `bin/claude-profile` : la commande `claude-profile` (voir [Profils](#profils)).
+
 ### Status line
 
 `statusline-command.sh` (bash + Python, lit le JSON de session sur stdin) affiche :
 modèle et niveau d'effort, dossier courant, branche git avec compteurs *staged/modifiés*
 (détachée → SHA court), PR GitHub ouverte sur la branche via `gh` (cache dans `/tmp`),
-nom du worktree, durée de session. `statusline-ps1.sh` est la variante minimale
+nom du worktree, durée de session, et `🧩 <profil>` pour une session lancée sur un profil
+(dossier de `CLAUDE_CONFIG_DIR` sous `~/.claude-profiles/`). `statusline-ps1.sh` est la variante minimale
 `user@host:~/chemin` (ancien PS1), à brancher dans `statusLine.command` si besoin.
 
 ### Skill `/pr`
@@ -152,10 +263,10 @@ d'une PR seulement quand elle a changé, après une écriture, ou toutes les dix
 
 Installation : `./setup/60-plugins.sh` déclare ce dépôt comme marketplace locale
 `claude-tools` (`.claude-plugin/marketplace.json`) et installe `pr-comments@claude-tools`
-(activé dans `settings.json`, `enabledPlugins`). Le plugin est lu directement depuis
+(activé dans `enabledPlugins` des profils, sauf `basic`). Le plugin est lu directement depuis
 `plugins/pr-comments/` : une modification y prend effet au démarrage de session suivant ou
 avec `/reload-plugins`. `marketplace add` écrit le chemin absolu du dépôt dans
-`extraKnownMarketplaces` du `settings.json` versionné ; le script l'en retire (la
+`extraKnownMarketplaces` de `~/.claude/settings.json` ; le script l'en retire (la
 marketplace reste connue via `~/.claude/plugins/known_marketplaces.json`).
 Tests : `claude plugin test plugins/pr-comments`.
 Prérequis : `gh` authentifié, Claude Code ≥ 2.1.287, `jq` (nettoyage de `settings.json`).
@@ -175,7 +286,8 @@ Prérequis : GNOME Shell + gnome-terminal, `python3-gi` avec `Notify 0.7`, `gdbu
 
 ### MCP IntelliJ
 
-Plugin `intellij` (`plugins/intellij/`), qui regroupe le serveur MCP et la consigne
+Plugin `intellij` (`plugins/intellij/`, activé dans les profils `vidal` et `basic`, à
+couper par profil, voir [Profils](#profils)), qui regroupe le serveur MCP et la consigne
 d'usage de ses outils :
 
 - `.mcp.json` : serveur `intellij`, transport SSE sur `http://127.0.0.1:64342/sse`
@@ -185,11 +297,10 @@ d'usage de ses outils :
   contexte par un hook `SessionStart` du plugin (`hooks/hooks.json`, au démarrage, à la
   reprise, après `/clear` et `/compact`) : un plugin ne porte ni `CLAUDE.md` ni rules.
 
-Installation : `./setup/60-plugins.sh` (comme `pr-comments`, activé dans `enabledPlugins`).
-Le script retire aussi l'ancien serveur `intellij` de scope user (`~/.claude.json`, ex-
-`setup/40-mcp.sh`) : à même URL, Claude Code garderait celui-ci et ignorerait celui du
-plugin. Prérequis : IntelliJ ouvert avec le serveur MCP actif, sinon `claude mcp list` le
-montre déconnecté.
+Installation : `./setup/60-plugins.sh`, qui retire aussi l'ancien serveur `intellij` de
+scope user (`~/.claude.json`, ex-`setup/40-mcp.sh`) : à même URL, Claude Code garderait
+celui-ci et ignorerait celui du plugin. Prérequis : IntelliJ ouvert avec le serveur MCP
+actif, sinon `claude mcp list` le montre déconnecté.
 
 ## Extension GNOME `claude-notify@ywicker`
 
@@ -226,7 +337,7 @@ locaux dans `~/.config/herdr/` : `*.log`, `*.sock`, `session.json`, `release-not
   (`[keys]`, `[theme]`, `[ui]`, `[terminal]`) se documente ici.
 - Intégration Claude : herdr génère `~/.claude/hooks/herdr-agent-state.sh` (fichier
   « managed by herdr », non versionné) et ajoute un hook `SessionStart` dans
-  `settings.json` avec un **chemin absolu**. Le `settings.json` versionné porte la variante
+  `settings.json` avec un **chemin absolu**. Les profils (`profiles/*.json`) portent la variante
   portable `[ -f "$HOME/.claude/hooks/herdr-agent-state.sh" ] && bash … session || true` ;
   comme herdr ne la reconnaît pas, chaque `integration install` ajoute un doublon absolu,
   que `setup/20-herdr.sh` retire (en écrivant à travers le lien). `dot` rejoue ce script

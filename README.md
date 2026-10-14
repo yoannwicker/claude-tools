@@ -26,10 +26,11 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | herdr (+ intégrations Claude/Copilot) | `./setup/20-herdr.sh` | `curl` ; Linux ou macOS |
 | Notifications desktop (hooks + extension GNOME) | `./install.sh link && ./setup/30-gnome.sh` | GNOME Shell 46, `python3-gi`, `gdbus`, `xprop`, gnome-terminal |
 | Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
-| Plugins `pr-comments` (fils de review non résolus) et `intellij` (MCP IntelliJ + consigne) | `./setup/60-plugins.sh` | `claude` ≥ 2.1.287, `gh` authentifié, `jq` ; IntelliJ avec le serveur MCP sur le port 64342 |
+| Plugins `pr-comments` (fils de review non résolus), `intellij` (MCP IntelliJ + consigne), `profiles` (commande `/profile`) | `./setup/60-plugins.sh` | `claude` ≥ 2.1.287, `gh` authentifié, `jq` ; IntelliJ avec le serveur MCP sur le port 64342 |
+| Profils (commande `claude-profile`, fonction shell `claude`) | `./install.sh link && ./setup/60-plugins.sh` (lie `claude-profile` dans `~/.local/bin`, pose le profil par défaut `vidal` → `~/.claude/settings.json`) | `jq` |
 
 Sans GNOME : garder `./install.sh link` et retirer les hooks `notify.sh` de
-`home/.claude/settings.json` (événements `Stop`, `StopFailure`, `Notification`,
+chaque profil `profiles/*.json` (événements `Stop`, `StopFailure`, `Notification`,
 `UserPromptSubmit`). Le premier `enable` d'une extension GNOME fraîchement liée peut
 demander une déconnexion/reconnexion de session.
 
@@ -41,6 +42,13 @@ demander une déconnexion/reconnexion de session.
   projet des espaces de travail choisis à l'installation (nom exact, sinon partiel
   insensible à la casse, sinon menu). `cl --list | --add [chemin] | --remove <n>` pour les
   faire évoluer, `cl --setup` pour refaire la sélection.
+- Profils : `claude-profile switch <profil>` (ou `cl -P <profil> <projet>`) lance Claude sur
+  `~/.claude-profiles/<profil>/`, généré depuis `~/.claude` avec pour `settings.json`
+  `profiles/<profil>.json` ; `claude` seul est sur le profil par défaut (`vidal` à
+  l'installation ; `claude-profile default <profil>`, `/profile default`). Dans une
+  session, `/profile` propose la liste des profils et `/profile <profil>` relance la
+  conversation dans ce profil ; `/profile show [<profil>]` montre ce qui y est actif et
+  (dés)active ses plugins, `/profile create <nom>` crée un profil.
 - Fils de review non résolus de mes PR (et de celles que je relis) : ligne `💬` au-dessus
   du prompt, `c` ou `/pr-review` pour les parcourir, les envoyer à Claude, répondre,
   résoudre (plugin `pr-comments`).
@@ -54,7 +62,8 @@ demander une déconnexion/reconnexion de session.
 ## Ne jamais ajouter
 
 `~/.claude/.credentials.json`, `~/.claude.json` (tokens OAuth, état, serveurs MCP
-utilisateur), `~/.claude/projects/` (transcripts, mémoire), `~/.claude/plugins/`,
+utilisateur), `~/.claude-profiles/` (dossiers de profils générés),
+`~/.claude/projects/` (transcripts, mémoire), `~/.claude/plugins/`,
 `~/.claude/skills/synced/`, `history.jsonl`, et dans `~/.config/herdr/` les `*.log`,
 `*.sock`, `session.json`. Toujours `adopt` fichier par fichier, jamais un dossier.
 
@@ -64,11 +73,12 @@ utilisateur), `~/.claude/projects/` (transcripts, mémoire), `~/.claude/plugins/
 install.sh          link | setup | status | adopt | capture (défaut : link + setup)
 home/               miroir de $HOME, un lien par fichier
   .bash_aliases     charge .config/shell/*.sh (outils shell, voir SHELL.md)
-  .claude/          settings.json, statusline-*.sh, notify*.sh, claude-notify.py, rules/, skills/{pr,br,worktree}/
-  .config/          herdr/config.toml, mise/config.toml, shell/git-tools.sh
+  .claude/          statusline-*.sh, notify*.sh, claude-notify.py, rules/, skills/{pr,br,worktree,profile}/
+  .config/          herdr/config.toml, mise/config.toml, shell/{git-tools,claude-profile}.sh
   .local/           bin/{cl,dot,gpr,gbr}, lib/git-tools.sh, share/gnome-shell/extensions/claude-notify@ywicker/
 .claude-plugin/     marketplace.json : ce dépôt comme marketplace locale « claude-tools »
-plugins/            plugins Claude Code : pr-comments/ (repris d'aguiddir/claude-config), intellij/
+plugins/            plugins Claude Code : pr-comments/ (repris d'aguiddir/claude-config), intellij/, profiles/ (avec bin/claude-profile)
+profiles/           profils (<nom>.json : settings.json complet de chaque profil — vidal, basic —, voir `claude-profile`)
 setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 50-cl, 60-plugins
 TOOLS.md            détail par outil
 SHELL.md            outils shell hors Claude (gpr, gbr)

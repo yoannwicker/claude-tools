@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# cl — ouvre Claude Code sur un projet des espaces de travail : cl [projet] [arguments claude…]
+# cl — ouvre Claude Code sur un projet des espaces de travail : cl [-P profil] [projet] [arguments claude…]
 #   nom exact, sinon correspondance partielle insensible à la casse, sinon menu de tous les projets.
 #   cl --list | --add [chemin…] | --remove <chemin|numéro>… | --setup | --help
 #   Espaces : $CL_WORKSPACE (séparés par « : »), sinon ~/.config/cl/workspaces, sinon ~/workspace.
+#   Lance claude par `claude-profile run` (ou `claude-profile switch <profil>` avec -P), pour que /profile puisse
+#   relancer la session dans un autre profil (voir claude-profile --help).
 set -u
 repo=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../.." && pwd)
 conf=${XDG_CONFIG_HOME:-$HOME/.config}/cl/workspaces
 
-usage() { sed -n '2,5p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,7p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 pretty() { case "$1" in "$HOME"/*) printf '~/%s' "${1#"$HOME"/}" ;; *) printf '%s' "$1" ;; esac; }
 
 # Espaces configurés (chemins absolus, existants ou non), un par ligne.
@@ -80,6 +82,13 @@ cmd_remove() {
   if [ ${#keep[@]} -gt 0 ]; then save "${keep[@]}"; else save; fi
 }
 
+profile=""
+if [ "${1:-}" = -P ] || [ "${1:-}" = --profile ]; then
+  [ $# -ge 2 ] || { echo "usage : cl -P <profil> [projet] [arguments claude…]" >&2; exit 2; }
+  profile=$2; shift 2
+  "$repo/plugins/profiles/bin/claude-profile" check "$profile" || exit 2
+fi
+
 case "${1:-}" in
   --help|-h) usage; exit 0 ;;
   --list)    cmd_list; exit ;;
@@ -145,4 +154,5 @@ fi
 
 [ -z "$selected" ] && exit 0
 cd "$selected" || exit 1
-exec claude "$@"
+[ -n "$profile" ] && exec "$repo/plugins/profiles/bin/claude-profile" switch "$profile" "$@"
+exec "$repo/plugins/profiles/bin/claude-profile" run "$@"

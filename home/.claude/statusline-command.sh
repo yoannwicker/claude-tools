@@ -231,6 +231,10 @@ if model:
         seg += f" {GRAY}{effort}{RST}"
     line1.append(seg)
 
+config_dir = os.environ.get("CLAUDE_CONFIG_DIR", "")
+if config_dir.startswith(os.path.expanduser("~/.claude-profiles/")):
+    line1.append(f"🧩 {MAGENTA}{os.path.basename(config_dir.rstrip('/'))}{RST}")
+
 cwd = get(data, "workspace", "current_dir") or data.get("cwd")
 if isinstance(cwd, str) and cwd:
     line1.append(f"📁 {BLUE_B}{os.path.basename(cwd.rstrip('/')) or '/'}{RST}")

@@ -14,6 +14,11 @@
       "name": "intellij",
       "source": "./plugins/intellij",
       "description": "MCP IntelliJ (SSE, port 64342) et consigne d'usage de ses outils pour la recherche, le refactoring et le diff"
+    },
+    {
+      "name": "profiles",
+      "source": "./plugins/profiles",
+      "description": "Commande /profile : choisir, voir, créer un profil Claude Code et en régler les plugins, relancer la conversation dans un autre (dossiers générés depuis ~/.claude, commande claude-profile)"
     }
   ]
 }

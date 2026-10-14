@@ -17,7 +17,7 @@ for agent in $integrations; do
 done
 
 # `herdr integration install claude` ajoute un hook SessionStart avec un chemin absolu.
-# Le settings.json versionné porte déjà la variante portable ($HOME + garde [ -f … ]) :
+# Les profils (profiles/*.json) portent déjà la variante portable ($HOME + garde [ -f … ]) :
 # on retire les doublons absolus, en écrivant à travers le lien (jamais de mv).
 settings=$HOME/.claude/settings.json
 if [ -f "$settings" ] && command -v python3 >/dev/null 2>&1; then

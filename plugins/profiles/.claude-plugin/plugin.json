@@ -1,0 +1,8 @@
+{
+  "name": "profiles",
+  "description": "Commande /profile : choisir, voir, créer un profil Claude Code et en régler les plugins, relancer la conversation dans un autre, choisir le profil par défaut (dossiers générés depuis ~/.claude, commande claude-profile)",
+  "author": {
+    "name": "ywicker"
+  },
+  "types": "./types/index.d.ts"
+}
