@@ -7,7 +7,7 @@ allowed-tools: Bash(gpr:*), EnterWorktree
 
 Argument : `$ARGUMENTS`
 
-Tout passe par le script `gpr` (`~/.local/bin/gpr`, `gpr --help`), que l'utilisateur
+Tout passe par le script `gpr` (`bin/` du plugin, `gpr --help`), que l'utilisateur
 emploie aussi dans son terminal : ne pas refaire à la main avec `gh`/`git` ce qu'une
 sous-commande fait déjà.
 

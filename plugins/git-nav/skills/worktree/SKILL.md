@@ -2,14 +2,14 @@
 name: worktree
 description: Lister les worktrees git du dépôt courant, supprimer ceux qu'aucune session n'utilise (clear), ou libérer celui de la session (release)
 argument-hint: "[list | clear | release]"
-allowed-tools: Bash(~/.claude/skills/worktree/scan.sh:*), Bash(git worktree list:*), Bash(git worktree remove:*), Bash(git worktree prune:*), Bash(git -C:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(cd:*), AskUserQuestion, ExitWorktree
+allowed-tools: Bash(worktree-scan:*), Bash(git worktree list:*), Bash(git worktree remove:*), Bash(git worktree prune:*), Bash(git -C:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(cd:*), AskUserQuestion, ExitWorktree
 ---
 
 Argument : `$ARGUMENTS` (vide = `list`)
 
 ## Scanner
 
-Lancer `~/.claude/skills/worktree/scan.sh` depuis le dépôt courant. Il renvoie une ligne
+Lancer `worktree-scan` (`bin/` du plugin) depuis le dépôt courant. Il renvoie une ligne
 TSV par worktree, `<verdict> <chemin> <branche> <détail>` :
 
 | Verdict | Sens | Supprimable |

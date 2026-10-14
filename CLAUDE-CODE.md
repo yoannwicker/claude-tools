@@ -1,18 +1,19 @@
 # Claude Code
 
 Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude (lanceur
-`cl`, extension GNOME, herdr, mise, `gpr`/`gbr`) sont dans [TOOLS.md](TOOLS.md).
+`cl`, extension GNOME, herdr, mise) sont dans [TOOLS.md](TOOLS.md).
 
 **Rôle** : agent de code en terminal ; ce repo porte sa configuration utilisateur
 (`~/.claude`), pas la configuration des projets (`.claude/` dans chaque repo).
 
 **Fichiers** : `profiles/*.json` (le `settings.json`, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh`,
-`notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/build-brief.md`, `skills/{pr,br}/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}` ; plugins :
-`.claude-plugin/marketplace.json`, `plugins/{pr-comments,intellij,profiles}/`,
-`setup/60-plugins.sh`, `home/.config/shell/claude-profile.sh` (plugin [`profiles`](#profiles)).
+`notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/build-brief.md` ; plugins :
+`.claude-plugin/marketplace.json`, `plugins/{pr-comments,intellij,profiles,git-nav}/`,
+`setup/60-plugins.sh`, `home/.config/shell/claude-profile.sh` (plugin [`profiles`](#profiles)),
+`home/.config/shell/git-tools.sh` (plugin [`git-nav`](#git-nav)).
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line,
-notifications) ; `gh` authentifié (skill `/pr`, badge PR de la status line) ; Linux +
+notifications) ; `gh` authentifié (plugin [`git-nav`](#git-nav), badge PR de la status line) ; Linux +
 GNOME Shell 46 pour les notifications (voir [Notifications desktop](#notifications-desktop) et l'extension GNOME dans
 [TOOLS.md](TOOLS.md#extension-gnome-claude-notifyywicker)) ;
 IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [`intellij`](#intellij)).
@@ -85,45 +86,9 @@ Prérequis : GNOME Shell + gnome-terminal, `python3-gi` avec `Notify 0.7`, `gdbu
 
 ## Skills
 
-### `/pr`
-
-`/pr [numéro | mots-clés]` : trouve une PR GitHub (`gh pr list`/`view`, PR ouvertes
-uniquement ; sans argument, les plus récemment modifiées d'abord) — une seule
-correspondance est ouverte directement, plusieurs sont proposées dans un sélecteur (les 4
-premières ; les 6 suivantes listées dans la question, à taper dans « Other », plus le
-nombre de PR restantes) —, la charge en contexte (description, revue, checks,
-commentaires), puis demande toujours où se placer : worktree dédié (recommandé s'il y a
-du travail local non commité) ou branche courante. Les outils autorisés sont listés dans le frontmatter du
-`SKILL.md`. Toutes les opérations passent par le script `gpr` (sous-commandes `list`,
-`view`, `where`, `worktree`, `checkout`, voir [TOOLS.md](TOOLS.md#gpr--pr-github)).
-Prérequis : `gpr` lié dans `~/.local/bin`, `gh` authentifié sur le compte qui voit le repo.
-
-### `/br`
-
-`/br [nom | mots-clés]` : même parcours que `/pr` pour une branche git, locale ou
-`origin` (nom exact pris directement, sinon recherche dans le nom et sélecteur ; sans
-argument, dernier commit d'abord), la charge en contexte (avance/retard sur la branche
-par défaut, commits propres, fichiers, PR liée), puis demande toujours où se placer :
-worktree dédié ou branche courante. Toutes les opérations passent par le script `gbr`
-(voir [TOOLS.md](TOOLS.md#gbr--branches-git)). Prérequis : `gbr` lié dans
-`~/.local/bin` ; `gh` facultatif (PR liée).
-
-### `/worktree`
-
-`/worktree [list | clear | release]` : liste les worktrees du dépôt courant avec un verdict
-(`scan.sh`), et avec `clear` supprime après confirmation ceux qui sont libres. Libre =
-ni dépôt principal, ni worktree de la session, ni verrouillé, sans modifications locales,
-et sans aucun processus de l'utilisateur dont le cwd est dedans (lecture de
-`/proc/*/cwd` : couvre les sessions Claude, les shells et les terminaux IDE). Suppression
-par `git worktree remove` sans `--force`, branches conservées, puis `git worktree prune`.
-
-`release` libère le worktree de la session (typiquement une fois la PR terminée, que
-`clear` ignore) : refus s'il est verrouillé ou a des modifications non commitées,
-confirmation s'il a des commits non poussés ou pas d'upstream ; la session le quitte
-(`ExitWorktree` en mode `keep` — `remove` supprimerait aussi la branche — ou `cd` vers
-le dépôt principal si elle a été lancée dedans), puis `git worktree remove` depuis le
-dépôt principal. La branche est conservée.
-Prérequis : Linux (`/proc`).
+Les skills `/pr`, `/br` et `/worktree` sont dans le plugin [`git-nav`](#git-nav). Un skill
+qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
+`./install.sh link`).
 
 ## Plugins
 
@@ -135,7 +100,7 @@ donc par profil (voir [Profils](#profils) ; `/profile show` du plugin
 
 **Installation** : `./setup/60-plugins.sh` déclare la marketplace (`claude plugin marketplace
 add`, sinon `update`), installe chaque plugin s'il manque ou le met à jour, lie
-`claude-profile` dans `~/.local/bin` et pose le profil par défaut (`vidal` s'il n'y en a
+`claude-profile`, `gpr` et `gbr` dans `~/.local/bin` et pose le profil par défaut (`vidal` s'il n'y en a
 pas). `marketplace add` écrit le chemin absolu du dépôt dans `extraKnownMarketplaces` de
 `~/.claude/settings.json` ; le script l'en retire (la marketplace reste connue via
 `~/.claude/plugins/known_marketplaces.json`). Prérequis : `claude` ≥ 2.1.287, `jq`.
@@ -329,6 +294,150 @@ Mod (`hooks/register.tsx`) :
 Logique pure (lecture de `list`/`show`, réponse à une bascule) dans `hooks/switch.ts`,
 testée par `claude plugin test plugins/profiles` ; `types/index.d.ts` déclare l'état du
 mod (brouillon de chaque vue en édition).
+
+### `git-nav`
+
+**Rôle** : naviguer entre PR, branches et worktrees git — skills `/pr`, `/br`,
+`/worktree` et leurs scripts `gpr`, `gbr` (aussi pour le terminal, voir
+[`gpr`, `gbr` dans le terminal](#gpr-gbr-dans-le-terminal)).
+
+**Fichiers** : `plugins/git-nav/` (`skills/{pr,br,worktree}/SKILL.md`,
+`bin/{gpr,gbr,worktree-scan}`, `lib/git-tools.sh`) ; hors du plugin,
+`home/.config/shell/git-tools.sh` (fonctions shell `gpr`/`gbr`, alias) et les liens
+`~/.local/bin/{gpr,gbr}` posés par `setup/60-plugins.sh`. **Activé dans** : `vidal` et
+`basic`.
+
+**Prérequis** : `git` ; `gh` authentifié (`/pr`, facultatif pour `/br`) ; Linux pour
+`/worktree` (`/proc`).
+
+`bin/` du plugin est dans le PATH de l'outil Bash : les skills appellent `gpr`, `gbr`,
+`worktree-scan` par leur nom, et leurs `allowed-tools` (`Bash(gpr:*)`…) ne dépendent
+d'aucun chemin. `gpr` et `gbr` chargent `lib/git-tools.sh` par un chemin relatif à leur
+emplacement réel (`readlink -f`), valable depuis la copie du plugin comme depuis les liens
+`~/.local/bin`. Les skills gardent leur `name:` : `/pr`, `/br`, `/worktree` s'invoquent sans
+préfixe tant qu'aucune autre commande ne porte ce nom (sinon `/git-nav:pr`…).
+
+Ménage par `setup/60-plugins.sh` : les anciens liens `~/.claude/skills/{pr,br,worktree}/`
+(d'avant le plugin) sont retirés, `~/.local/bin/{gpr,gbr}` repointés vers le plugin.
+
+#### Installation hors de ce dépôt
+
+Le plugin ne dépend pas du reste de la config :
+
+```bash
+claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
+claude plugin install git-nav@claude-tools
+```
+
+Pour `gpr`/`gbr` dans le terminal (facultatif), depuis un clone : lier
+`plugins/git-nav/bin/{gpr,gbr}` dans `~/.local/bin`, et sourcer
+`home/.config/shell/git-tools.sh` pour le `cd` final et les alias.
+
+#### `/pr`
+
+`/pr [numéro | mots-clés]` : trouve une PR GitHub (`gh pr list`/`view`, PR ouvertes
+uniquement ; sans argument, les plus récemment modifiées d'abord) — une seule
+correspondance est ouverte directement, plusieurs sont proposées dans un sélecteur (les 4
+premières ; les 6 suivantes listées dans la question, à taper dans « Other », plus le
+nombre de PR restantes) —, la charge en contexte (description, revue, checks,
+commentaires), puis demande toujours où se placer : worktree dédié (recommandé s'il y a
+du travail local non commité) ou branche courante. Les outils autorisés sont listés dans le frontmatter du
+`SKILL.md`. Toutes les opérations passent par le script `gpr` (sous-commandes `list`,
+`view`, `where`, `worktree`, `checkout`, voir [ci-dessous](#gpr-gbr-dans-le-terminal)).
+Prérequis : `gh` authentifié sur le compte qui voit le repo.
+
+#### `/br`
+
+`/br [nom | mots-clés]` : même parcours que `/pr` pour une branche git, locale ou
+`origin` (nom exact pris directement, sinon recherche dans le nom et sélecteur ; sans
+argument, dernier commit d'abord), la charge en contexte (avance/retard sur la branche
+par défaut, commits propres, fichiers, PR liée), puis demande toujours où se placer :
+worktree dédié ou branche courante. Toutes les opérations passent par le script `gbr`
+(voir [ci-dessous](#gpr-gbr-dans-le-terminal)). Prérequis : `gh`
+facultatif (PR liée).
+
+#### `/worktree`
+
+`/worktree [list | clear | release]` : liste les worktrees du dépôt courant avec un verdict
+(`worktree-scan`), et avec `clear` supprime après confirmation ceux qui sont libres. Libre =
+ni dépôt principal, ni worktree de la session, ni verrouillé, sans modifications locales,
+et sans aucun processus de l'utilisateur dont le cwd est dedans (lecture de
+`/proc/*/cwd` : couvre les sessions Claude, les shells et les terminaux IDE). Suppression
+par `git worktree remove` sans `--force`, branches conservées, puis `git worktree prune`.
+
+`release` libère le worktree de la session (typiquement une fois la PR terminée, que
+`clear` ignore) : refus s'il est verrouillé ou a des modifications non commitées,
+confirmation s'il a des commits non poussés ou pas d'upstream ; la session le quitte
+(`ExitWorktree` en mode `keep` — `remove` supprimerait aussi la branche — ou `cd` vers
+le dépôt principal si elle a été lancée dedans), puis `git worktree remove` depuis le
+dépôt principal. La branche est conservée.
+Prérequis : Linux (`/proc`).
+
+#### `gpr`, `gbr` dans le terminal
+
+Les skills reposent sur `gpr` (PR) et `gbr` (branches), qui servent aussi dans le
+terminal (liens `~/.local/bin`) : même parcours — trouver, afficher, se placer dessus —
+et code partagé dans `lib/git-tools.sh`. `home/.config/shell/git-tools.sh` (lié par
+`./install.sh link`, chargé par `~/.bash_aliases`, voir
+[TOOLS.md](TOOLS.md#chargement-du-shell)) les enveloppe dans des fonctions shell et
+ajoute des alias.
+
+- **Où se placer** : après l'affichage, le mode interactif demande toujours : branche
+  courante, worktree ou rester ici. Rien n'est demandé si l'on est déjà sur la branche.
+  S'il y a du travail non commité, il est affiché et le worktree proposé en premier
+  (jamais de stash). Un worktree déjà ouvert sur la branche est proposé à la place d'un
+  nouveau.
+- **Worktree** (sous-commande `worktree`) : réutilise le worktree déjà ouvert sur la
+  branche, sinon le crée dans `<racine du dépôt principal>/.claude/worktrees/<dossier>`
+  (fetch si la branche existe sur origin, `.claude/worktrees/` dans `.git/info/exclude`
+  s'il n'est pas ignoré, branche locale suivie, `mise trust` si `mise.toml`) ; n'écrit que
+  le chemin sur la sortie standard. Même emplacement que les worktrees de Claude, donc
+  visible par `/worktree` et accepté par `EnterWorktree`.
+- **Sous-commandes** `list`, `view`, `where`, `worktree`, `checkout` : non interactives, à
+  sortie stable, utilisées par les skills `/pr` et `/br` ; `--help` les liste.
+- **Le `cd` final** : un script ne peut pas changer le dossier de son appelant ; les
+  fonctions `gpr`/`gbr` passent un fichier dans `GIT_TOOLS_CD_FILE`, le script y écrit le
+  worktree choisi et la fonction y fait le `cd`. Appelé directement (sans la fonction),
+  le script affiche `cd <dossier>`.
+- **Dans Claude**, utiliser `/pr` et `/br` plutôt que `! gpr` / `! gbr` : pas de
+  clavier pour les menus, et le `cd` ne déplacerait pas la session.
+
+`gpr` — PR GitHub (`gh` authentifié sur le compte qui voit le repo) :
+
+- `gpr [-c] [numéro | mots-clés]` : interactif. Sans argument, PR ouvertes les plus
+  récemment modifiées d'abord ; une seule correspondance est prise directement, sinon
+  menu. Affiche la PR (`-c` : avec les commentaires) et ses checks, puis où se placer.
+- `gpr list [recherche]` : une PR par ligne, `n titre branche auteur draft date` séparés
+  par des tabulations, 50 au plus.
+- `gpr view [-c] <n>` : `gh pr view` puis `gh pr checks`.
+- `gpr where <n>` : `branch`, `local_branch`, `fork`, `current`, `worktree`, `dirty` en
+  `clé=valeur`.
+- `gpr worktree <n>` : worktree `pr-<n>`.
+- `gpr checkout <n>` : `gh pr checkout` puis `git status -sb`.
+- PR de fork : branche locale `pr-<n>` (fetch de `pull/<n>/head`).
+- Alias : `gprs` (PR ouvertes, récentes d'abord), `gprr` (relecture demandée).
+
+`gbr` — branches git (`gh` facultatif : PR liée dans `view`) :
+
+- `gbr [nom | mots-clés]` : interactif. Un nom de branche existant (avec ou sans
+  `origin/`) est pris directement ; sinon recherche dans le nom, une seule
+  correspondance est prise directement, sinon menu. Affiche la branche, puis où se
+  placer.
+- `gbr list [recherche]` : `git fetch --prune` puis branches locales et `origin`
+  dédoublonnées, hors branche par défaut (`origin/HEAD`, sinon `main`/`master`), dernier
+  commit d'abord, filtre insensible à la casse ; une par ligne,
+  `nom où date auteur suivi` séparés par des tabulations (`où` : `local`, `origin` ou
+  `local+origin`), 50 au plus.
+- `gbr view <branche>` : où elle existe, suivi, dernier commit, avance/retard sur la
+  branche par défaut, PR liée (`gh pr list --head`, tous états), 30 derniers commits
+  propres, résumé des fichiers touchés.
+- `gbr where <branche>` : `branch`, `local`, `remote`, `current`, `worktree`, `dirty` en
+  `clé=valeur`.
+- `gbr worktree <branche>` : worktree nommé d'après la branche, `/` remplacés par `-`
+  (`feat/x` → `feat-x`) ; une branche seulement locale n'est pas fetchée.
+- `gbr checkout <branche>` : `git switch` (crée la branche locale suivie si elle n'existe
+  que sur origin) puis `git status -sb`.
+- Alias : `gbrs` (= `gbr list`).
 
 ## Gabarit pour un nouveau plugin
 

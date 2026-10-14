@@ -1,5 +1,5 @@
 # ~/.config/shell/git-tools.sh — outils git/GitHub du terminal (hors Claude).
-# Chargé par ~/.bash_aliases. Doc : TOOLS.md du dépôt claude-tools.
+# Chargé par ~/.bash_aliases. Doc : CLAUDE-CODE.md (plugin git-nav) du dépôt claude-tools.
 
 alias gprs='gh pr list --search "sort:updated-desc"'    # PR ouvertes, récentes d'abord
 alias gprr='gh pr list --search "review-requested:@me"' # PR à relire

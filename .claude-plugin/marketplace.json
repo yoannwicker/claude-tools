@@ -19,6 +19,11 @@
       "name": "profiles",
       "source": "./plugins/profiles",
       "description": "Commande /profile : choisir, voir, créer un profil Claude Code et en régler les plugins, relancer la conversation dans un autre (dossiers générés depuis ~/.claude, commande claude-profile)"
+    },
+    {
+      "name": "git-nav",
+      "source": "./plugins/git-nav",
+      "description": "Skills /pr, /br, /worktree : trouver une PR ou une branche et se placer dessus (branche courante ou worktree), lister et nettoyer les worktrees (commandes gpr, gbr, aussi pour le terminal)"
     }
   ]
 }

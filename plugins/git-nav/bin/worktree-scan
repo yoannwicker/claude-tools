@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scan.sh — classe les worktrees du dépôt courant, une ligne TSV par worktree :
+# worktree-scan — classe les worktrees du dépôt courant (skill /worktree), une ligne TSV par worktree :
 #   <verdict>\t<chemin>\t<branche>\t<détail>
 # verdict : main | current | locked | busy | dirty | free
 #   busy  = un processus de l'utilisateur a son cwd dans le worktree (session Claude, shell, IDE…)

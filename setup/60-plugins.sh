@@ -20,7 +20,7 @@ else
   fi
 fi
 
-for p in pr-comments intellij profiles; do
+for p in pr-comments intellij profiles git-nav; do
   if claude plugin list 2>/dev/null | grep -q "$p@claude-tools"; then
     claude plugin update "$p@claude-tools"
   else
@@ -36,6 +36,23 @@ ln -sfn "$repo/plugins/profiles/bin/claude-profile" "$HOME/.local/bin/claude-pro
 "$repo/plugins/profiles/bin/claude-profile" default >/dev/null 2>&1 || "$repo/plugins/profiles/bin/claude-profile" default vidal
 # Ancien nom de la commande (profile), lien laissé par une installation précédente.
 [ -L "$HOME/.local/bin/profile" ] && [ "$(readlink "$HOME/.local/bin/profile")" = "$repo/plugins/profiles/bin/profile" ] && rm "$HOME/.local/bin/profile"
+
+# Commandes gpr et gbr du plugin git-nav, aussi pour le terminal (remplace les anciens liens
+# vers home/.local/bin/).
+for c in gpr gbr; do
+  ln -sfn "$repo/plugins/git-nav/bin/$c" "$HOME/.local/bin/$c"
+done
+# Anciens skills /pr, /br, /worktree de home/.claude/skills/ (liés par install.sh avant
+# git-nav) : sans ce ménage, ils doubleraient ceux du plugin, dans tous les profils
+# (~/.claude-profiles/*/skills est un lien vers ~/.claude/skills).
+for s in pr br worktree; do
+  d=$HOME/.claude/skills/$s
+  [ -d "$d" ] || continue
+  for f in "$d"/*; do
+    [ -L "$f" ] && [ "$(readlink "$f")" = "$repo/home/.claude/skills/$s/${f##*/}" ] && rm "$f"
+  done
+  rmdir "$d" 2>/dev/null || true
+done
 
 # Ancien MCP intellij de scope user (ex-setup/40-mcp.sh) : à même URL, il masquerait celui
 # du plugin intellij, et ses outils ne portent pas les noms cités par la consigne du plugin.

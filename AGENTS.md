@@ -12,7 +12,7 @@ mode, prérequis) met à jour la doc **dans le même commit** que le code.
   *Gabarit pour un nouveau plugin* (voir *Documenter un plugin* ci-dessous) ; un nouveau
   skill, la sienne dans *Skills*.
 - **[TOOLS.md](TOOLS.md)** — même règle pour les outils hors Claude (`cl`, extension GNOME,
-  herdr, mise, `home/.local/bin/{gpr,gbr}`, `home/.local/lib/`, `home/.config/shell/`) ;
+  herdr, mise, `home/.config/shell/`) ;
   un nouvel outil reçoit sa section selon le *Gabarit pour un nouvel outil*.
 - **[README.md](README.md)** — seulement si la vue d'ensemble change :
   - installation ajoutée, supprimée ou modifiée (tableau *À la carte*, scripts `setup/`,

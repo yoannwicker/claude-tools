@@ -7,7 +7,7 @@ allowed-tools: Bash(gbr:*), EnterWorktree
 
 Argument : `$ARGUMENTS`
 
-Tout passe par le script `gbr` (`~/.local/bin/gbr`, `gbr --help`), que l'utilisateur
+Tout passe par le script `gbr` (`bin/` du plugin, `gbr --help`), que l'utilisateur
 emploie aussi dans son terminal : ne pas refaire à la main avec `git`/`gh` ce qu'une
 sous-commande fait déjà. Un nom peut s'écrire avec ou sans `origin/`.
 
