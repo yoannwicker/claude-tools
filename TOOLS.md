@@ -12,7 +12,7 @@ source `~/.bash_aliases` (sinon y ajouter `. ~/.bash_aliases`). Fonctions et ali
 sont chargés que dans un shell interactif : ils n'existent pas dans les commandes `!` ni
 dans le shell de Claude, qui n'utilisent que les scripts de `~/.local/bin`.
 Seule exception côté Claude : `claude-profile.sh`, qui fait passer `claude` par
-`claude-profile run` (voir [CLAUDE-CODE.md](CLAUDE-CODE.md#profils)).
+`claude-profile run` (voir [CLAUDE-CODE.md](CLAUDE-CODE.md#bascule-depuis-une-session)).
 
 ## Lanceur `cl`
 
@@ -21,7 +21,7 @@ Seule exception côté Claude : `claude-profile.sh`, qui fait passer `claude` pa
 **Fichiers** : `home/.local/bin/cl` (espaces de travail dans `~/.config/cl/workspaces`,
 non versionné).
 
-**Prérequis** : `claude` ; `claude-profile` (voir [CLAUDE-CODE.md](CLAUDE-CODE.md#profils)).
+**Prérequis** : `claude` ; `claude-profile` (voir [CLAUDE-CODE.md](CLAUDE-CODE.md#claude-profile)).
 
 **Installation** : `./install.sh link && ./setup/50-cl.sh`.
 
@@ -48,7 +48,7 @@ sur `~/workspace`.
 
 `cl` lance Claude par `claude-profile run`, et `cl -P <profil> [projet] …` par
 `claude-profile switch <profil>` : `/profile` peut ensuite relancer la session dans un autre
-profil (voir [Profils](CLAUDE-CODE.md#profils)).
+profil (voir [`profiles`](CLAUDE-CODE.md#profiles)).
 
 ## Outils git : partie commune
 
