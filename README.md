@@ -4,9 +4,10 @@ Configuration locale versionnée de mes outils de développement assisté par IA
 [Claude Code](https://code.claude.com/docs) (settings, status line, notifications desktop,
 skills), [herdr](https://herdr.dev), l'extension GNOME `claude-notify` et les outils
 `mise` globaux — appliquée dans `$HOME` par symlinks via `install.sh`.
-Le détail de chaque outil (fonctionnalités, prérequis, installation, configuration
-spécifique) est dans [TOOLS.md](TOOLS.md) ; les outils shell hors Claude (`gpr`, `gbr`) dans
-[SHELL.md](SHELL.md).
+Le détail (fonctionnalités, prérequis, installation, configuration spécifique) est dans
+[CLAUDE-CODE.md](CLAUDE-CODE.md) pour Claude Code et ses plugins, et dans
+[TOOLS.md](TOOLS.md) pour les outils hors Claude (`cl`, extension GNOME, herdr, mise,
+`gpr`, `gbr`).
 
 ## Installer
 
@@ -17,17 +18,24 @@ git clone git@github.com:yoannwicker/claude-tools.git ~/workspace_perso/claude-t
 cd ~/workspace_perso/claude-tools && ./install.sh
 ```
 
-À la carte :
+À la carte, Claude Code (détail : [CLAUDE-CODE.md](CLAUDE-CODE.md)) :
 
 | Outil | Commande | Prérequis |
 |---|---|---|
 | Claude Code (settings, status line, règles, skills `/pr`, `/br`, `/worktree`) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
-| mise (outils globaux) | `./setup/10-mise.sh` | `curl` |
-| herdr (+ intégrations Claude/Copilot) | `./setup/20-herdr.sh` | `curl` ; Linux ou macOS |
-| Notifications desktop (hooks + extension GNOME) | `./install.sh link && ./setup/30-gnome.sh` | GNOME Shell 46, `python3-gi`, `gdbus`, `xprop`, gnome-terminal |
-| Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
 | Plugins `pr-comments` (fils de review non résolus), `intellij` (MCP IntelliJ + consigne), `profiles` (commande `/profile`) | `./setup/60-plugins.sh` | `claude` ≥ 2.1.287, `gh` authentifié, `jq` ; IntelliJ avec le serveur MCP sur le port 64342 |
 | Profils (commande `claude-profile`, fonction shell `claude`) | `./install.sh link && ./setup/60-plugins.sh` (lie `claude-profile` dans `~/.local/bin`, pose le profil par défaut `vidal` → `~/.claude/settings.json`) | `jq` |
+| Notifications desktop (hooks `notify.sh`) | `./install.sh link` | `python3-gi`, `gdbus`, `xprop`, gnome-terminal ; pastille : extension GNOME ci-dessous |
+
+À la carte, outils externes (détail : [TOOLS.md](TOOLS.md)) :
+
+| Outil | Commande | Prérequis |
+|---|---|---|
+| mise (outils globaux) | `./setup/10-mise.sh` | `curl` |
+| herdr (+ intégrations Claude/Copilot) | `./setup/20-herdr.sh` | `curl` ; Linux ou macOS |
+| Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
+| Extension GNOME `claude-notify` (pastille des notifications) | `./install.sh link && ./setup/30-gnome.sh` | GNOME Shell 46 |
+| Outils git `gpr`, `gbr` | `./install.sh link` | `git`, `gh` authentifié (`gpr`) |
 
 Sans GNOME : garder `./install.sh link` et retirer les hooks `notify.sh` de
 chaque profil `profiles/*.json` (événements `Stop`, `StopFailure`, `Notification`,
@@ -59,20 +67,12 @@ demander une déconnexion/reconnexion de session.
 - `./install.sh capture <fichier>` : repli pour un fichier qu'un outil réécrit en
   remplaçant le lien (recopie `$HOME` → `home/`).
 
-## Ne jamais ajouter
-
-`~/.claude/.credentials.json`, `~/.claude.json` (tokens OAuth, état, serveurs MCP
-utilisateur), `~/.claude-profiles/` (dossiers de profils générés),
-`~/.claude/projects/` (transcripts, mémoire), `~/.claude/plugins/`,
-`~/.claude/skills/synced/`, `history.jsonl`, et dans `~/.config/herdr/` les `*.log`,
-`*.sock`, `session.json`. Toujours `adopt` fichier par fichier, jamais un dossier.
-
 ## Structure
 
 ```
 install.sh          link | setup | status | adopt | capture (défaut : link + setup)
 home/               miroir de $HOME, un lien par fichier
-  .bash_aliases     charge .config/shell/*.sh (outils shell, voir SHELL.md)
+  .bash_aliases     charge .config/shell/*.sh (outils shell, voir TOOLS.md)
   .claude/          statusline-*.sh, notify*.sh, claude-notify.py, rules/, skills/{pr,br,worktree,profile}/
   .config/          herdr/config.toml, mise/config.toml, shell/{git-tools,claude-profile}.sh
   .local/           bin/{cl,dot,gpr,gbr}, lib/git-tools.sh, share/gnome-shell/extensions/claude-notify@ywicker/
@@ -80,7 +80,7 @@ home/               miroir de $HOME, un lien par fichier
 plugins/            plugins Claude Code : pr-comments/ (repris d'aguiddir/claude-config), intellij/, profiles/ (avec bin/claude-profile)
 profiles/           profils (<nom>.json : settings.json complet de chaque profil — vidal, basic —, voir `claude-profile`)
 setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 50-cl, 60-plugins
-TOOLS.md            détail par outil
-SHELL.md            outils shell hors Claude (gpr, gbr)
+CLAUDE-CODE.md      Claude Code : settings, profils, skills, plugins
+TOOLS.md            outils hors Claude : cl, extension GNOME, herdr, mise, gpr, gbr
 AGENTS.md           consignes pour les agents (CLAUDE.md l'importe)
 ```
