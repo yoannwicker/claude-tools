@@ -9,8 +9,9 @@ installation · fonctionnalités et configuration spécifique.
 (`~/.claude`), pas la configuration des projets (`.claude/` dans chaque repo).
 
 **Fichiers** : `home/.claude/settings.json`, `statusline-command.sh`, `statusline-ps1.sh`,
-`notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/{build-brief,jetbrains-mcp}.md`, `skills/{pr,br}/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`, `home/.local/bin/cl` ; plugins :
-`.claude-plugin/marketplace.json`, `plugins/pr-comments/`, `setup/60-plugins.sh`.
+`notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/build-brief.md`, `skills/{pr,br}/SKILL.md`, `skills/worktree/{SKILL.md,scan.sh}`, `home/.local/bin/cl` ; plugins :
+`.claude-plugin/marketplace.json`, `plugins/pr-comments/`, `plugins/intellij/`,
+`setup/60-plugins.sh`.
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line,
 notifications) ; `gh` authentifié (skill `/pr`, badge PR de la status line) ; Linux +
@@ -39,9 +40,9 @@ Instructions chargées dans toutes les sessions, reprises de `~/.copilot/instruc
 
 - `build-brief.md` : toute commande Gradle passe par `build-brief` (`build-brief ./gradlew …`),
   Gradle brut seulement dans les exceptions listées. Prérequis : `build-brief` dans le PATH.
-- `jetbrains-mcp.md` : recherche, refactoring et diff via les outils `mcp__intellij__*`
-  plutôt que `grep`/`find`, sauf MCP injoignable ou projet non ouvert dans l'IDE
-  (voir [MCP IntelliJ](#mcp-intellij)).
+
+La consigne IntelliJ (ex-`jetbrains-mcp.md`) est portée par le plugin `intellij` avec son
+serveur MCP (voir [MCP IntelliJ](#mcp-intellij)).
 
 ### Lanceur `cl`
 
@@ -174,10 +175,21 @@ Prérequis : GNOME Shell + gnome-terminal, `python3-gi` avec `Notify 0.7`, `gdbu
 
 ### MCP IntelliJ
 
-Serveur MCP utilisateur `intellij`, transport SSE sur `http://127.0.0.1:64342/sse`
-(plugin MCP Server d'IntelliJ). Il vit dans `~/.claude.json` (non versionné) ; `setup/40-mcp.sh`
-le déclare s'il manque (`claude mcp add --scope user --transport sse …`). Prérequis :
-IntelliJ ouvert avec le serveur MCP actif, sinon `claude mcp list` le montre déconnecté.
+Plugin `intellij` (`plugins/intellij/`), qui regroupe le serveur MCP et la consigne
+d'usage de ses outils :
+
+- `.mcp.json` : serveur `intellij`, transport SSE sur `http://127.0.0.1:64342/sse`
+  (plugin MCP Server d'IntelliJ). Outils exposés sous `mcp__plugin_intellij_intellij__*`.
+- `instructions.md` : recherche, refactoring et diff via ces outils plutôt que
+  `grep`/`find`, sauf MCP injoignable ou projet non ouvert dans l'IDE. Injectée dans le
+  contexte par un hook `SessionStart` du plugin (`hooks/hooks.json`, au démarrage, à la
+  reprise, après `/clear` et `/compact`) : un plugin ne porte ni `CLAUDE.md` ni rules.
+
+Installation : `./setup/60-plugins.sh` (comme `pr-comments`, activé dans `enabledPlugins`).
+Le script retire aussi l'ancien serveur `intellij` de scope user (`~/.claude.json`, ex-
+`setup/40-mcp.sh`) : à même URL, Claude Code garderait celui-ci et ignorerait celui du
+plugin. Prérequis : IntelliJ ouvert avec le serveur MCP actif, sinon `claude mcp list` le
+montre déconnecté.
 
 ## Extension GNOME `claude-notify@ywicker`
 

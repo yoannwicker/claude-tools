@@ -19,10 +19,16 @@ else
   fi
 fi
 
-for p in pr-comments; do
+for p in pr-comments intellij; do
   if claude plugin list 2>/dev/null | grep -q "$p@claude-tools"; then
     claude plugin update "$p@claude-tools"
   else
     claude plugin install "$p@claude-tools"
   fi
 done
+
+# Ancien MCP intellij de scope user (ex-setup/40-mcp.sh) : à même URL, il masquerait celui
+# du plugin intellij, et ses outils ne portent pas les noms cités par la consigne du plugin.
+if claude mcp get intellij 2>/dev/null | grep -qi 'scope: *user'; then
+  claude mcp remove --scope user intellij
+fi

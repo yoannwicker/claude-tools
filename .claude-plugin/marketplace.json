@@ -9,6 +9,11 @@
       "name": "pr-comments",
       "source": "./plugins/pr-comments",
       "description": "A pane to work through the review threads of your PRs and the current branch's: hand some to Claude, reply, resolve"
+    },
+    {
+      "name": "intellij",
+      "source": "./plugins/intellij",
+      "description": "MCP IntelliJ (SSE, port 64342) et consigne d'usage de ses outils pour la recherche, le refactoring et le diff"
     }
   ]
 }

@@ -1,0 +1,5 @@
+{
+  "name": "intellij",
+  "description": "MCP IntelliJ (SSE, port 64342) et consigne d'usage de ses outils pour la recherche, le refactoring et le diff",
+  "author": { "name": "ywicker" }
+}
