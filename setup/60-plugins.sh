@@ -20,7 +20,7 @@ else
   fi
 fi
 
-for p in pr-comments intellij profiles git-nav notify; do
+for p in pr-comments intellij profiles git-nav notify herdr-session; do
   if claude plugin list 2>/dev/null | grep -q "$p@claude-tools"; then
     claude plugin update "$p@claude-tools"
   else

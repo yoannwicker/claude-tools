@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# herdr : installe le binaire si absent, pose les intégrations agents, nettoie le hook Claude.
+# herdr : installe le binaire si absent, pose les intégrations agents, retire le hook Claude de
+# settings.json (il vient du plugin herdr-session).
 set -eu
 if ! command -v herdr >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/herdr" ]; then
   curl -fsSL https://herdr.dev/install.sh | sh
@@ -16,26 +17,32 @@ for agent in $integrations; do
   fi
 done
 
-# `herdr integration install claude` ajoute un hook SessionStart avec un chemin absolu.
-# Les profils (profiles/*.json) portent déjà la variante portable ($HOME + garde [ -f … ]) :
-# on retire les doublons absolus, en écrivant à travers le lien (jamais de mv).
+# `herdr integration install claude` ajoute à ~/.claude/settings.json un hook SessionStart vers
+# son script, avec un chemin absolu. Le branchement vient du plugin herdr-session : on retire de
+# settings.json tout hook herdr (absolu ou ancienne variante portable des profils), en écrivant
+# à travers le lien (jamais de mv).
 settings=$HOME/.claude/settings.json
 if [ -f "$settings" ] && command -v python3 >/dev/null 2>&1; then
   python3 - "$settings" <<'PY'
-import json, re, sys
+import json, sys
 p = sys.argv[1]
 d = json.load(open(p))
-pat = re.compile(r"^bash '.*herdr-agent-state\.sh' session$")
-ss = d.get("hooks", {}).get("SessionStart", [])
-before = sum(len(e["hooks"]) for e in ss)
+hooks = d.get("hooks", {})
+ss = hooks.get("SessionStart", [])
+before = sum(len(e.get("hooks", [])) for e in ss)
 for e in ss:
-    e["hooks"] = [h for h in e["hooks"] if not pat.match(h.get("command", ""))]
+    e["hooks"] = [h for h in e.get("hooks", []) if "herdr-agent-state.sh" not in h.get("command", "")]
 ss = [e for e in ss if e["hooks"]]
 after = sum(len(e["hooks"]) for e in ss)
 if before != after:
-    d["hooks"]["SessionStart"] = ss
+    if ss:
+        hooks["SessionStart"] = ss
+    else:
+        hooks.pop("SessionStart", None)
+    if not hooks:
+        d.pop("hooks", None)
     with open(p, "w") as f:
         json.dump(d, f, indent=2, ensure_ascii=False); f.write("\n")
-    print(f"hook herdr absolu retiré de settings.json ({before - after})")
+    print(f"hook herdr retiré de settings.json ({before - after}) : il vient du plugin herdr-session")
 PY
 fi

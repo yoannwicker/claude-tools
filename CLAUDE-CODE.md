@@ -8,7 +8,7 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 
 **Fichiers** : `profiles/*.json` (le `settings.json`, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh`,
 `rules/build-brief.md` ; plugins :
-`.claude-plugin/marketplace.json`, `plugins/{pr-comments,intellij,profiles,git-nav,notify}/`,
+`.claude-plugin/marketplace.json`, `plugins/{pr-comments,intellij,profiles,git-nav,notify,herdr-session}/`,
 `setup/60-plugins.sh`, `home/.config/shell/claude-profile.sh` (plugin [`profiles`](#profiles)),
 `home/.config/shell/git-tools.sh` (plugin [`git-nav`](#git-nav)).
 
@@ -29,8 +29,8 @@ Pas de `settings.json` versionné dans `home/` : `~/.claude/settings.json` vient
 - Modèle par défaut `opus` ; niveaux d'effort par modèle (`modelSettings` : `high` pour
   `claude-fable-5-1`, `medium` pour `claude-opus-5-5`) ; thème `dark`.
 - `worktree.baseRef = "fresh"` : les worktrees créés par Claude partent d'une base fraîche.
-- Hooks : `SessionStart` → intégration herdr, gardée par `[ -f … ]` pour être sans effet sur une
-  machine sans herdr (voir [TOOLS.md](TOOLS.md#herdr)).
+- Aucun hook dans les profils : ils viennent des plugins ([`notify`](#notify),
+  [`herdr-session`](#herdr-session), [`intellij`](#intellij)).
 - `statusLine` → `statusline-command.sh`, rafraîchie toutes les 10 s.
 - `autoContinueAtUsageLimit = false`, `inputNeededNotifEnabled = true`.
 - Notifications desktop : plugin [`notify`](#notify), activé dans `enabledPlugins`.
@@ -54,7 +54,7 @@ hook, la statusline) est à reporter dans chacun. Ce qui change d'un profil à l
 surtout `enabledPlugins` (voir [Plugins](#plugins)).
 
 Profils versionnés : `vidal` (config complète : `pr-comments`, `intellij`, `profiles`,
-`git-nav`, `notify` ; par défaut à l'installation) et `basic` (le même sans `pr-comments`).
+`git-nav`, `notify`, `herdr-session` ; par défaut à l'installation) et `basic` (le même sans `pr-comments`).
 
 Passer d'un profil à l'autre demande le plugin [`profiles`](#profiles) (`/profile`,
 `claude-profile`). Sans lui, il suffit de remplacer le contenu de `~/.claude/settings.json`
@@ -505,15 +505,65 @@ bloque pas le hook (on retombe sur ce qu'il sait sans herdr).
 | Clic : 3. repli | première fenêtre gnome-terminal | idem |
 | Événements, urgence, effacement, extension GNOME | identiques | identiques |
 
-Le titre d'onglet que cherche le clic sous herdr vient de `ui.window_title`, laissé à son
-défaut `"{hostname}: {workspace}"` (voir [TOOLS.md](TOOLS.md#herdr)) : le changer casse la
-recherche.
+Le titre d'onglet que cherche le clic sous herdr vient de `ui.window_title`, fixé à
+`"{hostname}: {workspace}"` dans `home/.config/herdr/config.toml` (voir
+[TOOLS.md](TOOLS.md#herdr)) : à garder tel quel, la recherche en dépend.
 
-Ce que `notify` n'utilise pas : le hook herdr `SessionStart`, qui ne change rien à ce
-tableau (herdr reconnaît Claude et son état en lisant l'écran du pane ; le hook ne lui
-transmet que l'identifiant de session, pour la reprise après un redémarrage), et les
-notifications propres à herdr (`ui.toast.delivery`, `off` par défaut : à laisser ainsi,
-sinon doublons).
+Le plugin [`herdr-session`](#herdr-session) ne change rien à ce tableau : herdr reconnaît
+Claude et son état en lisant l'écran du pane, l'intégration ne lui transmet que
+l'identifiant de session, pour la reprise après un redémarrage. `notify` n'utilise pas non
+plus les notifications propres à herdr (`ui.toast.delivery`, `off` par défaut : à laisser ainsi, sinon doublons).
+
+### `herdr-session`
+
+**Rôle** : signaler la session Claude au pane herdr qui l'héberge, pour que herdr la reprenne
+après un redémarrage.
+
+**Fichiers** : `plugins/herdr-session/` (`hooks/hooks.json`) ; hors du plugin, le script
+`~/.claude/hooks/herdr-agent-state.sh`, généré et réécrit par herdr (non versionné), et le
+ménage de `setup/20-herdr.sh`. **Activé dans** : `vidal` et `basic`.
+
+**Prérequis** : herdr avec son intégration Claude (`herdr integration install claude`,
+version ≥ 6 pour la reprise ; `herdr integration status` → `claude: current`). Sans le
+script, ou hors d'un pane herdr, le hook ne fait rien. Pas de tests.
+
+#### Installation hors de ce dépôt
+
+Le plugin ne dépend pas du reste de la config :
+
+```bash
+herdr integration install claude                          # script ~/.claude/hooks/herdr-agent-state.sh
+claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
+claude plugin install herdr-session@claude-tools
+```
+
+`herdr integration install claude` ajoute aussi son propre hook `SessionStart` (chemin
+absolu) dans `~/.claude/settings.json` : le retirer, sinon la session est signalée deux
+fois (à refaire après chaque réinstallation de l'intégration, ce que fait ici
+`setup/20-herdr.sh`).
+
+#### Fonctionnement
+
+Un hook `SessionStart` (démarrage, reprise, `/clear`, compaction, fork ; `timeout` 10 s)
+lance `[ -f "$HOME/.claude/hooks/herdr-agent-state.sh" ] && bash … session || true`. Le
+script de herdr ne fait rien hors d'un pane herdr (`HERDR_ENV`, `HERDR_PANE_ID`,
+`HERDR_SOCKET_PATH`) ni pour un sous-agent ; sinon il envoie au socket herdr
+`pane.report_agent_session` : agent `claude`, identifiant de session, chemin du transcript.
+
+herdr garde cette référence dans la session sauvegardée. Après un redémarrage du serveur
+herdr (ou de la machine), il restaure workspaces, onglets et panes, puis relance
+`claude --resume <id>` dans chaque pane signalé, une fois un client attaché
+(`[session] resume_agents_on_restore = true`, fixé dans `home/.config/herdr/config.toml` ;
+`startup_per_agent_delay_ms`, 100 ms par défaut, espace les relances). Plugin à `false`
+dans un profil : ses sessions ne sont pas signalées, herdr les restaure en simple shell.
+
+Non vérifié : herdr relance `claude` sans `CLAUDE_CONFIG_DIR`, donc a priori dans le profil
+par défaut ; la conversation est retrouvée (`projects/` est partagé entre profils).
+
+Ménage par `setup/20-herdr.sh` (rejoué par `dot` après `herdr update`) : tout hook
+`herdr-agent-state.sh` de `~/.claude/settings.json` (celui que herdr ajoute à chaque
+installation, ou l'ancienne variante portable des profils) est retiré, en écrivant à
+travers le lien.
 
 ## Gabarit pour un nouveau plugin
 

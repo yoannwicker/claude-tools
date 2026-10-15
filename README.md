@@ -22,7 +22,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Outil | Commande | Prérequis |
 |---|---|---|
 | Claude Code (settings, status line, règles) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
-| Plugins `pr-comments` (fils de review non résolus), `intellij` (MCP IntelliJ + consigne), `profiles` (commande `/profile`), `git-nav` (skills `/pr`, `/br`, `/worktree` ; `gpr`, `gbr` liés dans `~/.local/bin` pour le terminal), `notify` (notifications desktop) | `./setup/60-plugins.sh` | `claude` ≥ 2.1.287, `gh` authentifié, `jq`, `git` ; IntelliJ avec le serveur MCP sur le port 64342 ; `notify` : `python3-gi`, `gdbus`, `xprop`, gnome-terminal |
+| Plugins `pr-comments` (fils de review non résolus), `intellij` (MCP IntelliJ + consigne), `profiles` (commande `/profile`), `git-nav` (skills `/pr`, `/br`, `/worktree` ; `gpr`, `gbr` liés dans `~/.local/bin` pour le terminal), `notify` (notifications desktop), `herdr-session` (reprise des sessions par herdr) | `./setup/60-plugins.sh` | `claude` ≥ 2.1.287, `gh` authentifié, `jq`, `git` ; IntelliJ avec le serveur MCP sur le port 64342 ; `notify` : `python3-gi`, `gdbus`, `xprop`, gnome-terminal |
 | Profils (commande `claude-profile`, fonction shell `claude`) | `./install.sh link && ./setup/60-plugins.sh` (lie `claude-profile` dans `~/.local/bin`, pose le profil par défaut `vidal` → `~/.claude/settings.json`) | `jq` |
 
 À la carte, outils externes (détail : [TOOLS.md](TOOLS.md)) :
@@ -79,7 +79,7 @@ home/               miroir de $HOME, un lien par fichier
 .claude-plugin/     marketplace.json : ce dépôt comme marketplace locale « claude-tools »
 plugins/            plugins Claude Code : pr-comments/ (repris d'aguiddir/claude-config), intellij/, profiles/ (avec bin/claude-profile),
                     git-nav/ (skills /pr, /br, /worktree, bin/{gpr,gbr}, lib/git-tools.sh),
-                    notify/ (hooks et scripts des notifications desktop)
+                    notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr)
 profiles/           profils (<nom>.json : settings.json complet de chaque profil — vidal, basic —, voir `claude-profile`)
 setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 50-cl, 60-plugins
 CLAUDE-CODE.md      Claude Code : settings, profils, plugins

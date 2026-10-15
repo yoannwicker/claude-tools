@@ -29,6 +29,11 @@
       "name": "notify",
       "source": "./plugins/notify",
       "description": "Notifications desktop GNOME aux événements de Claude Code (fin de tour, erreur, permission, question), clic pour revenir sur l'onglet de la session"
+    },
+    {
+      "name": "herdr-session",
+      "source": "./plugins/herdr-session",
+      "description": "Signale la session Claude Code au pane herdr qui l'héberge, pour que herdr la reprenne (claude --resume) après un redémarrage"
     }
   ]
 }

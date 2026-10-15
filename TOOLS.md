@@ -84,18 +84,20 @@ locaux dans `~/.config/herdr/` : `*.log`, `*.sock`, `session.json`, `release-not
 
 **Configuration spécifique** :
 - `onboarding = false` ; `[update] channel = "stable"`. Toute section ajoutée ensuite
-  (`[keys]`, `[theme]`, `[ui]`, `[terminal]`) se documente ici.
+  (`[keys]`, `[theme]`, `[terminal]`…) se documente ici.
+- `[ui] window_title = "{hostname}: {workspace}"` (la valeur par défaut, fixée) : le clic
+  des notifications Claude retrouve l'onglet gnome-terminal par ce titre (plugin
+  [`notify`](CLAUDE-CODE.md#sans-et-avec-herdr)). `ui.toast.delivery` reste à son défaut `off`, pour
+  ne pas doubler ces notifications.
+- `[session] resume_agents_on_restore = true` (la valeur par défaut, fixée) : après un
+  redémarrage, herdr relance `claude --resume` dans les panes que le plugin
+  [`herdr-session`](CLAUDE-CODE.md#herdr-session) lui a signalés.
 - Intégration Claude : herdr génère `~/.claude/hooks/herdr-agent-state.sh` (fichier
-  « managed by herdr », non versionné) et ajoute un hook `SessionStart` dans
-  `settings.json` avec un **chemin absolu**. Les profils (`profiles/*.json`, voir [CLAUDE-CODE.md](CLAUDE-CODE.md#profils)) portent la variante
-  portable `[ -f "$HOME/.claude/hooks/herdr-agent-state.sh" ] && bash … session || true` ;
-  comme herdr ne la reconnaît pas, chaque `integration install` ajoute un doublon absolu,
-  que `setup/20-herdr.sh` retire (en écrivant à travers le lien). `dot` rejoue ce script
+  « managed by herdr », non versionné) et ajoute à chaque `integration install` un hook
+  `SessionStart` à chemin absolu dans `settings.json`. Le branchement vient du plugin
+  [`herdr-session`](CLAUDE-CODE.md#herdr-session) : `setup/20-herdr.sh` retire de
+  `settings.json` tout hook herdr (en écrivant à travers le lien), et `dot` rejoue ce script
   après `herdr update`.
-- `ui.window_title` laissé au défaut (`"{hostname}: {workspace}"`) : le clic des
-  notifications Claude retrouve l'onglet gnome-terminal par ce titre, et
-  `ui.toast.delivery` à `off` (défaut) pour ne pas doubler ces notifications (plugin
-  [`notify`](CLAUDE-CODE.md#sans-et-avec-herdr)).
 - Vérifier : `herdr integration status` → `claude: current`.
 
 ## mise

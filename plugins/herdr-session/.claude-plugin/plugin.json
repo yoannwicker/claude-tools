@@ -1,0 +1,5 @@
+{
+  "name": "herdr-session",
+  "description": "Signale la session Claude Code au pane herdr qui l'héberge, pour que herdr la reprenne (claude --resume) après un redémarrage",
+  "author": { "name": "ywicker" }
+}
