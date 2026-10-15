@@ -24,6 +24,11 @@
       "name": "git-nav",
       "source": "./plugins/git-nav",
       "description": "Skills /pr, /br, /worktree : trouver une PR ou une branche et se placer dessus (branche courante ou worktree), lister et nettoyer les worktrees (commandes gpr, gbr, aussi pour le terminal)"
+    },
+    {
+      "name": "notify",
+      "source": "./plugins/notify",
+      "description": "Notifications desktop GNOME aux événements de Claude Code (fin de tour, erreur, permission, question), clic pour revenir sur l'onglet de la session"
     }
   ]
 }

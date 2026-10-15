@@ -59,9 +59,11 @@ attente ; menu pour revenir sur une session ou tout effacer.
 (`extension.js`, `metadata.json`, `stylesheet.css`).
 
 **Prérequis** : GNOME Shell 46 (`shell-version` dans `metadata.json`), les scripts de
-notification de Claude ([CLAUDE-CODE.md](CLAUDE-CODE.md#notifications-desktop)) (l'extension appelle `~/.claude/notify-click.sh`).
+notification de Claude, plugin [`notify`](CLAUDE-CODE.md#notify) (l'extension appelle
+`~/.local/bin/claude-notify-click`, lien vers son `notify-click.sh` posé par
+`setup/60-plugins.sh`).
 
-**Installation** : `./install.sh link` puis `./setup/30-gnome.sh`
+**Installation** : `./install.sh link`, `./setup/60-plugins.sh` (plugin et lien) puis `./setup/30-gnome.sh`
 (`gnome-extensions enable claude-notify@ywicker`). Après un premier lien, GNOME Shell ne
 voit l'extension qu'au prochain login : se déconnecter/reconnecter puis relancer le script.
 
@@ -90,6 +92,10 @@ locaux dans `~/.config/herdr/` : `*.log`, `*.sock`, `session.json`, `release-not
   comme herdr ne la reconnaît pas, chaque `integration install` ajoute un doublon absolu,
   que `setup/20-herdr.sh` retire (en écrivant à travers le lien). `dot` rejoue ce script
   après `herdr update`.
+- `ui.window_title` laissé au défaut (`"{hostname}: {workspace}"`) : le clic des
+  notifications Claude retrouve l'onglet gnome-terminal par ce titre, et
+  `ui.toast.delivery` à `off` (défaut) pour ne pas doubler ces notifications (plugin
+  [`notify`](CLAUDE-CODE.md#sans-et-avec-herdr)).
 - Vérifier : `herdr integration status` → `claude: current`.
 
 ## mise

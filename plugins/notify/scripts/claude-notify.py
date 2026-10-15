@@ -20,7 +20,7 @@ from gi.repository import GLib, Notify  # noqa: E402
 STATE_DIR = os.path.join(
     os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "claude-notify"
 )
-CLICK = os.path.expanduser("~/.claude/notify-click.sh")
+CLICK = os.path.join(os.path.dirname(os.path.realpath(__file__)), "notify-click.sh")
 DISMISSED = 2
 
 

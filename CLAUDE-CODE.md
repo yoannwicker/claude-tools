@@ -7,15 +7,14 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 (`~/.claude`), pas la configuration des projets (`.claude/` dans chaque repo).
 
 **Fichiers** : `profiles/*.json` (le `settings.json`, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh`,
-`notify.sh`, `notify-click.sh`, `claude-notify.py`, `rules/build-brief.md` ; plugins :
-`.claude-plugin/marketplace.json`, `plugins/{pr-comments,intellij,profiles,git-nav}/`,
+`rules/build-brief.md` ; plugins :
+`.claude-plugin/marketplace.json`, `plugins/{pr-comments,intellij,profiles,git-nav,notify}/`,
 `setup/60-plugins.sh`, `home/.config/shell/claude-profile.sh` (plugin [`profiles`](#profiles)),
 `home/.config/shell/git-tools.sh` (plugin [`git-nav`](#git-nav)).
 
-**Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line,
-notifications) ; `gh` authentifié (plugin [`git-nav`](#git-nav), badge PR de la status line) ; Linux +
-GNOME Shell 46 pour les notifications (voir [Notifications desktop](#notifications-desktop) et l'extension GNOME dans
-[TOOLS.md](TOOLS.md#extension-gnome-claude-notifyywicker)) ;
+**Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line) ; `gh`
+authentifié (plugin [`git-nav`](#git-nav), badge PR de la status line) ; Linux + GNOME pour
+les notifications (plugin [`notify`](#notify)) ;
 IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [`intellij`](#intellij)).
 
 **Installation** : `./install.sh link`, puis `./setup/60-plugins.sh` pour les plugins et le
@@ -30,12 +29,11 @@ Pas de `settings.json` versionné dans `home/` : `~/.claude/settings.json` vient
 - Modèle par défaut `opus` ; niveaux d'effort par modèle (`modelSettings` : `high` pour
   `claude-fable-5-1`, `medium` pour `claude-opus-5-5`) ; thème `dark`.
 - `worktree.baseRef = "fresh"` : les worktrees créés par Claude partent d'une base fraîche.
-- Hooks : `Stop`, `StopFailure`, `Notification` → `notify.sh` (notification desktop) ;
-  `UserPromptSubmit` → `notify.sh` (efface les notifications en attente de la session) ;
-  `SessionStart` → intégration herdr, gardée par `[ -f … ]` pour être sans effet sur une
+- Hooks : `SessionStart` → intégration herdr, gardée par `[ -f … ]` pour être sans effet sur une
   machine sans herdr (voir [TOOLS.md](TOOLS.md#herdr)).
 - `statusLine` → `statusline-command.sh`, rafraîchie toutes les 10 s.
 - `autoContinueAtUsageLimit = false`, `inputNeededNotifEnabled = true`.
+- Notifications desktop : plugin [`notify`](#notify), activé dans `enabledPlugins`.
 
 ## Règles (`~/.claude/rules/`)
 
@@ -55,8 +53,8 @@ une clé `description`) : rien n'est partagé entre profils, une modification co
 hook, la statusline) est à reporter dans chacun. Ce qui change d'un profil à l'autre est
 surtout `enabledPlugins` (voir [Plugins](#plugins)).
 
-Profils versionnés : `vidal` (config complète : `pr-comments`, `intellij`, `profiles` ;
-par défaut à l'installation) et `basic` (le même sans `pr-comments`).
+Profils versionnés : `vidal` (config complète : `pr-comments`, `intellij`, `profiles`,
+`git-nav`, `notify` ; par défaut à l'installation) et `basic` (le même sans `pr-comments`).
 
 Passer d'un profil à l'autre demande le plugin [`profiles`](#profiles) (`/profile`,
 `claude-profile`). Sans lui, il suffit de remplacer le contenu de `~/.claude/settings.json`
@@ -73,16 +71,7 @@ nom du worktree, durée de session, et `🧩 <profil>` pour une session lancée 
 
 ## Notifications desktop
 
-Chaîne : hook Claude → `notify.sh` (lit le JSON de l'événement, construit titre/corps,
-détache le reste pour rendre la main tout de suite) → `claude-notify.py` (libnotify via
-`gi`, affiche, mémorise la notification comme *en attente* dans
-`~/.local/state/claude-notify/`, suit le clic) → `notify-click.sh` (`--open` ramène
-l'onglet gnome-terminal de la session au premier plan via `gdbus`, `--clear-session` /
-`--clear-all` ferment les notifications en attente). L'extension GNOME
-([TOOLS.md](TOOLS.md#extension-gnome-claude-notifyywicker)) consomme le même état.
-
-Prérequis : GNOME Shell + gnome-terminal, `python3-gi` avec `Notify 0.7`, `gdbus`,
-`xprop`, `jq`. `setup/30-gnome.sh` signale ce qui manque.
+Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
@@ -100,7 +89,8 @@ donc par profil (voir [Profils](#profils) ; `/profile show` du plugin
 
 **Installation** : `./setup/60-plugins.sh` déclare la marketplace (`claude plugin marketplace
 add`, sinon `update`), installe chaque plugin s'il manque ou le met à jour, lie
-`claude-profile`, `gpr` et `gbr` dans `~/.local/bin` et pose le profil par défaut (`vidal` s'il n'y en a
+`claude-profile`, `gpr`, `gbr` et `claude-notify-click` dans `~/.local/bin`, régénère les
+dossiers de profil depuis `profiles/*.json` (`claude-profile generate --all`) et pose le profil par défaut (`vidal` s'il n'y en a
 pas). `marketplace add` écrit le chemin absolu du dépôt dans `extraKnownMarketplaces` de
 `~/.claude/settings.json` ; le script l'en retire (la marketplace reste connue via
 `~/.claude/plugins/known_marketplaces.json`). Prérequis : `claude` ≥ 2.1.287, `jq`.
@@ -438,6 +428,92 @@ ajoute des alias.
 - `gbr checkout <branche>` : `git switch` (crée la branche locale suivie si elle n'existe
   que sur origin) puis `git status -sb`.
 - Alias : `gbrs` (= `gbr list`).
+
+### `notify`
+
+**Rôle** : notifications desktop GNOME aux événements de Claude Code (fin de tour, erreur,
+permission, question) ; un clic ramène l'onglet gnome-terminal de la session.
+
+**Fichiers** : `plugins/notify/` (`hooks/hooks.json`,
+`scripts/{notify.sh,notify-click.sh,claude-notify.py}`) ; hors du plugin, le lien
+`~/.local/bin/claude-notify-click` posé par `setup/60-plugins.sh` pour l'extension GNOME
+`claude-notify@ywicker` ([TOOLS.md](TOOLS.md#extension-gnome-claude-notifyywicker)).
+**Activé dans** : `vidal` et `basic`.
+
+**Prérequis** : GNOME Shell + gnome-terminal (X11 : `xprop`), `python3-gi` avec
+`Notify 0.7`, `gdbus`, `jq` ; herdr facultatif (voir [Sans et avec herdr](#sans-et-avec-herdr)). `setup/30-gnome.sh` signale ce qui manque.
+Pas de tests.
+
+#### Installation hors de ce dépôt
+
+Le plugin ne dépend pas du reste de la config (les scripts se trouvent entre eux par
+chemin relatif) :
+
+```bash
+claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
+claude plugin install notify@claude-tools
+```
+
+Pour la pastille GNOME (facultative), depuis un clone : lier
+`plugins/notify/scripts/notify-click.sh` en `~/.local/bin/claude-notify-click`, lier
+`home/.local/share/gnome-shell/extensions/claude-notify@ywicker/` dans
+`~/.local/share/gnome-shell/extensions/`, puis `gnome-extensions enable
+claude-notify@ywicker` (au premier lien, GNOME Shell ne la voit qu'après une
+déconnexion/reconnexion).
+
+#### Fonctionnement
+
+Hooks du plugin (`hooks/hooks.json`), tous sur `bash "${CLAUDE_PLUGIN_ROOT}/scripts/notify.sh"` :
+`Stop`, `StopFailure`, `Notification` (notification desktop), `UserPromptSubmit` (efface
+les notifications en attente de la session). Plugin à `false` dans un profil : aucune
+notification.
+
+Chaîne : `notify.sh` (lit le JSON de l'événement, construit titre et corps — titre de la
+session, dossier ou workspace herdr, branche — et rend la main tout de suite) →
+`claude-notify.py` (libnotify via `gi`, affiche, mémorise la notification comme *en
+attente* dans `~/.local/state/claude-notify/`, suit le clic) → `notify-click.sh` (`--open`
+ramène l'onglet gnome-terminal de la session au premier plan via `gdbus`,
+`--clear-session` / `--clear-all` ferment les notifications en attente). Permission et
+question restent à l'écran (urgence critique) ; `idle_prompt` et `auth_success` sont
+ignorées.
+
+L'extension GNOME lit le même état et appelle `notify-click.sh` via
+`~/.local/bin/claude-notify-click` : hors de Claude, pas de `${CLAUDE_PLUGIN_ROOT}`, et
+l'emplacement du plugin installé dépend de sa source (dossier du clone ou
+`~/.claude/plugins/cache/…/<version>/`) ; le lien donne un chemin fixe.
+
+Ménage par `setup/60-plugins.sh` : les anciens liens `notify.sh`, `notify-click.sh`,
+`claude-notify.py` de `~/.claude` et de `~/.claude-profiles/*/` (d'avant le plugin, liés
+par `install.sh`) sont retirés.
+
+#### Sans et avec herdr
+
+Le plugin marche seul ; dans un pane herdr (`HERDR_PANE_ID` posé), les scripts demandent en
+plus à herdr le contexte de la session et l'utilisent au clic. Binaire : `HERDR_BIN_PATH`,
+sinon `herdr` du PATH ; chaque appel est borné par `timeout 2`, un herdr injoignable ne
+bloque pas le hook (on retombe sur ce qu'il sait sans herdr).
+
+| | Sans herdr | Avec herdr |
+|---|---|---|
+| Titre : nom de la session | `customTitle` ou `aiTitle` du transcript, sinon nom du dossier | idem, sinon agent et titre du pane (`herdr pane get`) |
+| Corps : lieu | nom du dossier (`cwd`) | « label (#n) » du workspace (`herdr workspace get`) ; dossier s'il n'a pas de label |
+| Corps : branche | `git rev-parse` dans `cwd` (repli : transcript) | idem |
+| Silence | jamais | pane focalisé dans herdr et fenêtre X active = un terminal (`xprop` ne dit pas lequel) |
+| Gardé pour le clic (`~/.local/state/claude-notify/<id>.json`) | `tty` de l'onglet (plus haut ancêtre qui en a un), `where` | `pane_id`, `herdr`, `ws_label` |
+| Clic : 1. se placer dans la session | — | `herdr agent focus <pane_id>` : workspace, onglet et pane |
+| Clic : 2. trouver l'onglet gnome-terminal | titre marqueur `Claude Code · <dossier> (pts/N)` écrit sur le tty (OSC 2), onglet cherché par ce titre | onglet titré `*: <label du workspace>`, titre écrit par herdr (`ui.window_title`) ; workspace sans label : étape sautée |
+| Clic : 3. repli | première fenêtre gnome-terminal | idem |
+| Événements, urgence, effacement, extension GNOME | identiques | identiques |
+
+Le titre d'onglet que cherche le clic sous herdr vient de `ui.window_title`, laissé à son
+défaut `"{hostname}: {workspace}"` (voir [TOOLS.md](TOOLS.md#herdr)) : le changer casse la
+recherche.
+
+Ce que `notify` n'utilise pas : le hook herdr `SessionStart`, qui ne change rien à ce
+tableau (herdr reconnaît Claude et son état en lisant l'écran du pane ; le hook ne lui
+transmet que l'identifiant de session, pour la reprise après un redémarrage), et les
+notifications propres à herdr (`ui.toast.delivery`, `off` par défaut : à laisser ainsi,
+sinon doublons).
 
 ## Gabarit pour un nouveau plugin
 

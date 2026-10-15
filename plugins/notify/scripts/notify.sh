@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Desktop notification for Claude Code hooks; reads the hook JSON on stdin.
-# Hands the notification to claude-notify.py (detached, so the hook returns
-# at once); UserPromptSubmit clears what is pending for the session instead.
+# Desktop notification for Claude Code hooks (notify plugin); reads the hook
+# JSON on stdin. Hands the notification to claude-notify.py (detached, so the
+# hook returns at once); UserPromptSubmit clears what is pending for the
+# session instead.
+here=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 jq=$(command -v jq || echo ~/.local/bin/jq)
 in=$(cat)
 event=$($jq -r '.hook_event_name // empty' <<<"$in")
@@ -16,7 +18,7 @@ ws_label=
 agent=
 
 if [ "$event" = UserPromptSubmit ]; then
-  [ -n "$session_id" ] && setsid -f bash ~/.claude/notify-click.sh --clear-session "$session_id" </dev/null >/dev/null 2>&1
+  [ -n "$session_id" ] && setsid -f bash "$here/notify-click.sh" --clear-session "$session_id" </dev/null >/dev/null 2>&1
   exit 0
 fi
 
@@ -80,4 +82,4 @@ $jq -n --arg title "$title · ${session_title:-$where}" --arg body "$body" --arg
   --arg pane_id "$HERDR_PANE_ID" --arg herdr "${HERDR_BIN_PATH:-herdr}" --arg ws_label "$ws_label" \
   --arg tty "$tty" --arg where "$where" --arg session_id "$session_id" --arg event "$event" \
   '$ARGS.named' |
-  setsid -f python3 ~/.claude/claude-notify.py show >/dev/null 2>&1
+  setsid -f python3 "$here/claude-notify.py" show >/dev/null 2>&1

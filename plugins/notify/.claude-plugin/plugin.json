@@ -1,0 +1,5 @@
+{
+  "name": "notify",
+  "description": "Notifications desktop GNOME aux événements de Claude Code (fin de tour, erreur, permission, question), clic pour revenir sur l'onglet de la session",
+  "author": { "name": "ywicker" }
+}

@@ -20,7 +20,7 @@ else
   fi
 fi
 
-for p in pr-comments intellij profiles git-nav; do
+for p in pr-comments intellij profiles git-nav notify; do
   if claude plugin list 2>/dev/null | grep -q "$p@claude-tools"; then
     claude plugin update "$p@claude-tools"
   else
@@ -32,6 +32,15 @@ done
 # est déjà dans le PATH de l'outil Bash).
 mkdir -p "$HOME/.local/bin"
 ln -sfn "$repo/plugins/profiles/bin/claude-profile" "$HOME/.local/bin/claude-profile"
+# Anciens scripts de notification de home/.claude/ (liés par install.sh avant le plugin notify),
+# dans ~/.claude et dans les dossiers de profil générés (qui en reprenaient la cible).
+for n in notify.sh notify-click.sh claude-notify.py; do
+  for d in "$HOME/.claude" "$HOME"/.claude-profiles/*; do
+    [ -L "$d/$n" ] && [ "$(readlink "$d/$n")" = "$repo/home/.claude/$n" ] && rm "$d/$n"
+  done
+done
+# Dossiers de profil régénérés depuis profiles/*.json (réglages à jour, liens morts retirés).
+"$repo/plugins/profiles/bin/claude-profile" generate --all
 # ~/.claude/settings.json : celui du profil par défaut (vidal si aucun n'est encore choisi).
 "$repo/plugins/profiles/bin/claude-profile" default >/dev/null 2>&1 || "$repo/plugins/profiles/bin/claude-profile" default vidal
 # Ancien nom de la commande (profile), lien laissé par une installation précédente.
@@ -42,6 +51,9 @@ ln -sfn "$repo/plugins/profiles/bin/claude-profile" "$HOME/.local/bin/claude-pro
 for c in gpr gbr; do
   ln -sfn "$repo/plugins/git-nav/bin/$c" "$HOME/.local/bin/$c"
 done
+# Script de clic du plugin notify à un chemin stable, pour l'extension GNOME claude-notify@ywicker
+# (hors de Claude, pas de ${CLAUDE_PLUGIN_ROOT} pour trouver le plugin).
+ln -sfn "$repo/plugins/notify/scripts/notify-click.sh" "$HOME/.local/bin/claude-notify-click"
 # Anciens skills /pr, /br, /worktree de home/.claude/skills/ (liés par install.sh avant
 # git-nav) : sans ce ménage, ils doubleraient ceux du plugin, dans tous les profils
 # (~/.claude-profiles/*/skills est un lien vers ~/.claude/skills).

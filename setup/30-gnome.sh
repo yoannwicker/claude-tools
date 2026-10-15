@@ -13,6 +13,8 @@ command -v jq >/dev/null 2>&1 || missing="$missing jq"
 python3 -c 'import gi; gi.require_version("Notify", "0.7"); from gi.repository import Notify' 2>/dev/null \
   || missing="$missing python3-gi(Notify)"
 [ -z "$missing" ] || echo "dépendances manquantes pour les notifications :$missing"
+[ -e "$HOME/.local/bin/claude-notify-click" ] \
+  || echo "~/.local/bin/claude-notify-click absent (script de clic du plugin notify) : lancer setup/60-plugins.sh"
 
 if gnome-extensions info "$uuid" 2>/dev/null | grep -q "ACTIVE"; then
   echo "extension $uuid : active"

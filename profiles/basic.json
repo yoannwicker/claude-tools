@@ -13,46 +13,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/notify.sh 2>/dev/null || true"
-          }
-        ]
-      }
-    ],
-    "StopFailure": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/notify.sh 2>/dev/null || true"
-          }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/notify.sh 2>/dev/null || true"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/notify.sh 2>/dev/null || true"
-          }
-        ]
-      }
     ]
   },
   "worktree": {
@@ -79,6 +39,7 @@
     "pr-comments@claude-tools": false,
     "intellij@claude-tools": true,
     "profiles@claude-tools": true,
-    "git-nav@claude-tools": true
+    "git-nav@claude-tools": true,
+    "notify@claude-tools": true
   }
 }

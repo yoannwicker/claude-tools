@@ -22,9 +22,8 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Outil | Commande | Prérequis |
 |---|---|---|
 | Claude Code (settings, status line, règles) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
-| Plugins `pr-comments` (fils de review non résolus), `intellij` (MCP IntelliJ + consigne), `profiles` (commande `/profile`), `git-nav` (skills `/pr`, `/br`, `/worktree` ; `gpr`, `gbr` liés dans `~/.local/bin` pour le terminal) | `./setup/60-plugins.sh` | `claude` ≥ 2.1.287, `gh` authentifié, `jq`, `git` ; IntelliJ avec le serveur MCP sur le port 64342 |
+| Plugins `pr-comments` (fils de review non résolus), `intellij` (MCP IntelliJ + consigne), `profiles` (commande `/profile`), `git-nav` (skills `/pr`, `/br`, `/worktree` ; `gpr`, `gbr` liés dans `~/.local/bin` pour le terminal), `notify` (notifications desktop) | `./setup/60-plugins.sh` | `claude` ≥ 2.1.287, `gh` authentifié, `jq`, `git` ; IntelliJ avec le serveur MCP sur le port 64342 ; `notify` : `python3-gi`, `gdbus`, `xprop`, gnome-terminal |
 | Profils (commande `claude-profile`, fonction shell `claude`) | `./install.sh link && ./setup/60-plugins.sh` (lie `claude-profile` dans `~/.local/bin`, pose le profil par défaut `vidal` → `~/.claude/settings.json`) | `jq` |
-| Notifications desktop (hooks `notify.sh`) | `./install.sh link` | `python3-gi`, `gdbus`, `xprop`, gnome-terminal ; pastille : extension GNOME ci-dessous |
 
 À la carte, outils externes (détail : [TOOLS.md](TOOLS.md)) :
 
@@ -33,11 +32,10 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | mise (outils globaux) | `./setup/10-mise.sh` | `curl` |
 | herdr (+ intégrations Claude/Copilot) | `./setup/20-herdr.sh` | `curl` ; Linux ou macOS |
 | Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
-| Extension GNOME `claude-notify` (pastille des notifications) | `./install.sh link && ./setup/30-gnome.sh` | GNOME Shell 46 |
+| Extension GNOME `claude-notify` (pastille des notifications du plugin `notify`) | `./install.sh link && ./setup/60-plugins.sh && ./setup/30-gnome.sh` | GNOME Shell 46 |
 
-Sans GNOME : garder `./install.sh link` et retirer les hooks `notify.sh` de
-chaque profil `profiles/*.json` (événements `Stop`, `StopFailure`, `Notification`,
-`UserPromptSubmit`). Le premier `enable` d'une extension GNOME fraîchement liée peut
+Sans GNOME : désactiver le plugin `notify` dans chaque profil (`"notify@claude-tools": false`
+dans `enabledPlugins` de `profiles/*.json`, ou `/profile show`). Le premier `enable` d'une extension GNOME fraîchement liée peut
 demander une déconnexion/reconnexion de session.
 
 ## Au quotidien
@@ -75,12 +73,13 @@ demander une déconnexion/reconnexion de session.
 install.sh          link | setup | status | adopt | capture (défaut : link + setup)
 home/               miroir de $HOME, un lien par fichier
   .bash_aliases     charge .config/shell/*.sh (outils shell, voir TOOLS.md)
-  .claude/          statusline-*.sh, notify*.sh, claude-notify.py, rules/
+  .claude/          statusline-*.sh, rules/
   .config/          herdr/config.toml, mise/config.toml, shell/{git-tools,claude-profile}.sh
   .local/           bin/{cl,dot}, share/gnome-shell/extensions/claude-notify@ywicker/
 .claude-plugin/     marketplace.json : ce dépôt comme marketplace locale « claude-tools »
 plugins/            plugins Claude Code : pr-comments/ (repris d'aguiddir/claude-config), intellij/, profiles/ (avec bin/claude-profile),
-                    git-nav/ (skills /pr, /br, /worktree, bin/{gpr,gbr}, lib/git-tools.sh)
+                    git-nav/ (skills /pr, /br, /worktree, bin/{gpr,gbr}, lib/git-tools.sh),
+                    notify/ (hooks et scripts des notifications desktop)
 profiles/           profils (<nom>.json : settings.json complet de chaque profil — vidal, basic —, voir `claude-profile`)
 setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 50-cl, 60-plugins
 CLAUDE-CODE.md      Claude Code : settings, profils, plugins
