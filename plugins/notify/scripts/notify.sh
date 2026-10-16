@@ -80,6 +80,7 @@ context="$where${branch:+ · $branch}"
 body=$(printf '%s\n%s' "$context" "$msg" | sed '/^$/d')
 $jq -n --arg title "$title · ${session_title:-$where}" --arg body "$body" --arg urgency "$urgency" \
   --arg pane_id "$HERDR_PANE_ID" --arg herdr "${HERDR_BIN_PATH:-herdr}" --arg ws_label "$ws_label" \
+  --arg ws_id "$HERDR_WORKSPACE_ID" \
   --arg tty "$tty" --arg where "$where" --arg session_id "$session_id" --arg event "$event" \
   '$ARGS.named' |
   setsid -f python3 "$here/claude-notify.py" show >/dev/null 2>&1

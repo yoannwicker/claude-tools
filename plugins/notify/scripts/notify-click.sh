@@ -65,7 +65,11 @@ window_matching() {
 # window, and leaves other windows on their original tab.
 find_tab() {
   local pattern=$1 w path idx start i
-  if w=$(window_matching "$pattern"); then activate_window "$w"; return 0; fi
+  # herdr retitles the tab ~100 ms after a focus: wait for it before cycling
+  for i in $(seq 20); do
+    if w=$(window_matching "$pattern"); then activate_window "$w"; return 0; fi
+    sleep 0.05
+  done
   for path in $(gdbus introspect --session --dest org.gnome.Terminal \
       --object-path /org/gnome/Terminal/window --recurse 2>/dev/null |
       grep -oE '/org/gnome/Terminal/window/[0-9]+'); do
@@ -85,12 +89,32 @@ find_tab() {
   return 1
 }
 
-# focus_session <pane_id> <herdr_bin> <ws_label> <tty> <where>
+# focus_herdr <herdr_bin> <pane_id> <ws_id> <session_id>: focuses the pane;
+# if it is gone, the pane now running the session (resumed elsewhere), else
+# the workspace. Prints the label of the workspace focused.
+focus_herdr() {
+  local herdr=$1 pane_id=$2 ws_id=$3 session_id=$4 p
+  if ! timeout 2 "$herdr" agent focus "$pane_id" >/dev/null 2>&1; then
+    ws_id=
+    [ -n "$session_id" ] && p=$(timeout 2 "$herdr" pane list 2>/dev/null |
+      $jq -r --arg s "$session_id" '[.result.panes[] | select(.agent_session.value == $s)][0] // empty | "\(.pane_id) \(.workspace_id)"')
+    if [ -n "$p" ] && timeout 2 "$herdr" agent focus "${p% *}" >/dev/null 2>&1; then
+      ws_id=${p#* }
+    elif [ -n "$3" ] && timeout 2 "$herdr" workspace focus "$3" >/dev/null 2>&1; then
+      ws_id=$3
+    fi
+  fi
+  [ -n "$ws_id" ] && timeout 2 "$herdr" workspace get "$ws_id" 2>/dev/null | $jq -r '.result.workspace.label // empty'
+}
+
+# focus_session <pane_id> <herdr_bin> <ws_label> <ws_id> <session_id> <tty> <where>
 focus_session() {
-  local pane_id=$1 herdr=$2 ws_label=$3 tty=$4 where=$5 marker w
+  local pane_id=$1 herdr=$2 ws_label=$3 ws_id=$4 session_id=$5 tty=$6 where=$7 marker w label
   if [ -n "$pane_id" ]; then
-    timeout 2 "$herdr" agent focus "$pane_id" >/dev/null 2>&1
-    [ -n "$ws_label" ] && find_tab "*: $ws_label" && return 0
+    label=$(focus_herdr "$herdr" "$pane_id" "$ws_id" "$session_id")
+    # no workspace id (state written by an older notify.sh): keep the stored label
+    [ -n "$ws_id" ] || [ -n "$label" ] || label=$ws_label
+    [ -n "$label" ] && find_tab "*: $label" && return 0
   elif [ -n "$tty" ] && [ -w "$tty" ]; then
     marker="Claude Code · $where (${tty#/dev/})"
     printf '\033]2;%s\007' "$marker" > "$tty"
@@ -114,9 +138,10 @@ case "$1" in
     f=$2
     [ -f "$f" ] || exit 0
     pane_id=$($jq -r '.pane_id // ""' "$f"); herdr=$($jq -r '.herdr // "herdr"' "$f")
-    ws_label=$($jq -r '.ws_label // ""' "$f"); tty=$($jq -r '.tty // ""' "$f"); where=$($jq -r '.where // ""' "$f")
+    ws_label=$($jq -r '.ws_label // ""' "$f"); ws_id=$($jq -r '.ws_id // ""' "$f")
+    session_id=$($jq -r '.session_id // ""' "$f"); tty=$($jq -r '.tty // ""' "$f"); where=$($jq -r '.where // ""' "$f")
     clear_pending "$f"
-    focus_session "$pane_id" "$herdr" "$ws_label" "$tty" "$where"
+    focus_session "$pane_id" "$herdr" "$ws_label" "$ws_id" "$session_id" "$tty" "$where"
     ;;
   --clear-session)
     for f in "$state_dir"/*.json; do

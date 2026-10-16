@@ -499,9 +499,9 @@ bloque pas le hook (on retombe sur ce qu'il sait sans herdr).
 | Corps : lieu | nom du dossier (`cwd`) | « label (#n) » du workspace (`herdr workspace get`) ; dossier s'il n'a pas de label |
 | Corps : branche | `git rev-parse` dans `cwd` (repli : transcript) | idem |
 | Silence | jamais | pane focalisé dans herdr et fenêtre X active = un terminal (`xprop` ne dit pas lequel) |
-| Gardé pour le clic (`~/.local/state/claude-notify/<id>.json`) | `tty` de l'onglet (plus haut ancêtre qui en a un), `where` | `pane_id`, `herdr`, `ws_label` |
-| Clic : 1. se placer dans la session | — | `herdr agent focus <pane_id>` : workspace, onglet et pane |
-| Clic : 2. trouver l'onglet gnome-terminal | titre marqueur `Claude Code · <dossier> (pts/N)` écrit sur le tty (OSC 2), onglet cherché par ce titre | onglet titré `*: <label du workspace>`, titre écrit par herdr (`ui.window_title`) ; workspace sans label : étape sautée |
+| Gardé pour le clic (`~/.local/state/claude-notify/<id>.json`) | `tty` de l'onglet (plus haut ancêtre qui en a un), `where` | `pane_id`, `herdr`, `ws_label`, `ws_id`, `session_id` |
+| Clic : 1. se placer dans la session | — | `herdr agent focus <pane_id>` : workspace, onglet et pane ; pane disparu : le pane où tourne la session (`agent_session` de `herdr pane list`, session reprise ailleurs), sinon `herdr workspace focus <ws_id>` |
+| Clic : 2. trouver l'onglet gnome-terminal | titre marqueur `Claude Code · <dossier> (pts/N)` écrit sur le tty (OSC 2), onglet cherché par ce titre | onglet titré `*: <label du workspace atteint>`, titre écrit par herdr (`ui.window_title`) avec ~100 ms de retard après le focus, attendu jusqu'à 1 s avant de parcourir les onglets ; workspace sans label : étape sautée |
 | Clic : 3. repli | première fenêtre gnome-terminal | idem |
 | Événements, urgence, effacement, extension GNOME | identiques | identiques |
 
