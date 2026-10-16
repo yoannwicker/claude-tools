@@ -48,13 +48,13 @@ demander une déconnexion/reconnexion de session.
   faire évoluer, `cl --setup` pour refaire la sélection.
 - Profils : `~/.claude/settings.json` est le profil de référence
   (`home/.claude/settings.json`) ; un profil (`profiles/<profil>.json`) n'en surcharge que les plugins
-  actifs. `claude-profile switch <profil>` (ou `cl -P <profil> <projet>`) lance Claude sur
+  actifs et les MCP coupés. `claude-profile switch <profil>` (ou `cl -P <profil> <projet>`) lance Claude sur
   `~/.claude-profiles/<profil>/`, généré depuis `~/.claude` ; `claude` seul part sur le
   profil par défaut s'il y en a un (`claude-profile default <profil>`, `/profile default`),
   sinon sur le profil de référence. Dans une
   session, `/profile` propose la liste des profils et `/profile <profil>` relance la
   conversation dans ce profil ; `/profile show [<profil>]` montre ce qui y est actif et
-  (dés)active ses plugins, `/profile create <nom>` crée un profil.
+  (dés)active ses plugins et MCP, `/profile create <nom>` crée un profil.
 - Fils de review non résolus de mes PR (et de celles que je relis) : ligne `💬` au-dessus
   du prompt, `c` ou `/pr-review` pour les parcourir, les envoyer à Claude, répondre,
   résoudre (plugin `pr-comments`).

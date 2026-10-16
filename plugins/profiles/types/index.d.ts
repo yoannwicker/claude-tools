@@ -1,4 +1,4 @@
-// A profile's draft while its view is in edit mode: plugin → wanted state, for the
+// A profile's draft while its view is in edit mode: draft key (a plugin, or mcp:<server>) → wanted state, for the
 // plugins changed since entering it.
 export type Draft = Record<string, boolean>
 

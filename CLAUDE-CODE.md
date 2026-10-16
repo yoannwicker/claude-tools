@@ -41,9 +41,12 @@ hors profil (`/config`, `claude plugin enable`) l'écrit donc dans le dépôt. R
 ## Profils
 
 Un **profil** est une **surcharge** du profil de référence, versionnée dans `profiles/<nom>.json` :
-`{ "description": …, "enabledPlugins": { … } }`. Son `settings.json` est le profil de référence dont
-`enabledPlugins` est **remplacé en entier** par celui du profil ; c'est pour l'instant la
-seule section surchargeable (toute autre clé est refusée). Une modification commune (un
+`{ "description": …, "enabledPlugins": { … } }`, plus au besoin `deniedMcpServers` et
+`disableClaudeAiConnectors` (MCP coupés). Son `settings.json` est le profil de référence dont
+chacune de ces sections est **remplacée en entier** par celle du profil ; toute autre clé est
+refusée. Le bouton de `/mcp` (`disabledMcpServers`, dans `.claude.json` commun à tous les
+profils) ne distingue pas les profils : couper un MCP par profil passe par
+`claude-profile mcp` ou `/profile show`. Une modification commune (un
 réglage, la statusline) se fait donc une fois, dans le profil de référence.
 
 Profils versionnés : `vidal` (config complète : tous les plugins, comme le profil de référence) et
@@ -151,6 +154,10 @@ déconnecté.
   contexte par un hook `SessionStart` du plugin (`hooks/hooks.json`, au démarrage, à la
   reprise, après `/clear` et `/compact`) : un plugin ne porte ni `CLAUDE.md` ni rules.
 
+Couper seulement le serveur dans un profil (`plugin:intellij:intellij`, voir
+[`claude-profile mcp`](#claude-profile)) laisse la consigne injectée, qui citerait des outils
+absents : mieux vaut éteindre le plugin entier.
+
 Installation : `./setup/60-plugins.sh` retire aussi l'ancien serveur `intellij` de
 scope user (`~/.claude.json`, ex-`setup/40-mcp.sh`) : à même URL, Claude Code garderait
 celui-ci et ignorerait celui du plugin.
@@ -199,8 +206,9 @@ variable (nom réservé `reference`).
 
 - Contenu : un lien par entrée de `~/.claude` (dossiers liés en entier : historique
   `projects/`, `plugins/`, rules, skills…), `.claude.json` lié à `~/.claude.json`,
-  `settings.json` généré : le profil de référence (`~/.claude/settings.json`) avec l'`enabledPlugins`
-  de `profiles/<nom>.json`. Régénéré à chaque lancement par `switch`/`run`, il reprend
+  `settings.json` généré : le profil de référence (`~/.claude/settings.json`) avec les
+  sections de `profiles/<nom>.json` (`enabledPlugins`, et `deniedMcpServers`,
+  `disableClaudeAiConnectors` s'il les porte). Régénéré à chaque lancement par `switch`/`run`, il reprend
   donc une modification du profil de référence à la session suivante. Session
   connectée, sans onboarding ni confiance redemandée ; `--continue` reprend une
   conversation commencée dans un autre profil.
@@ -236,13 +244,33 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
   vaut pour les nouvelles sessions de `run` ;
 - `claude-profile show [<nom>]` : ce qui est actif sur un profil (celui de la session par
   défaut) — plugins activés (`+`) ou non (`-`, ou `?` pour un plugin installé que le profil
-  ne mentionne pas), avec `(référence : activé|désactivé)` quand la référence diffère,
-  modèle, et la liste des plugins différents du profil de référence ;
+  ne mentionne pas), avec `(référence : activé|désactivé)` quand la référence diffère ;
+  MCP actifs (`+`) ou coupés (`-`), en tête `claude.ai` pour tous les connecteurs, avec
+  `(référence : …)` quand la référence diffère (serveurs : cache de `mcp-scan`, plus ceux
+  des `.mcp.json` des plugins activés) ; modèle, et la liste des plugins différents du
+  profil de référence ;
 - `claude-profile new <nom> [description…]` : crée `profiles/<nom>.json` avec les plugins
   du profil de référence (noms réservés : `reference`, `default`, `show`, `create`) ;
 - `claude-profile plugin <nom> <plugin>@<marketplace> on|off` : active ou désactive un plugin
   dans `enabledPlugins` du profil, puis le régénère ; `reference` l'écrit dans
   `~/.claude/settings.json`, à travers le lien (donc dans le dépôt) ;
+- `claude-profile mcp <nom> <serveur|url|claude.ai> on|off` : coupe ou réactive un MCP
+  dans le profil, puis le régénère ; vaut à la session suivante. Un nom donne une entrée
+  `{serverName}` de `deniedMcpServers`, une url (`http(s)://…`, jokers `*` admis) une entrée
+  `{serverUrl}`, `claude.ai` bascule `disableClaudeAiConnectors` (tous les connecteurs).
+  Noms : ceux de `claude mcp list`, soit `plugin:<plugin>:<serveur>` pour un MCP de plugin
+  (le nom seul du `.mcp.json` ne marche pas) et `claude.ai <Nom>` pour un connecteur (nom
+  affiché, susceptible de changer : une url est plus robuste). `on` retire aussi les
+  entrées `serverUrl` qui couvrent l'url connue du serveur. Un profil sans sa propre liste
+  part de celle de la référence (section remplacée en entier) ;
+- `claude-profile mcp-scan` : relève les MCP connus avec `claude mcp list` sur le profil de
+  référence (~6 s : il contacte chaque serveur), fusionnés dans le cache
+  `~/.claude-profiles/.mcp-servers.json` (un serveur coupé par la référence y reste) ; fait
+  automatiquement par `show` si le cache manque, à relancer après l'ajout d'un connecteur.
+  Ce cache est commun à tous les profils et n'est pas surchargeable (ce n'est pas un
+  réglage, seulement la liste proposée par `show`) ; chaque relevé refait toutes les
+  connexions, sans relevé incrémental ni par profil : pas utile pour l'instant, à ajouter
+  plus tard si besoin ;
 - `claude-profile check <nom>` : vérifie un profil (objet JSON, seulement des clés
   surchargeables) ;
 - `claude-profile generate <nom>|--all` : (re)génère le dossier (liens à jour, orphelins
@@ -281,9 +309,9 @@ Mod (`hooks/register.tsx`) :
 - `show [<nom>]` : vue d'un profil (`claude-profile show` : plugins, modèle, écarts avec
   le profil de référence), choisi dans la même liste sans `<nom>`, ouverte en lecture
   seule : `m` passe en édition, `b` bascule dans le profil, Échap ferme. En
-  édition, chaque plugin est un bouton `[x]`/`[ ]` qu'Entrée bascule dans un brouillon
-  (`*` : modifié) ; `v` valide (`claude-profile plugin` pour chaque changement, profil
-  régénéré), `a` annule, Échap ferme sans appliquer. Une modification du profil de la
+  édition, chaque plugin et chaque MCP est un bouton `[x]`/`[ ]` qu'Entrée bascule dans
+  un brouillon (`*` : modifié) ; `v` valide (`claude-profile plugin` ou `mcp` pour chaque
+  changement, profil régénéré), `a` annule, Échap ferme sans appliquer. Une modification du profil de la
   session vaut à sa prochaine relance ;
 - `default [<profil>]` : choisit le profil par défaut (`claude-profile default`) dans la
   même liste (le profil par défaut présélectionné ; `reference` pour n'en garder aucun) ou

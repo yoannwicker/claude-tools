@@ -13,7 +13,7 @@ export const parseList = (stdout: string): Profile[] =>
   })
 
 export const HINT =
-  '\n/profile <profil> : relance cette conversation dans ce profil.\n/profile show [<profil>] : ce qui y est actif, ses plugins à (dés)activer ; /profile create <nom> : nouveau profil ; /profile default [<profil>] : profil par défaut des nouvelles sessions ; /profile reference : revenir au settings.json de référence.'
+  '\n/profile <profil> : relance cette conversation dans ce profil.\n/profile show [<profil>] : ce qui y est actif, ses plugins et MCP à (dés)activer ; /profile create <nom> : nouveau profil ; /profile default [<profil>] : profil par défaut des nouvelles sessions ; /profile reference : revenir au settings.json de référence.'
 
 // Relaunch by hand, for a session no `claude-profile switch`/`run` loop started.
 export const manual = (name: string) =>
@@ -28,27 +28,43 @@ export function afterRequest(name: string, req: Run): { exit: boolean; text: str
   return { exit: false, text: req.stderr.trim() || `claude-profile request a échoué (code ${req.exitCode})` }
 }
 
-// One line of `claude-profile show`: a plugin (`+` on, `-` off, `?` installed but not in
-// the profile, so off) or any other line, as text.
-export type ShowLine = { plugin: string; isOn: boolean; isListed: boolean } | { text: string }
+// One line of `claude-profile show`: under `plugins :`, a plugin (`+` on, `-` off, `?`
+// installed but not in the profile, so off); under `MCP :`, a server (`+` on, `-` cut; its
+// name may hold spaces, its notes in parentheses follow); any other line, as text.
+export type ShowLine =
+  | { plugin: string; isOn: boolean; isListed: boolean }
+  | { mcp: string; isOn: boolean; note: string }
+  | { text: string }
 
-export const parseShow = (stdout: string): ShowLine[] =>
-  stdout.trimEnd().split('\n').map(line => {
+export function parseShow(stdout: string): ShowLine[] {
+  let section = ''
+  return stdout.trimEnd().split('\n').map(line => {
+    if (!line.startsWith('  ')) section = line
+    if (section === 'MCP :') {
+      const m = /^ {2}([+-]) (.+?)((?: \([^()]*\))*)$/.exec(line)
+      if (m?.[2]) return { mcp: m[2], isOn: m[1] === '+', note: m[3]?.trim() ?? '' }
+    }
     const m = /^ {2}([+?-]) (\S+)/.exec(line)
-    return m?.[2] ? { plugin: m[2], isOn: m[1] === '+', isListed: m[1] !== '?' } : { text: line }
+    return section === 'plugins :' && m?.[2] ? { plugin: m[2], isOn: m[1] === '+', isListed: m[1] !== '?' } : { text: line }
   })
+}
 
-// A draft (plugin → wanted state) with `plugin` flipped from `isOn`, its shown state:
-// flipping it back drops it, so the draft holds only real changes.
+// The draft key of a show line: the plugin, or `mcp:` and the server.
+export const draftKey = (line: { plugin: string } | { mcp: string }) => ('plugin' in line ? line.plugin : `mcp:${line.mcp}`)
+
+// A draft (draft key → wanted state) with `plugin` (a draft key) flipped from `isOn`, its
+// shown state: flipping it back drops it, so the draft holds only real changes.
 export function toggleDraft(draft: Record<string, boolean>, plugin: string, isOn: boolean): Record<string, boolean> {
   const { [plugin]: was, ...rest } = draft
   return was === undefined ? { ...draft, [plugin]: !isOn } : rest
 }
 
-// The `claude-profile plugin` calls a draft comes to, against what `show` says.
+// The `claude-profile plugin|mcp <profil> <name> on|off` calls a draft comes to, against what
+// `show` says: the action, the name, the state.
 export const draftChanges = (lines: ShowLine[], draft: Record<string, boolean>) =>
-  lines.flatMap(line =>
-    'plugin' in line && draft[line.plugin] !== undefined && draft[line.plugin] !== line.isOn
-      ? [{ plugin: line.plugin, state: draft[line.plugin] ? 'on' : 'off' }]
-      : [],
-  )
+  lines.flatMap(line => {
+    if ('text' in line) return []
+    const wanted = draft[draftKey(line)]
+    if (wanted === undefined || wanted === line.isOn) return []
+    return [{ action: 'plugin' in line ? 'plugin' : 'mcp', name: 'plugin' in line ? line.plugin : line.mcp, state: wanted ? 'on' : 'off' }]
+  })

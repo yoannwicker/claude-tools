@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Draft } from '../types'
-import { afterRequest, draftChanges, HINT, parseList, parseShow, toggleDraft } from './switch'
+import { afterRequest, draftChanges, draftKey, HINT, parseList, parseShow, toggleDraft } from './switch'
 import type { Profile } from './switch'
 
 // The dialogs: pick a profile to switch to, to view, or to make the default; one profile's view.
@@ -96,7 +96,7 @@ export const register: Register = on => {
     }
     const show = /^show(?:\s+(\S+))?$/.exec(args)
     if (show?.[1]) {
-      if (await openDetail($, show[1])) return { text: `Vue du profil ${show[1]} (m : modifier ses plugins, Échap : fermer).` }
+      if (await openDetail($, show[1])) return { text: `Vue du profil ${show[1]} (m : modifier ses plugins et MCP, Échap : fermer).` }
       const shown = await run($, 'show', show[1])
 
       return { text: (shown.exitCode === 0 ? shown.stdout : shown.stderr).trimEnd() }
@@ -171,8 +171,8 @@ export const register: Register = on => {
     const lines = parseShow(shown.stdout)
     const isCurrent = (await run($, 'current')).stdout.trim() === name
     const validate = async () => {
-      for (const { plugin, state } of draftChanges(lines, draft ?? {})) {
-        const set = await run($, 'plugin', name, plugin, state)
+      for (const { action, name: item, state } of draftChanges(lines, draft ?? {})) {
+        const set = await run($, action, name, item, state)
         if (set.exitCode !== 0 || set.stderr.trim()) $.ui.log(set.stderr.trim() || set.stdout.trim())
       }
       await setDraft($, name)
@@ -187,13 +187,15 @@ export const register: Register = on => {
       <Box flexDirection="column">
         {lines.map(line => {
           if ('text' in line) return <Text>{line.text}</Text>
-          const absent = line.isListed ? '' : ' (absent du profil)'
-          if (!draft) return <Text>{`  ${box(line.isOn)} ${line.plugin}${absent}`}</Text>
-          const wanted = draft[line.plugin] ?? line.isOn
+          const label = 'plugin' in line ? line.plugin : line.mcp
+          const note = 'plugin' in line ? (line.isListed ? '' : ' (absent du profil)') : line.note ? ` ${line.note}` : ''
+          if (!draft) return <Text>{`  ${box(line.isOn)} ${label}${note}`}</Text>
+          const key = draftKey(line)
+          const wanted = draft[key] ?? line.isOn
 
           return (
-            <Button key={`plugin:${line.plugin}`} onPress={() => void setDraft($, name, toggleDraft(draft, line.plugin, line.isOn))}>
-              {`  ${box(wanted)} ${line.plugin}${absent}${wanted !== line.isOn ? ' *' : ''}`}
+            <Button key={`item:${key}`} onPress={() => void setDraft($, name, toggleDraft(draft, key, line.isOn))}>
+              {`  ${box(wanted)} ${label}${note}${wanted !== line.isOn ? ' *' : ''}`}
             </Button>
           )
         })}
@@ -201,7 +203,7 @@ export const register: Register = on => {
           <Box flexDirection="row">
             <Button key="validate" hotkey="v" onPress={() => void validate()}>Valider</Button>
             <Button key="cancel" hotkey="a" onPress={() => void setDraft($, name)}>Annuler</Button>
-            <Text dimColor>{'  Entrée : (dés)activer le plugin (* : à appliquer) · Échap : fermer sans appliquer'}</Text>
+            <Text dimColor>{'  Entrée : (dés)activer le plugin ou le MCP (* : à appliquer) · Échap : fermer sans appliquer'}</Text>
           </Box>
         ) : (
           <Box flexDirection="row">

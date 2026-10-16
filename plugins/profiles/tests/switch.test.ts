@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { afterRequest, draftChanges, manual, parseList, parseShow, toggleDraft } from '../hooks/switch'
+import { afterRequest, draftChanges, draftKey, manual, parseList, parseShow, toggleDraft } from '../hooks/switch'
 
 const run = (exitCode: number, stderr = '') => ({ exitCode, stdout: '', stderr })
 
@@ -67,7 +67,38 @@ test('a draft holds only the plugins changed: flipped back, dropped', () => {
 test('a draft applied: one claude-profile plugin call per real change', () => {
   const lines = parseShow('plugins :\n  + a@m\n  - b@m (désactivé)\n  ? c@m (installé, absent du profil : inactif)\n')
   expect(draftChanges(lines, { 'a@m': false, 'b@m': false, 'c@m': true, 'x@m': true })).toEqual([
-    { plugin: 'a@m', state: 'off' },
-    { plugin: 'c@m', state: 'on' },
+    { action: 'plugin', name: 'a@m', state: 'off' },
+    { action: 'plugin', name: 'c@m', state: 'on' },
+  ])
+})
+
+const MCP_SHOW =
+  'plugins :\n  + a@m\nMCP :\n  + claude.ai (tous les connecteurs)\n  - claude.ai Slack (coupé) (référence : actif)\n' +
+  '  + plugin:intellij:intellij\n  - https://x.example/* (coupé)\nmodèle : opus\n'
+
+test('claude-profile show parsed: MCP servers, names with spaces, notes apart', () => {
+  expect(parseShow(MCP_SHOW)).toEqual([
+    { text: 'plugins :' },
+    { plugin: 'a@m', isOn: true, isListed: true },
+    { text: 'MCP :' },
+    { mcp: 'claude.ai', isOn: true, note: '(tous les connecteurs)' },
+    { mcp: 'claude.ai Slack', isOn: false, note: '(coupé) (référence : actif)' },
+    { mcp: 'plugin:intellij:intellij', isOn: true, note: '' },
+    { mcp: 'https://x.example/*', isOn: false, note: '(coupé)' },
+    { text: 'modèle : opus' },
+  ])
+})
+
+test('a draft mixing plugins and MCP: mcp: keys, one plugin or mcp call per change', () => {
+  const lines = parseShow(MCP_SHOW)
+  const key = draftKey({ mcp: 'claude.ai Slack' })
+  expect(key).toBe('mcp:claude.ai Slack')
+  let draft = toggleDraft({}, key, false)
+  draft = toggleDraft(draft, 'mcp:plugin:intellij:intellij', true)
+  draft = toggleDraft(draft, 'a@m', true)
+  expect(draftChanges(lines, draft)).toEqual([
+    { action: 'plugin', name: 'a@m', state: 'off' },
+    { action: 'mcp', name: 'claude.ai Slack', state: 'on' },
+    { action: 'mcp', name: 'plugin:intellij:intellij', state: 'off' },
   ])
 })

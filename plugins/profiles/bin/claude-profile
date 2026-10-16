@@ -2,11 +2,13 @@
 # claude-profile — profils Claude Code : une surcharge du settings.json de référence, générée en un
 # dossier de config depuis ~/.claude, où seul settings.json diffère, lancé avec CLAUDE_CONFIG_DIR.
 #   claude-profile list | current | show [<nom>] | new <nom> [description…] | plugin <nom> <plugin> on|off | generate <nom>|--all | check <nom> | --help
+#   claude-profile mcp <nom> <serveur|url|claude.ai> on|off | mcp-scan : MCP coupés (deniedMcpServers), serveurs connus
 #   claude-profile default [<nom>|--unset] : profil par défaut (celui des nouvelles sessions de run), affiché ou changé
 #   claude-profile switch <nom> [arguments claude…] | run [arguments claude…] | request <nom> <session>
 #   Profil de référence (reference) : ~/.claude/settings.json, ~/.claude sans profil.
-#   Profil : profiles/<nom>.json du dépôt, { description, enabledPlugins } ; son settings.json est
-#   le profil de référence avec enabledPlugins remplacé en entier par celui du profil.
+#   Profil : profiles/<nom>.json du dépôt, { description, enabledPlugins, deniedMcpServers,
+#   disableClaudeAiConnectors } ; son settings.json est le profil de référence avec chacune de ces
+#   sections remplacée en entier par celle du profil.
 #   Dossier généré : ~/.claude-profiles/<nom>/ (tout le reste en liens vers ~/.claude).
 #   switch/run lancent claude dans une boucle : /profile <nom> (plugin profiles) y dépose une
 #   demande (request) puis quitte, et la boucle relance la même session dans <nom>. run hors
@@ -19,9 +21,18 @@ out_root=$HOME/.claude-profiles
 main=$base/settings.json
 default_file=$out_root/.default
 # Clés qu'un profil peut porter : les sections surchargées (remplacées en entier) et sa description.
-overridable='["description", "enabledPlugins"]'
+overridable='["description", "enabledPlugins", "deniedMcpServers", "disableClaudeAiConnectors"]'
+# Serveurs MCP connus (nom, url), relevés par claude mcp list (mcp-scan).
+mcp_cache=$out_root/.mcp-servers.json
+# jq : motif serverUrl (jokers *) en expression régulière ; serveur s ({name, url}) coupé par la
+# liste d'entrées deniedMcpServers d (serverName exact, ou serverUrl).
+jq_mcp='
+  def glob($p): "^" + ($p | gsub("(?<c>[.?+^$(){}|\\[\\]\\\\/])"; "\\\(.c)") | gsub("\\*"; ".*")) + "$";
+  def urlmatch($u; $url): $u != null and $url != null and ($url | test(glob($u)));
+  def denied($s; $d): any($d[]; .serverName == $s.name or urlmatch(.serverUrl; $s.url));
+'
 
-usage() { sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "$*" >&2; exit 2; }
 
 names() { local f; for f in "$profiles_dir"/*.json; do [ -e "$f" ] && basename "$f" .json; done; }
@@ -32,7 +43,7 @@ check() {
   [ -f "$f" ] || die "profil inconnu : $1 (profils : reference $(names | tr '\n' ' '))"
   jq -e 'type == "object"' "$f" >/dev/null 2>&1 || die "profil invalide (objet JSON attendu) : $f"
   bad=$(jq -r --argjson ok "$overridable" 'keys - $ok | join(", ")' "$f")
-  [ -z "$bad" ] || die "profil $1 : seules description et enabledPlugins sont surchargeables (en trop : $bad) : $f"
+  [ -z "$bad" ] || die "profil $1 : seules $(jq -r 'join(", ")' <<< "$overridable") sont surchargeables (en trop : $bad) : $f"
 }
 
 # Le profil de référence, lu pour générer un profil : un objet JSON, pas un ancien lien vers un profil généré.
@@ -182,9 +193,11 @@ cmd_show() {
   fi
   settings=$(merged "$name") || die "lecture impossible : $f"
   installed=$(jq -c '.plugins // {} | keys' "$base/plugins/installed_plugins.json" 2>/dev/null || echo '[]')
+  [ -f "$mcp_cache" ] || mcp_scan >/dev/null 2>&1
   jq -r --arg name "$name" --arg cur "$(current)" --arg state "$state" --arg file "${f/#$HOME/\~}" \
      --arg desc "$([ "$name" = reference ] || jq -r '.description // ""' "$f")" --argjson installed "$installed" \
-     --slurpfile ref "$main" '
+     --argjson servers "$(mcp_servers "$settings")" \
+     --slurpfile ref "$main" "$jq_mcp"'
     (.enabledPlugins // {}) as $on
     | ($ref[0].enabledPlugins // {}) as $main
     | def reference($k): if $name == "reference" or ($on[$k] // false) == ($main[$k] // false) then ""
@@ -195,12 +208,53 @@ cmd_show() {
       "plugins :",
       ($on | to_entries[] | "  \(if .value then "+" else "-" end) \(.key)\(if .value then "" else " (désactivé)" end)\(reference(.key))"),
       ($installed - ($on | keys) | .[] | "  ? \(.) (installé, absent du profil : inactif)\(reference(.))"),
+      "MCP :",
+      ((.deniedMcpServers // []) as $d | ($ref[0].deniedMcpServers // []) as $rd
+       | (.disableClaudeAiConnectors // false) as $all | ($ref[0].disableClaudeAiConnectors // false) as $rall
+       | def off($s; $d; $all): denied($s; $d) or ($all and ($s.name | startswith("claude.ai ")));
+         def refnote($s; $isoff): if $name == "reference" or $isoff == off($s; $rd; $rall) then ""
+           else " (référence : \(if $isoff then "actif" else "coupé" end))" end;
+         (if $all then "  - claude.ai (tous les connecteurs coupés)" else "  + claude.ai (tous les connecteurs)" end)
+           + (if $name == "reference" or $all == $rall then "" else " (référence : \(if $rall then "coupés" else "actifs" end))" end),
+         ($servers[] | off(.; $d; $all) as $isoff
+           | "  \(if $isoff then "-" else "+" end) \(.name)\(if denied(.; $d) then " (coupé)" elif $isoff then " (coupé : tous les connecteurs)" else "" end)\(refnote(.; $isoff))"),
+         ($d[] | . as $e | select(any($servers[]; ($e.serverName == .name) or urlmatch($e.serverUrl; .url)) | not)
+           | "  - \(.serverName // .serverUrl // tojson) (coupé)")),
       "modèle : \(.model // "par défaut")",
       (if $name == "reference" then empty else
         [($on + $main) | keys[] | select(($on[.] // false) != ($main[.] // false))] as $diff
         | "plugins différents du profil de référence : \(if $diff == [] then "aucun" else $diff | join(", ") end)"
        end)
   ' <<< "$settings"
+}
+
+# Relève les serveurs MCP connus avec claude mcp list sur le profil de référence (~6 s : il les
+# contacte tous), fusionnés au cache, qui garde ainsi un serveur que la référence coupe.
+mcp_scan() {
+  local out tmp
+  command -v claude >/dev/null 2>&1 || die "claude absent : relevé des MCP impossible"
+  out=$(env -u CLAUDE_CONFIG_DIR claude mcp list 2>/dev/null) || die "claude mcp list a échoué"
+  mkdir -p "$out_root"
+  tmp=$(mktemp "$out_root/.mcp-servers.XXXXXX")
+  jq -Rn --argjson old "$(jq -c 'if type == "array" then . else [] end' "$mcp_cache" 2>/dev/null || echo '[]')" '
+    [inputs | capture("^(?<name>.+?): (?<url>\\S+)(?: \\([A-Za-z]+\\))? - ")?
+     | .url |= (if test("^https?://") then . else null end)] as $new
+    | $old + $new | group_by(.name) | map(.[-1])' <<< "$out" > "$tmp" \
+    && mv "$tmp" "$mcp_cache" || { rm -f "$tmp"; die "écriture impossible : $mcp_cache"; }
+}
+
+# Serveurs MCP connus pour un settings.json ($1) : le cache de mcp-scan, plus ceux des .mcp.json des
+# plugins qu'il active (plugin:<plugin>:<serveur>), en JSON [{name, url}].
+mcp_servers() {
+  local p dir extra='[]'
+  for p in $(jq -r '.enabledPlugins // {} | to_entries[] | select(.value) | .key' <<< "$1"); do
+    dir=$(jq -r --arg p "$p" '.plugins[$p][0].installPath // empty' "$base/plugins/installed_plugins.json" 2>/dev/null)
+    [ -f "$dir/.mcp.json" ] || continue
+    extra=$(jq -c --argjson extra "$extra" --arg p "${p%@*}" \
+      '$extra + [(.mcpServers // .) | to_entries[] | {name: "plugin:\($p):\(.key)", url: (.value.url // null)}]' "$dir/.mcp.json" 2>/dev/null || echo "$extra")
+  done
+  jq -c --argjson extra "$extra" 'if type == "array" then . else [] end | . + $extra | group_by(.name) | map(.[-1])' "$mcp_cache" 2>/dev/null \
+    || echo "$extra"
 }
 
 cmd_new() {
@@ -236,6 +290,35 @@ cmd_plugin() {
   echo "$2 : $([ "$3" = on ] && echo activé || echo désactivé) dans $1"
 }
 
+# Coupe (off) ou réactive (on) un serveur MCP dans un profil, puis le régénère : entrée serverName
+# (ou serverUrl pour une url) de deniedMcpServers ; claude.ai : disableClaudeAiConnectors. Un profil
+# qui n'a pas encore sa liste part de celle de la référence (section remplacée en entier).
+cmd_mcp() {
+  [ $# -eq 3 ] && [[ $3 =~ ^(on|off)$ ]] || die "usage : claude-profile mcp <nom> <serveur|url|claude.ai> on|off"
+  check "$1"
+  local f tmp url
+  if [ "$1" = reference ]; then f=$main; else f=$profiles_dir/$1.json; fi
+  url=$(jq -r --arg n "$2" 'map(select(.name == $n))[0].url // ""' "$mcp_cache" 2>/dev/null)
+  tmp=$(mktemp "$profiles_dir/.mcp.XXXXXX" 2>/dev/null || mktemp)
+  jq --arg s "$2" --arg url "$url" --arg state "$3" --argjson isref "$([ "$1" = reference ] && echo true || echo false)" \
+     --slurpfile ref "$main" "$jq_mcp"'
+    $ref[0] as $r
+    | if $s == "claude.ai" then
+        if $state == "off" then .disableClaudeAiConnectors = true
+        elif $isref or ($r.disableClaudeAiConnectors // false) == false then del(.disableClaudeAiConnectors)
+        else .disableClaudeAiConnectors = false end
+      else
+        (if $isref then .deniedMcpServers // [] else .deniedMcpServers // $r.deniedMcpServers // [] end) as $d
+        | (if ($s | test("^https?://")) then {serverUrl: $s} else {serverName: $s} end) as $e
+        | (if $state == "off" then (if any($d[]; . == $e) then $d else $d + [$e] end)
+           else $d | map(select(. != $e and (urlmatch(.serverUrl; if $url == "" then null else $url end) | not))) end) as $new
+        | if $new == [] and ($isref or ($r.deniedMcpServers // []) == []) then del(.deniedMcpServers) else .deniedMcpServers = $new end
+      end' "$f" > "$tmp" \
+    && cat "$tmp" > "$f" && rm -f "$tmp" || { rm -f "$tmp"; die "écriture impossible : $f"; }
+  generate "$1"
+  echo "$2 : $([ "$3" = on ] && echo réactivé || echo coupé) dans $1 (à la prochaine session)"
+}
+
 # Profil par défaut, celui des nouvelles sessions de claude-profile run (fonction shell claude,
 # cl) : nommé dans ~/.claude-profiles/.default ; sans lui, elles partent sur le profil de référence.
 cmd_default() {
@@ -262,6 +345,8 @@ case "${1:-}" in
   show)     shift; cmd_show "$@" ;;
   new)      shift; cmd_new "$@" ;;
   plugin)   shift; cmd_plugin "$@" ;;
+  mcp)      shift; cmd_mcp "$@" ;;
+  mcp-scan) mcp_scan && jq -r '.[] | "\(.name)\(if .url then "  \(.url)" else "" end)"' "$mcp_cache" ;;
   check)    [ $# -eq 2 ] || die "usage : claude-profile check <nom>"; check "$2" ;;
   request)  shift; cmd_request "$@" ;;
   run)      shift
