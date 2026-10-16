@@ -1,0 +1,5 @@
+{
+  "name": "build-brief",
+  "description": "Consigne build-brief pour Gradle et garde-fou qui refuse un gradle/./gradlew lancé sans build-brief",
+  "author": { "name": "ywicker" }
+}

@@ -6,16 +6,17 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 **Rôle** : agent de code en terminal ; ce repo porte sa configuration utilisateur
 (`~/.claude`), pas la configuration des projets (`.claude/` dans chaque repo).
 
-**Fichiers** : `profiles/*.json` (le `settings.json`, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh`,
-`rules/build-brief.md` ; plugins :
-`.claude-plugin/marketplace.json`, `plugins/{pr-comments,intellij,profiles,git-nav,notify,herdr-session}/`,
+**Fichiers** : `profiles/*.json` (le `settings.json`, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh` ;
+plugins : `.claude-plugin/marketplace.json`,
+`plugins/{pr-comments,intellij,profiles,git-nav,notify,herdr-session,build-brief}/`,
 `setup/60-plugins.sh`, `home/.config/shell/claude-profile.sh` (plugin [`profiles`](#profiles)),
 `home/.config/shell/git-tools.sh` (plugin [`git-nav`](#git-nav)).
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line) ; `gh`
 authentifié (plugin [`git-nav`](#git-nav), badge PR de la status line) ; Linux + GNOME pour
 les notifications (plugin [`notify`](#notify)) ;
-IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [`intellij`](#intellij)).
+IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [`intellij`](#intellij)) ;
+`build-brief` dans le PATH pour Gradle (plugin [`build-brief`](#build-brief)).
 
 **Installation** : `./install.sh link`, puis `./setup/60-plugins.sh` pour les plugins et le
 profil par défaut (voir [Plugins](#plugins)). Les fichiers d'état et de secrets restent locaux
@@ -34,17 +35,6 @@ Pas de `settings.json` versionné dans `home/` : `~/.claude/settings.json` vient
 - `statusLine` → `statusline-command.sh`, rafraîchie toutes les 10 s.
 - `autoContinueAtUsageLimit = false`, `inputNeededNotifEnabled = true`.
 - Notifications desktop : plugin [`notify`](#notify), activé dans `enabledPlugins`.
-
-## Règles (`~/.claude/rules/`)
-
-Instructions chargées dans toutes les sessions, reprises de `~/.copilot/instructions/`
-(noms d'outils adaptés à Claude) :
-
-- `build-brief.md` : toute commande Gradle passe par `build-brief` (`build-brief ./gradlew …`),
-  Gradle brut seulement dans les exceptions listées. Prérequis : `build-brief` dans le PATH.
-
-La consigne IntelliJ (ex-`jetbrains-mcp.md`) est portée par le plugin `intellij` avec son
-serveur MCP (voir [`intellij`](#intellij)).
 
 ## Profils
 
@@ -83,6 +73,9 @@ qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 
 Les éléments activables (MCP, consignes, mods, skills de plugin) sont des plugins de la
 marketplace locale `claude-tools` : ce dépôt, déclaré par `.claude-plugin/marketplace.json`.
+Une consigne passe par un plugin (hook `SessionStart`, voir [`intellij`](#intellij),
+[`build-brief`](#build-brief)) plutôt que par `~/.claude/rules/`, chargé dans tous les
+profils sans moyen de l'éteindre.
 Ils sont installés une fois et allumés ou éteints dans `enabledPlugins` du `settings.json`,
 donc par profil (voir [Profils](#profils) ; `/profile show` du plugin
 [`profiles`](#profiles) pour les (dés)activer).
@@ -564,6 +557,61 @@ Ménage par `setup/20-herdr.sh` (rejoué par `dot` après `herdr update`) : tout
 `herdr-agent-state.sh` de `~/.claude/settings.json` (celui que herdr ajoute à chaque
 installation, ou l'ancienne variante portable des profils) est retiré, en écrivant à
 travers le lien.
+
+### `build-brief`
+
+**Rôle** : faire passer toute commande Gradle de Claude par `build-brief` (sortie de build
+réduite) — consigne d'usage et garde-fou qui refuse un Gradle brut.
+
+**Fichiers** : `plugins/build-brief/` (`instructions.md`, `hooks/hooks.json`,
+`hooks/gradle-guard.py`, `tests/gradle-guard.test.sh`) ; hors du plugin, le ménage de
+`setup/60-plugins.sh`. **Activé dans** : `vidal` et `basic`.
+
+**Prérequis** : `build-brief` dans le PATH (sans lui, le garde-fou laisse tout passer) ;
+`python3`. Tests : `bash plugins/build-brief/tests/gradle-guard.test.sh` (hook commande,
+pas un mod : `claude plugin test` ne s'applique pas).
+
+#### Installation hors de ce dépôt
+
+Le plugin ne dépend pas du reste de la config :
+
+```bash
+claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
+claude plugin install build-brief@claude-tools
+```
+
+Retirer une éventuelle consigne build-brief déjà présente ailleurs (`~/.claude/rules/`,
+`CLAUDE.md`, bloc posé par `build-brief --global`), sinon elle est chargée deux fois.
+
+#### Consigne
+
+`instructions.md`, injectée par un hook `SessionStart` (démarrage, reprise, `/clear`,
+compaction) comme celle d'[`intellij`](#intellij) : `build-brief gradle|./gradlew …`
+pour toute commande Gradle, chaque segment d'une commande enchaînée réécrit. Pour plus de
+détail, sans quitter build-brief : `--stacktrace`, puis le log brut dont il donne le
+chemin, puis `build-brief --mode raw` (sortie intégrale) ; rapports de tests dans
+`build/test-results/`, `build/reports/tests/`. Gradle brut seulement si `build-brief`
+manque, pour `--stop`/`--status`/`--version`, ou en dernier recours avec le préfixe
+`BUILD_BRIEF_BYPASS=1`. Ex-règle `~/.claude/rules/build-brief.md`, reprise de
+`~/.copilot/instructions/`.
+
+#### Garde-fou
+
+Hook `PreToolUse` sur `Bash` (`hooks/gradle-guard.py`) : la commande est découpée en
+segments (`&&`, `||`, `;`, `|`, `&`, parenthèses, `$( )`, retours à la ligne ; guillemets
+respectés, corps des heredocs ignorés). Un segment dont le premier mot (après les
+`VAR=…` et `time`/`nohup`/`exec`/`command`/`env`) est `gradle`, `gradlew` ou un chemin
+qui finit par l'un d'eux est refusé (`permissionDecision: "deny"`). Le message donne la
+commande corrigée (`build-brief rewrite`) et l'escalade ci-dessus.
+
+Laissés passer : `build-brief` absent du PATH, segment préfixé par `BUILD_BRIEF_BYPASS=1`,
+appel dont toutes les options sont `--stop`, `--status`, `--version` ou `-v`, commande
+illisible (guillemet non fermé). Non inspectés : `bash -c '…'`, `eval`, scripts, builds
+lancés par l'IDE.
+
+Ménage par `setup/60-plugins.sh` : l'ancien lien `~/.claude/rules/build-brief.md` est
+retiré, puis `~/.claude/rules/` s'il est vide ; les liens `rules` des dossiers de profil,
+devenus morts, disparaissent à la régénération qui suit.
 
 ## Gabarit pour un nouveau plugin
 

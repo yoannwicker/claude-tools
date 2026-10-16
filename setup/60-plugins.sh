@@ -20,7 +20,7 @@ else
   fi
 fi
 
-for p in pr-comments intellij profiles git-nav notify herdr-session; do
+for p in pr-comments intellij profiles git-nav notify herdr-session build-brief; do
   if claude plugin list 2>/dev/null | grep -q "$p@claude-tools"; then
     claude plugin update "$p@claude-tools"
   else
@@ -39,6 +39,14 @@ for n in notify.sh notify-click.sh claude-notify.py; do
     [ -L "$d/$n" ] && [ "$(readlink "$d/$n")" = "$repo/home/.claude/$n" ] && rm "$d/$n"
   done
 done
+# Ancienne règle ~/.claude/rules/build-brief.md (liée par install.sh avant le plugin
+# build-brief) : sans ce ménage, la consigne serait chargée deux fois, et même dans un profil
+# où le plugin est éteint (~/.claude-profiles/*/rules est un lien vers ~/.claude/rules ;
+# devenu mort si rules/ est retiré, generate --all ci-dessous l'efface).
+r=$HOME/.claude/rules/build-brief.md
+[ -L "$r" ] && [ "$(readlink "$r")" = "$repo/home/.claude/rules/build-brief.md" ] && rm "$r"
+rmdir "$HOME/.claude/rules" 2>/dev/null || true
+
 # Dossiers de profil régénérés depuis profiles/*.json (réglages à jour, liens morts retirés).
 "$repo/plugins/profiles/bin/claude-profile" generate --all
 # ~/.claude/settings.json : celui du profil par défaut (vidal si aucun n'est encore choisi).

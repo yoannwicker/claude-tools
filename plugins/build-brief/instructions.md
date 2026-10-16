@@ -6,20 +6,33 @@ L'usage de `build-brief` est **OBLIGATOIRE** pour toute commande Gradle (`gradle
 
 - `build-brief gradle ...` pour le Gradle du PATH, `build-brief ./gradlew ...` pour le
   wrapper d'un projet donné.
-- Commandes enchaînées (`&&`, `||`, `;`) : réécrire **chaque segment Gradle
+- Commandes enchaînées (`&&`, `||`, `;`, `|`) : réécrire **chaque segment Gradle
   individuellement** avec `build-brief` (ne pas se contenter du premier segment).
 
-## Exceptions (limitatives) — besoin de plus de log
+## Besoin de plus de log : rester dans build-brief
+
+Dans cet ordre, sans quitter build-brief :
+
+1. stack trace : `build-brief ./gradlew --stacktrace ...` ;
+2. log brut complet : consulter le chemin du log renvoyé par build-brief ;
+3. sortie intégrale non réduite en direct (y compris avec `--info`/`--debug`) :
+   `build-brief --mode raw ./gradlew ...`.
+
+Rapports de tests : lire `build/test-results/` et `build/reports/tests/`.
+
+## Exceptions (limitatives) — Gradle brut
 
 Retomber sur Gradle brut est autorisé **uniquement** dans ces cas :
 
 - `build-brief` absent du PATH dans la session en cours ;
-- une stack trace est nécessaire : passer d'abord par
-  `build-brief gradle --stacktrace ...` (ou `build-brief ./gradlew --stacktrace ...`) ;
-  ne retomber sur Gradle brut que si cette sortie reste insuffisante ;
-- la sortie intégrale non réduite est nécessaire pour un diagnostic — après avoir
-  d'abord consulté le chemin du log brut renvoyé par build-brief ;
+- gestion du daemon ou simple info : `./gradlew --stop`, `--status`, `--version` ;
+- dernier recours, quand les trois niveaux ci-dessus restent insuffisants (build
+  `--continuous`, doute sur la sortie de build-brief lui-même) : préfixer la commande par
+  `BUILD_BRIEF_BYPASS=1` (ex. `BUILD_BRIEF_BYPASS=1 ./gradlew test`) ;
 - commande non-Gradle (Maven, npm, etc.) — hors périmètre de cette règle.
+
+Un hook `PreToolUse` refuse tout autre appel Bash à `gradle`/`gradlew` sans `build-brief` :
+relancer alors la commande proposée dans le message de refus.
 
 ## Précisions
 

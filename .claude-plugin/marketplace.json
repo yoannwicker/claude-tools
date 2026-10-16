@@ -34,6 +34,11 @@
       "name": "herdr-session",
       "source": "./plugins/herdr-session",
       "description": "Signale la session Claude Code au pane herdr qui l'héberge, pour que herdr la reprenne (claude --resume) après un redémarrage"
+    },
+    {
+      "name": "build-brief",
+      "source": "./plugins/build-brief",
+      "description": "Consigne build-brief pour Gradle et garde-fou qui refuse un gradle/./gradlew lancé sans build-brief"
     }
   ]
 }

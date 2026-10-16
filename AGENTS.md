@@ -5,7 +5,7 @@
 Toute modification du fonctionnement d'un outil (script, skill, hook, réglage, option,
 mode, prérequis) met à jour la doc **dans le même commit** que le code.
 
-- **[CLAUDE-CODE.md](CLAUDE-CODE.md)** — Claude Code (settings, profils, règles, status line,
+- **[CLAUDE-CODE.md](CLAUDE-CODE.md)** — Claude Code (settings, profils, status line,
   hooks, skills, plugins), à chaque changement de comportement : fonctionnalité, mode ou
   argument ajouté/modifié/retiré, nouveau fichier versionné (ligne **Fichiers**), prérequis,
   configuration spécifique. Un nouveau plugin reçoit sa sous-section dans *Plugins* selon le
