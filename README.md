@@ -99,7 +99,7 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     git-nav/ (skills /pr, /br, /worktree, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle)
-profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, basic —, voir `claude-profile`)
+profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, basic, lean —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
 CLAUDE-CODE.md      Claude Code : settings, profils, plugins
 TOOLS.md            outils hors Claude : cl, extension GNOME, herdr, mise

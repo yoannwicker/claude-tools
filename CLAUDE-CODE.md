@@ -50,9 +50,11 @@ réglage, la statusline) se fait donc une fois, dans le profil de référence.
 
 Profils versionnés : `vidal` (config complète : tous les plugins du dépôt sauf `pr-comments`,
 plus `superpowers`, à installer une fois dans Claude Code :
-`/plugin install superpowers@claude-plugins-official`) et `basic` (le même sans
-`superpowers`). Aucun profil par défaut à l'installation : `claude` part sur le profil de
-référence (tous les plugins du dépôt sauf `pr-comments`).
+`/plugin install superpowers@claude-plugins-official`), `basic` (le même sans
+`superpowers`) et `lean` (comme `basic`, mais seuls les MCP `claude.ai Atlassian MCP` et
+`plugin:intellij:intellij` restent allumés, les autres connecteurs claude.ai étant coupés par
+url dans `deniedMcpServers`). Aucun profil par défaut à l'installation : `claude` part sur le
+profil de référence (tous les plugins du dépôt sauf `pr-comments`).
 
 Passer d'un profil à l'autre demande le plugin [`profiles`](#profiles) (`/profile`,
 `claude-profile`).

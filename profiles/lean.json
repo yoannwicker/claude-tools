@@ -1,0 +1,74 @@
+{
+  "description": "Lean : sans superpowers, MCP limités à Atlassian MCP et IntelliJ",
+  "enabledPlugins": {
+    "intellij@claude-tools": true,
+    "profiles@claude-tools": true,
+    "git-nav@claude-tools": true,
+    "notify@claude-tools": true,
+    "herdr-session@claude-tools": true,
+    "build-brief@claude-tools": true,
+    "superpowers@claude-plugins-official": false
+  },
+  "deniedMcpServers": [
+    {
+      "serverUrl": "https://mcp.atlassian.com/v1/mcp"
+    },
+    {
+      "serverUrl": "https://mcp.canva.com/mcp"
+    },
+    {
+      "serverUrl": "https://api.anthropic.com/v1/pages/mcp"
+    },
+    {
+      "serverUrl": "https://hcls.mcp.claude.com/clinical_trials/mcp"
+    },
+    {
+      "serverUrl": "https://mcp.consensus.app/mcp"
+    },
+    {
+      "serverUrl": "https://mcp.datadoghq.eu/api/unstable/mcp-server/mcp"
+    },
+    {
+      "serverUrl": "https://mcp.docusign.com/mcp"
+    },
+    {
+      "serverUrl": "https://mcp.figma.com/mcp"
+    },
+    {
+      "serverUrl": "https://gmailmcp.googleapis.com/mcp/v1"
+    },
+    {
+      "serverUrl": "https://calendarmcp.googleapis.com/mcp/v1"
+    },
+    {
+      "serverUrl": "https://docsmcp.googleapis.com/mcp/v1"
+    },
+    {
+      "serverUrl": "https://drivemcp.googleapis.com/mcp/v1"
+    },
+    {
+      "serverUrl": "https://sheetsmcp.googleapis.com/mcp/v1"
+    },
+    {
+      "serverUrl": "https://slidesmcp.googleapis.com/mcp/v1"
+    },
+    {
+      "serverUrl": "https://microsoft365.mcp.claude.com/mcp"
+    },
+    {
+      "serverUrl": "https://pubmed.mcp.claude.com/mcp"
+    },
+    {
+      "serverUrl": "https://mcp.slack.com/mcp"
+    },
+    {
+      "serverUrl": "https://mcp.teamtailor.com/mcp"
+    },
+    {
+      "serverUrl": "https://mcp.trello.com/v1"
+    },
+    {
+      "serverUrl": "https://mcp.wrike.com/app/mcp/stream"
+    }
+  ]
+}
