@@ -8,5 +8,46 @@
     "notify@claude-tools": true,
     "herdr-session@claude-tools": true,
     "build-brief@claude-tools": true
-  }
+  },
+  "deniedMcpServers": [
+    {
+      "serverName": "claude.ai Atlassian Rovo"
+    },
+    {
+      "serverName": "claude.ai Canva"
+    },
+    {
+      "serverName": "claude.ai Claude Docs"
+    },
+    {
+      "serverName": "claude.ai Clinical Trials"
+    },
+    {
+      "serverName": "claude.ai Consensus"
+    },
+    {
+      "serverName": "claude.ai Datadog"
+    },
+    {
+      "serverName": "claude.ai Docusign"
+    },
+    {
+      "serverName": "claude.ai Figma"
+    },
+    {
+      "serverName": "claude.ai PubMed"
+    },
+    {
+      "serverName": "claude.ai Slack"
+    },
+    {
+      "serverName": "claude.ai Teamtailor"
+    },
+    {
+      "serverName": "claude.ai Trello"
+    },
+    {
+      "serverName": "claude.ai Wrike"
+    }
+  ]
 }

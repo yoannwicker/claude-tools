@@ -152,10 +152,17 @@ launch_loop() {
 }
 
 # Dépose une demande de bascule pour la boucle qui a lancé cette session. Code 3 : session
-# lancée hors boucle (claude sans la fonction shell, IDE…), bascule manuelle.
+# lancée hors boucle (claude sans la fonction shell, IDE…), bascule manuelle. Code 4 : session
+# d'arrière-plan (claude daemon, reconnue à CLAUDE_JOB_DIR, variable non documentée) : /exit
+# la détache sans quitter le claude que la boucle attend, la demande ne serait jamais lue.
 cmd_request() {
   [ $# -eq 2 ] || die "usage : claude-profile request <nom> <session>"
   check "$1"
+  if [ -n "${CLAUDE_JOB_DIR:-}" ]; then
+    echo "Session d'arrière-plan (claude daemon) : /exit la détache sans la quitter, bascule automatique impossible." \
+      "Relance manuelle, dans un terminal : claude stop $2, puis claude-profile switch $1 --resume $2" >&2
+    exit 4
+  fi
   [ -n "${CLAUDE_PROFILE_SWITCH_FILE:-}" ] || { echo "session lancée hors de claude-profile switch/run : relance manuelle" >&2; exit 3; }
   printf '%s %s\n' "$1" "$2" > "$CLAUDE_PROFILE_SWITCH_FILE"
 }

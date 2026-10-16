@@ -293,7 +293,11 @@ profil. Pour que `claude` tapé à la main passe par la boucle,
 `home/.config/shell/claude-profile.sh` (chargé par `~/.bash_aliases`) le définit comme
 fonction appelant `claude-profile run` ; `cl` y passe aussi. Lancé autrement (IDE, lanceur
 graphique, `command claude`), `/profile` donne la relance manuelle : `/exit` puis
-`claude-profile switch <nom> --continue`.
+`claude-profile switch <nom> --continue`. Une session passée en arrière-plan (sous
+`claude daemon`, reconnue à `CLAUDE_JOB_DIR`, variable non documentée) ne bascule pas non
+plus : `/exit` la détache sans quitter le `claude` que la boucle attend, la demande ne serait
+lue qu'à sa fermeture. `/profile <nom>` n'y dépose donc rien et donne la relance manuelle :
+`claude stop <session>`, puis `claude-profile switch <nom> --resume <session>`.
 
 #### `/profile`
 

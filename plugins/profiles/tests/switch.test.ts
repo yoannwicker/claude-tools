@@ -13,6 +13,11 @@ test('a session outside the loop: no exit, the manual relaunch', () => {
   expect(manual('perso')).toContain('claude-profile switch perso --continue')
 })
 
+test('a background session: no exit, the manual relaunch the command gives', () => {
+  const text = "Session d'arrière-plan (claude daemon) : … claude-profile switch perso --resume s1"
+  expect(afterRequest('perso', run(4, `${text}\n`))).toEqual({ exit: false, text })
+})
+
 test('an error: no exit, its message', () => {
   expect(afterRequest('x', run(2, 'profil inconnu : x\n'))).toEqual({ exit: false, text: 'profil inconnu : x' })
   expect(afterRequest('x', run(1))).toEqual({ exit: false, text: 'claude-profile request a échoué (code 1)' })
