@@ -21,11 +21,13 @@ export const manual = (name: string) =>
   `relance manuelle. /exit, puis dans ce dossier : claude-profile switch ${name} --continue`
 
 // The answer to `/profile <name>` once `claude-profile request` ran: `exit` when the
-// loop will relaunch the session, then the text to show.
-export function afterRequest(name: string, req: Run): { exit: boolean; text: string } {
-  if (req.exitCode === 0) return { exit: true, text: `Bascule vers le profil ${name} : la session se relance…` }
-  if (req.exitCode === 3) return { exit: false, text: manual(name) }
-  return { exit: false, text: req.stderr.trim() || `claude-profile request a échoué (code ${req.exitCode})` }
+// loop will relaunch the session, `isBackground` for a background session (request left,
+// the session to stop first), then the text to show.
+export function afterRequest(name: string, req: Run): { exit: boolean; isBackground: boolean; text: string } {
+  if (req.exitCode === 0) return { exit: true, isBackground: false, text: `Bascule vers le profil ${name} : la session se relance…` }
+  if (req.exitCode === 3) return { exit: false, isBackground: false, text: manual(name) }
+  const text = req.stderr.trim() || `claude-profile request a échoué (code ${req.exitCode})`
+  return { exit: false, isBackground: req.exitCode === 4, text }
 }
 
 // One line of `claude-profile show`: under `plugins :`, a plugin (`+` on, `-` off, `?`

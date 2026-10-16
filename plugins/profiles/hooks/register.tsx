@@ -76,7 +76,7 @@ export const register: Register = on => {
       name: 'profile',
       description:
         'Choisir un profil dans une liste, relancer cette conversation dans le profil donné, voir ce qui est actif sur un profil (show), ou choisir le profil par défaut (default)',
-      argumentHint: '[<profil> | show [<profil>] | create <nom> | default [<profil>]]',
+      argumentHint: '[<profil> | show [<profil>] | create <nom> | default [<profil>] | stop | cancel]',
     })
 
     return next(e)
@@ -114,6 +114,21 @@ export const register: Register = on => {
       const now = await run($, 'default')
 
       return { text: `Profil par défaut : ${now.stdout.trim() || 'reference'}. /profile default <profil> pour le changer, /profile default reference pour n'en garder aucun.` }
+    }
+    // A background session's switch: stop it (claude stop, the loop relaunching the
+    // conversation once the claude of this terminal is quit), or cancel the request left.
+    if (args === 'stop') {
+      if ((await run($, 'background')).exitCode !== 0) return { text: "Cette session n'est pas en arrière-plan : /exit suffit." }
+      const id = await $.session.id()
+      // Not from the command's hook: the session stops with it.
+      $.clock.after(300, () => void $.process.run(['claude', 'stop', id.slice(0, 8)]))
+
+      return { text: 'Arrêt de cette session : quitter ensuite le claude de ce terminal (Ctrl+C) pour basculer.' }
+    }
+    if (args === 'cancel') {
+      await run($, 'request', '--cancel')
+
+      return { text: 'Bascule annulée.' }
     }
     if (args) return { text: await switchTo($, args) }
     if (await openPicker($, PICKER)) return { text: 'Choix du profil (Entrée : relancer dedans, Échap : annuler).' }

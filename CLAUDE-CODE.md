@@ -250,7 +250,8 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
   des `.mcp.json` des plugins activés) ; modèle, et la liste des plugins différents du
   profil de référence ;
 - `claude-profile new <nom> [description…]` : crée `profiles/<nom>.json` avec les plugins
-  du profil de référence (noms réservés : `reference`, `default`, `show`, `create`) ;
+  du profil de référence (noms réservés : `reference`, `default`, `show`, `create`,
+  `stop`, `cancel`) ;
 - `claude-profile plugin <nom> <plugin>@<marketplace> on|off` : active ou désactive un plugin
   dans `enabledPlugins` du profil, puis le régénère ; `reference` l'écrit dans
   `~/.claude/settings.json`, à travers le lien (donc dans le dépôt) ;
@@ -280,7 +281,8 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
   variable) ; deux terminaux peuvent tourner sur deux profils ;
 - `claude-profile run [arguments claude…]` : lance `claude` sur le profil par défaut (sinon
   le profil de référence), ou sans toucher au profil courant dans une session de profil ;
-- `claude-profile request <nom> <session>` : demande de bascule, déposée par `/profile`.
+- `claude-profile request <nom> <session>|--cancel` : demande de bascule, déposée (ou retirée)
+  par `/profile` ; `claude-profile background` : code 0 dans une session d'arrière-plan.
 
 #### Bascule depuis une session
 
@@ -294,10 +296,14 @@ profil. Pour que `claude` tapé à la main passe par la boucle,
 fonction appelant `claude-profile run` ; `cl` y passe aussi. Lancé autrement (IDE, lanceur
 graphique, `command claude`), `/profile` donne la relance manuelle : `/exit` puis
 `claude-profile switch <nom> --continue`. Une session passée en arrière-plan (sous
-`claude daemon`, reconnue à `CLAUDE_JOB_DIR`, variable non documentée) ne bascule pas non
-plus : `/exit` la détache sans quitter le `claude` que la boucle attend, la demande ne serait
-lue qu'à sa fermeture. `/profile <nom>` n'y dépose donc rien et donne la relance manuelle :
-`claude stop <session>`, puis `claude-profile switch <nom> --resume <session>`.
+`claude daemon`, reconnue à `CLAUDE_JOB_DIR`, variable non documentée) ne se quitte pas par
+`/exit`, qui la détache seulement : le `claude` que la boucle attend continue. `/profile <nom>`
+y dépose la demande et l'indique : `/profile stop` arrête la session (`claude stop`), et la
+boucle la relance dans `<nom>` une fois le `claude` du terminal quitté (Ctrl+C) ;
+`/profile cancel` annule la demande (`claude-profile request --cancel`), qui sinon
+s'appliquerait à la fermeture de ce `claude`. Une session d'arrière-plan ne peut pas être
+relancée en arrière-plan dans un autre profil : le daemon les démarre toutes avec son propre
+environnement, donc son `CLAUDE_CONFIG_DIR`.
 
 #### `/profile`
 
@@ -321,7 +327,10 @@ Mod (`hooks/register.tsx`) :
   même liste (le profil par défaut présélectionné ; `reference` pour n'en garder aucun) ou
   celui donné ;
 - `create <nom> [description]` : crée le profil (`claude-profile new`, plugins du
-  profil de référence), le génère et ouvre sa vue en édition pour choisir ses plugins.
+  profil de référence), le génère et ouvre sa vue en édition pour choisir ses plugins ;
+- `stop` / `cancel` : dans une session d'arrière-plan, l'arrêter pour que la bascule
+  demandée se fasse, ou annuler cette demande (voir
+  [Bascule depuis une session](#bascule-depuis-une-session)).
 
 Logique pure (lecture de `list`/`show`, réponse à une bascule) dans `hooks/switch.ts`,
 testée par `claude plugin test plugins/profiles` ; `types/index.d.ts` déclare l'état du

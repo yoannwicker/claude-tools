@@ -134,7 +134,9 @@ launch_loop() {
   while :; do
     case "$name" in
       "")      claude "$@" ;;
-      *)       generate "$name" || return 2
+      # Le script relu, pas la fonction en mémoire : une boucle lancée avant une mise à jour du
+      # dépôt générerait sinon avec l'ancien code.
+      *)       "$(readlink -f "${BASH_SOURCE[0]}")" generate "$name" >/dev/null || return 2
                dir=$(config_dir "$name")
                if [ -z "$dir" ]; then env -u CLAUDE_CONFIG_DIR claude "$@"; else env CLAUDE_CONFIG_DIR="$dir" claude "$@"; fi ;;
     esac
@@ -151,20 +153,23 @@ launch_loop() {
   done
 }
 
-# Dépose une demande de bascule pour la boucle qui a lancé cette session. Code 3 : session
-# lancée hors boucle (claude sans la fonction shell, IDE…), bascule manuelle. Code 4 : session
-# d'arrière-plan (claude daemon, reconnue à CLAUDE_JOB_DIR, variable non documentée) : /exit
-# la détache sans quitter le claude que la boucle attend, la demande ne serait jamais lue.
+# Dépose une demande de bascule pour la boucle qui a lancé cette session (--cancel : la retire).
+# Code 3 : session lancée hors boucle (claude sans la fonction shell, IDE…), bascule manuelle.
+# Code 4 : demande déposée, mais session d'arrière-plan (claude daemon, reconnue à
+# CLAUDE_JOB_DIR, variable non documentée) : /exit la détache sans quitter le claude que la
+# boucle attend ; la bascule se fait une fois la session arrêtée et ce claude quitté.
 cmd_request() {
-  [ $# -eq 2 ] || die "usage : claude-profile request <nom> <session>"
+  if [ "${1:-}" = --cancel ]; then rm -f "${CLAUDE_PROFILE_SWITCH_FILE:-/dev/null/none}" 2>/dev/null; return 0; fi
+  [ $# -eq 2 ] || die "usage : claude-profile request <nom> <session> | --cancel"
   check "$1"
-  if [ -n "${CLAUDE_JOB_DIR:-}" ]; then
-    echo "Session d'arrière-plan (claude daemon) : /exit la détache sans la quitter, bascule automatique impossible." \
-      "Relance manuelle, dans un terminal : claude stop $2, puis claude-profile switch $1 --resume $2" >&2
-    exit 4
-  fi
   [ -n "${CLAUDE_PROFILE_SWITCH_FILE:-}" ] || { echo "session lancée hors de claude-profile switch/run : relance manuelle" >&2; exit 3; }
   printf '%s %s\n' "$1" "$2" > "$CLAUDE_PROFILE_SWITCH_FILE"
+  if [ -n "${CLAUDE_JOB_DIR:-}" ]; then
+    echo "Session d'arrière-plan : /exit la détache sans la quitter. Bascule vers $1 en attente :" \
+      "/profile stop arrête cette session, puis quitter le claude de ce terminal (Ctrl+C) ;" \
+      "la boucle relance alors la conversation dans $1. /profile cancel : annuler." >&2
+    exit 4
+  fi
 }
 
 cmd_list() {
@@ -268,7 +273,7 @@ cmd_new() {
   [ $# -ge 1 ] || die "usage : claude-profile new <nom> [description…]"
   local name=$1 f
   shift
-  case "$name" in reference|default|show|create) die "nom réservé : $name" ;; esac
+  case "$name" in reference|default|show|create|stop|cancel) die "nom réservé : $name" ;; esac
   [[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "nom invalide : $name (minuscules, chiffres, tirets)"
   f=$profiles_dir/$name.json
   [ -e "$f" ] && die "existe déjà : $f"
@@ -356,6 +361,7 @@ case "${1:-}" in
   mcp-scan) mcp_scan && jq -r '.[] | "\(.name)\(if .url then "  \(.url)" else "" end)"' "$mcp_cache" ;;
   check)    [ $# -eq 2 ] || die "usage : claude-profile check <nom>"; check "$2" ;;
   request)  shift; cmd_request "$@" ;;
+  background) [ -n "${CLAUDE_JOB_DIR:-}" ] ;;
   run)      shift
             # Hors session de profil, une nouvelle session part sur le profil par défaut.
             name=""

@@ -5,22 +5,22 @@ import { afterRequest, draftChanges, draftKey, manual, parseList, parseShow, tog
 const run = (exitCode: number, stderr = '') => ({ exitCode, stdout: '', stderr })
 
 test('a request the loop took: exit, then relaunch', () => {
-  expect(afterRequest('perso', run(0))).toEqual({ exit: true, text: 'Bascule vers le profil perso : la session se relance…' })
+  expect(afterRequest('perso', run(0))).toEqual({ exit: true, isBackground: false, text: 'Bascule vers le profil perso : la session se relance…' })
 })
 
 test('a session outside the loop: no exit, the manual relaunch', () => {
-  expect(afterRequest('perso', run(3, 'hors boucle'))).toEqual({ exit: false, text: manual('perso') })
+  expect(afterRequest('perso', run(3, 'hors boucle'))).toEqual({ exit: false, isBackground: false, text: manual('perso') })
   expect(manual('perso')).toContain('claude-profile switch perso --continue')
 })
 
-test('a background session: no exit, the manual relaunch the command gives', () => {
-  const text = "Session d'arrière-plan (claude daemon) : … claude-profile switch perso --resume s1"
-  expect(afterRequest('perso', run(4, `${text}\n`))).toEqual({ exit: false, text })
+test('a background session: request left, no exit, the session to stop first', () => {
+  const text = "Session d'arrière-plan : /exit la détache sans la quitter. Bascule vers perso en attente : …"
+  expect(afterRequest('perso', run(4, `${text}\n`))).toEqual({ exit: false, isBackground: true, text })
 })
 
 test('an error: no exit, its message', () => {
-  expect(afterRequest('x', run(2, 'profil inconnu : x\n'))).toEqual({ exit: false, text: 'profil inconnu : x' })
-  expect(afterRequest('x', run(1))).toEqual({ exit: false, text: 'claude-profile request a échoué (code 1)' })
+  expect(afterRequest('x', run(2, 'profil inconnu : x\n'))).toEqual({ exit: false, isBackground: false, text: 'profil inconnu : x' })
+  expect(afterRequest('x', run(1))).toEqual({ exit: false, isBackground: false, text: 'claude-profile request a échoué (code 1)' })
 })
 
 test('claude-profile list parsed: name, description, current', () => {
