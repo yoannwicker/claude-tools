@@ -1,48 +1,72 @@
 #!/usr/bin/env bash
-# claude-profile — profils Claude Code : un dossier de config généré depuis ~/.claude, où seul
-# settings.json diffère, lancé avec CLAUDE_CONFIG_DIR.
+# claude-profile — profils Claude Code : une surcharge du settings.json de référence, générée en un
+# dossier de config depuis ~/.claude, où seul settings.json diffère, lancé avec CLAUDE_CONFIG_DIR.
 #   claude-profile list | current | show [<nom>] | new <nom> [description…] | plugin <nom> <plugin> on|off | generate <nom>|--all | check <nom> | --help
-#   claude-profile default [<nom>] : profil par défaut (celui de claude lancé sans profil), affiché ou changé
+#   claude-profile default [<nom>|--unset] : profil par défaut (celui des nouvelles sessions de run), affiché ou changé
 #   claude-profile switch <nom> [arguments claude…] | run [arguments claude…] | request <nom> <session>
-#   Profil : profiles/<nom>.json du dépôt, un settings.json complet (plus une clé « description »)
-#   qui devient tel quel celui du profil. Profil par défaut : ~/.claude/settings.json est un lien
-#   vers son settings.json généré, claude lancé sans profil est donc sur lui.
+#   Profil de référence (reference) : ~/.claude/settings.json, ~/.claude sans profil.
+#   Profil : profiles/<nom>.json du dépôt, { description, enabledPlugins } ; son settings.json est
+#   le profil de référence avec enabledPlugins remplacé en entier par celui du profil.
 #   Dossier généré : ~/.claude-profiles/<nom>/ (tout le reste en liens vers ~/.claude).
 #   switch/run lancent claude dans une boucle : /profile <nom> (plugin profiles) y dépose une
-#   demande (request) puis quitte, et la boucle relance la même session dans <nom>.
+#   demande (request) puis quitte, et la boucle relance la même session dans <nom>. run hors
+#   profil part sur le profil par défaut, sinon sur le profil de référence.
 set -u
 repo=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../.." && pwd)
 profiles_dir=$repo/profiles
 base=$HOME/.claude
 out_root=$HOME/.claude-profiles
+main=$base/settings.json
+default_file=$out_root/.default
+# Clés qu'un profil peut porter : les sections surchargées (remplacées en entier) et sa description.
+overridable='["description", "enabledPlugins"]'
 
-usage() { sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "$*" >&2; exit 2; }
 
 names() { local f; for f in "$profiles_dir"/*.json; do [ -e "$f" ] && basename "$f" .json; done; }
 
 check() {
-  [ -f "$profiles_dir/$1.json" ] || die "profil inconnu : $1 (profils : $(names | tr '\n' ' '))"
-  jq -e 'type == "object"' "$profiles_dir/$1.json" >/dev/null 2>&1 || die "profil invalide (objet JSON attendu) : $profiles_dir/$1.json"
+  [ "$1" = reference ] && return 0
+  local f=$profiles_dir/$1.json bad
+  [ -f "$f" ] || die "profil inconnu : $1 (profils : reference $(names | tr '\n' ' '))"
+  jq -e 'type == "object"' "$f" >/dev/null 2>&1 || die "profil invalide (objet JSON attendu) : $f"
+  bad=$(jq -r --argjson ok "$overridable" 'keys - $ok | join(", ")' "$f")
+  [ -z "$bad" ] || die "profil $1 : seules description et enabledPlugins sont surchargeables (en trop : $bad) : $f"
 }
 
-# Profil par défaut : celui dont ~/.claude/settings.json est le lien (rien s'il n'y en a pas).
+# Le profil de référence, lu pour générer un profil : un objet JSON, pas un ancien lien vers un profil généré.
+check_main() {
+  case "$(readlink -f "$main")" in
+    "$out_root"/*) die "$main pointe encore vers un profil généré (ancien modèle) : ./install.sh link le relie au profil de référence du dépôt" ;;
+  esac
+  jq -e 'type == "object"' "$main" >/dev/null 2>&1 || die "profil de référence illisible (objet JSON attendu) : $main"
+}
+
+# Profil par défaut : celui nommé dans ~/.claude-profiles/.default (rien s'il n'y en a pas ou
+# s'il n'existe plus).
 default_profile() {
-  local t
-  t=$(readlink "$base/settings.json" 2>/dev/null)
-  case "$t" in "$out_root"/*/settings.json) t=${t%/settings.json}; echo "${t##*/}" ;; esac
+  local d
+  d=$(cat "$default_file" 2>/dev/null) || return 0
+  [ -n "$d" ] && [ -f "$profiles_dir/$d.json" ] && echo "$d"
+  return 0
 }
 
-# Dossier de config d'un profil, vide pour ~/.claude tel quel (le profil par défaut).
-config_dir() { [ "$1" = "$(default_profile)" ] || echo "$out_root/$1"; }
+# Dossier de config d'un profil, vide pour le profil de référence (~/.claude tel quel).
+config_dir() { [ "$1" = reference ] || echo "$out_root/$1"; }
 
 # Profil de la session courante, d'après CLAUDE_CONFIG_DIR.
 current() {
   case "${CLAUDE_CONFIG_DIR:-}" in
     "$out_root"/*) basename "$CLAUDE_CONFIG_DIR" ;;
-    "") default_profile | grep . || echo "aucun (~/.claude sans profil par défaut)" ;;
+    "") echo reference ;;
     *) echo "autre ($CLAUDE_CONFIG_DIR)" ;;
   esac
+}
+
+# settings.json d'un profil : le profil de référence, ses sections surchargées remplacées par celles du profil.
+merged() {
+  if [ "$1" = reference ]; then jq . "$main"; else jq -s '.[0] + (.[1] | del(.description))' "$main" "$profiles_dir/$1.json"; fi
 }
 
 # Identifiants : lien vers ceux de la base. Claude Code réécrit le fichier par renommage,
@@ -61,6 +85,8 @@ repair_credentials() {
 generate() {
   local name=$1 dir=$out_root/$1 e n target tmp
   check "$name"
+  [ "$name" = reference ] && return 0
+  check_main
   mkdir -p "$dir"
   repair_credentials "$dir"
   for e in "$base"/* "$base"/.[!.]*; do
@@ -79,7 +105,7 @@ generate() {
   ln -s "$HOME/.claude.json" "$dir/.claude.json"
   find "$dir" -maxdepth 1 -xtype l -delete
   tmp=$(mktemp "$dir/.settings.XXXXXX")
-  jq 'del(.description)' "$profiles_dir/$name.json" > "$tmp" \
+  merged "$name" > "$tmp" \
     && chmod 644 "$tmp" && mv "$tmp" "$dir/settings.json" || { rm -f "$tmp"; die "lecture impossible : $profiles_dir/$name.json"; }
   jq -e '.enabledPlugins["profiles@claude-tools"] == true' "$dir/settings.json" >/dev/null \
     || echo "attention : $name n'active pas profiles@claude-tools, /profile n'y sera pas disponible" >&2
@@ -87,7 +113,7 @@ generate() {
 
 # Lance claude, puis tant qu'une demande de bascule a été déposée (claude-profile request, depuis
 # /profile), relance la session demandée dans le profil demandé. $1 : profil à lancer, vide
-# pour garder l'environnement tel quel (claude-profile run).
+# pour garder l'environnement tel quel (claude-profile run dans une session de profil).
 launch_loop() {
   local name=$1 req rc id dir
   shift
@@ -127,6 +153,8 @@ cmd_list() {
   local cur def n state
   cur=$(current)
   def=$(default_profile)
+  printf '%s %-16s %s [%s]\n' "$([ "$cur" = reference ] && echo '*' || echo ' ')" reference \
+    "Profil de référence (~/.claude/settings.json)" "référence$([ -z "$def" ] && echo ", par défaut")"
   for n in $(names); do
     if [ -f "$out_root/$n/settings.json" ]; then state=généré; else state="non généré"; fi
     [ "$n" = "$def" ] && state="$state, par défaut"
@@ -136,83 +164,93 @@ cmd_list() {
 }
 
 # Ce qui est actif sur un profil (celui de la session par défaut) : plugins activés ou non,
-# y compris ceux installés que le profil ne mentionne pas, modèle, réglages qui diffèrent du
-# profil par défaut.
+# y compris ceux installés que le profil ne mentionne pas, avec l'état du profil de référence quand il
+# diffère, modèle.
 cmd_show() {
   [ $# -le 1 ] || die "usage : claude-profile show [<nom>]"
-  local name=${1:-$(current)} def f state installed
+  local name=${1:-$(current)} def f state installed settings
   check "$name"
+  [ "$name" = reference ] || check_main
   def=$(default_profile)
-  f=$profiles_dir/$name.json
-  if [ -f "$out_root/$name/settings.json" ]; then state=généré; else state="non généré"; fi
-  [ "$name" = "$def" ] && state="$state, par défaut"
+  if [ "$name" = reference ]; then
+    f=$main
+    state="référence$([ -z "$def" ] && echo ", par défaut")"
+  else
+    f=$profiles_dir/$name.json
+    if [ -f "$out_root/$name/settings.json" ]; then state=généré; else state="non généré"; fi
+    [ "$name" = "$def" ] && state="$state, par défaut"
+  fi
+  settings=$(merged "$name") || die "lecture impossible : $f"
   installed=$(jq -c '.plugins // {} | keys' "$base/plugins/installed_plugins.json" 2>/dev/null || echo '[]')
   jq -r --arg name "$name" --arg cur "$(current)" --arg state "$state" --arg file "${f/#$HOME/\~}" \
-     --arg def "$def" --argjson installed "$installed" \
-     --slurpfile ref "$([ -n "$def" ] && echo "$profiles_dir/$def.json" || echo /dev/null)" '
+     --arg desc "$([ "$name" = reference ] || jq -r '.description // ""' "$f")" --argjson installed "$installed" \
+     --slurpfile ref "$main" '
     (.enabledPlugins // {}) as $on
-    | "profil : \($name)\(if $name == $cur then " (actuel)" else "" end) [\($state)]",
-      (if (.description // "") != "" then "  \(.description)" else empty end),
+    | ($ref[0].enabledPlugins // {}) as $main
+    | def reference($k): if $name == "reference" or ($on[$k] // false) == ($main[$k] // false) then ""
+        else " (référence : \(if $main[$k] then "activé" else "désactivé" end))" end;
+    "profil : \($name)\(if $name == $cur then " (actuel)" else "" end) [\($state)]",
+      (if $desc != "" then "  \($desc)" else empty end),
       "réglages : \($file)",
       "plugins :",
-      ($on | to_entries[] | "  \(if .value then "+" else "-" end) \(.key)\(if .value then "" else " (désactivé)" end)"),
-      ($installed - ($on | keys) | .[] | "  ? \(.) (installé, absent du profil : inactif)"),
+      ($on | to_entries[] | "  \(if .value then "+" else "-" end) \(.key)\(if .value then "" else " (désactivé)" end)\(reference(.key))"),
+      ($installed - ($on | keys) | .[] | "  ? \(.) (installé, absent du profil : inactif)\(reference(.))"),
       "modèle : \(.model // "par défaut")",
-      (if $def == "" or $name == $def then empty else
-        [to_entries[] | select(.key != "description" and .key != "enabledPlugins")
-         | select(.value != ($ref[0][.key])) | .key] as $diff
-        | "diffère de \($def) (par défaut) : \(if $diff == [] then "rien d’autre" else $diff | join(", ") end)"
+      (if $name == "reference" then empty else
+        [($on + $main) | keys[] | select(($on[.] // false) != ($main[.] // false))] as $diff
+        | "plugins différents du profil de référence : \(if $diff == [] then "aucun" else $diff | join(", ") end)"
        end)
-  ' "$f"
+  ' <<< "$settings"
 }
 
 cmd_new() {
   [ $# -ge 1 ] || die "usage : claude-profile new <nom> [description…]"
   local name=$1 f
   shift
-  case "$name" in default|show|create) die "nom réservé : $name" ;; esac
+  case "$name" in reference|default|show|create) die "nom réservé : $name" ;; esac
   [[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "nom invalide : $name (minuscules, chiffres, tirets)"
   f=$profiles_dir/$name.json
   [ -e "$f" ] && die "existe déjà : $f"
   mkdir -p "$profiles_dir"
-  local def
-  def=$(default_profile)
-  if [ -n "$def" ]; then
-    jq --arg d "$*" '{description: $d} + del(.description)' "$profiles_dir/$def.json" > "$f"
+  if jq -e 'type == "object"' "$main" >/dev/null 2>&1; then
+    jq --arg d "$*" '{description: $d, enabledPlugins: (.enabledPlugins // {"profiles@claude-tools": true})}' "$main" > "$f"
   else
     jq -n --arg d "$*" '{description: $d, enabledPlugins: {"profiles@claude-tools": true}}' > "$f"
   fi
-  echo "créé : $f (copie du profil par défaut${def:+, $def}, à adapter ; il devient tel quel le settings.json du profil)"
+  echo "créé : $f (plugins du profil de référence, à adapter ; le reste vient du profil de référence)"
 }
 
-# Active ou désactive un plugin dans un profil (pas la base), puis le régénère.
+# Active ou désactive un plugin dans un profil, puis le régénère ; dans le profil de référence, écrit à
+# travers le lien ~/.claude/settings.json (vers le dépôt), que mv remplacerait.
 cmd_plugin() {
   [ $# -eq 3 ] && [[ $3 =~ ^(on|off)$ ]] || die "usage : claude-profile plugin <nom> <plugin>@<marketplace> on|off"
   check "$1"
-  local f=$profiles_dir/$1.json tmp
-  tmp=$(mktemp "$f.XXXXXX")
+  local f tmp
+  if [ "$1" = reference ]; then f=$main; else f=$profiles_dir/$1.json; fi
+  tmp=$(mktemp "$profiles_dir/.plugin.XXXXXX" 2>/dev/null || mktemp)
   jq --arg p "$2" --argjson on "$([ "$3" = on ] && echo true || echo false)" '.enabledPlugins[$p] = $on' "$f" > "$tmp" \
-    && mv "$tmp" "$f" || { rm -f "$tmp"; die "écriture impossible : $f"; }
+    && cat "$tmp" > "$f" && rm -f "$tmp" || { rm -f "$tmp"; die "écriture impossible : $f"; }
   [ "$2" = profiles@claude-tools ] && [ "$3" = off ] \
     && echo "attention : sans profiles@claude-tools, /profile ne sera pas disponible dans $1" >&2
   generate "$1"
   echo "$2 : $([ "$3" = on ] && echo activé || echo désactivé) dans $1"
 }
 
-# Profil par défaut, celui de claude lancé sans profil : ~/.claude/settings.json devient un lien
-# vers le settings.json généré du profil (un fichier ordinaire à sa place est sauvegardé).
+# Profil par défaut, celui des nouvelles sessions de claude-profile run (fonction shell claude,
+# cl) : nommé dans ~/.claude-profiles/.default ; sans lui, elles partent sur le profil de référence.
 cmd_default() {
-  [ $# -le 1 ] || die "usage : claude-profile default [<nom>]"
-  if [ $# -eq 0 ]; then default_profile | grep . || { echo "aucun profil par défaut" >&2; exit 1; }; return; fi
-  local name=$1 bak
-  check "$name"
-  generate "$name" || exit 2
-  if [ -f "$base/settings.json" ] && [ ! -L "$base/settings.json" ]; then
-    bak=$base/settings.json.bak.$(date +%Y%m%d-%H%M%S)
-    mv "$base/settings.json" "$bak" && echo "sauvegardé : $bak"
-  fi
-  ln -sfn "$out_root/$name/settings.json" "$base/settings.json"
-  echo "profil par défaut : $name (claude lancé sans profil, et ses sessions à leur prochaine relance)"
+  [ $# -le 1 ] || die "usage : claude-profile default [<nom>|--unset]"
+  if [ $# -eq 0 ]; then default_profile | grep . || echo reference; return; fi
+  case "$1" in
+    reference|--unset)
+      rm -f "$default_file"
+      echo "profil par défaut : reference (aucun profil par défaut)" ;;
+    *)
+      check "$1"
+      generate "$1" || exit 2
+      mkdir -p "$out_root" && echo "$1" > "$default_file" || die "écriture impossible : $default_file"
+      echo "profil par défaut : $1 (nouvelles sessions lancées par claude-profile run : fonction shell claude, cl)" ;;
+  esac
 }
 
 command -v jq >/dev/null 2>&1 || die "jq requis"
@@ -226,7 +264,11 @@ case "${1:-}" in
   plugin)   shift; cmd_plugin "$@" ;;
   check)    [ $# -eq 2 ] || die "usage : claude-profile check <nom>"; check "$2" ;;
   request)  shift; cmd_request "$@" ;;
-  run)      shift; launch_loop "" "$@" ;;
+  run)      shift
+            # Hors session de profil, une nouvelle session part sur le profil par défaut.
+            name=""
+            [ -z "${CLAUDE_CONFIG_DIR:-}" ] && name=$(default_profile)
+            launch_loop "$name" "$@" ;;
   generate)
     [ $# -eq 2 ] || die "usage : claude-profile generate <nom>|--all"
     if [ "$2" = --all ]; then

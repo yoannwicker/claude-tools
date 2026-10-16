@@ -5,7 +5,7 @@ export type Run = { exitCode: number; stdout: string; stderr: string }
 export type Profile = { name: string; description: string; isCurrent: boolean; isDefault: boolean }
 
 // The profiles of `claude-profile list`: `* name   description [state]`, `*` on the session's,
-// `par défaut` in the state of the default one.
+// `par défaut` in the state of the default one (`reference`, the reference profile, when none is set).
 export const parseList = (stdout: string): Profile[] =>
   stdout.split('\n').flatMap(line => {
     const m = /^([* ]) (\S+)\s*(.*?)\s*(\[[^\]]*\])?$/.exec(line)
@@ -13,7 +13,7 @@ export const parseList = (stdout: string): Profile[] =>
   })
 
 export const HINT =
-  '\n/profile <profil> : relance cette conversation dans ce profil.\n/profile show [<profil>] : ce qui y est actif, ses plugins à (dés)activer ; /profile create <nom> : nouveau profil ; /profile default [<profil>] : profil par défaut.'
+  '\n/profile <profil> : relance cette conversation dans ce profil.\n/profile show [<profil>] : ce qui y est actif, ses plugins à (dés)activer ; /profile create <nom> : nouveau profil ; /profile default [<profil>] : profil par défaut des nouvelles sessions ; /profile reference : revenir au settings.json de référence.'
 
 // Relaunch by hand, for a session no `claude-profile switch`/`run` loop started.
 export const manual = (name: string) =>

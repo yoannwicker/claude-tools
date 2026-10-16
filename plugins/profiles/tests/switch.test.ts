@@ -39,6 +39,24 @@ test('claude-profile show parsed: plugins on, off, unlisted; other lines as text
   ])
 })
 
+test('claude-profile list with the reference: default when none is set', () => {
+  const out = '* reference        Profil de référence (~/.claude/settings.json) [référence, par défaut]\n  basic            Sans pr-comments [généré]\n'
+  expect(parseList(out)).toEqual([
+    { name: 'reference', description: 'Profil de référence (~/.claude/settings.json)', isCurrent: true, isDefault: true },
+    { name: 'basic', description: 'Sans pr-comments', isCurrent: false, isDefault: false },
+  ])
+})
+
+test('claude-profile show parsed: the reference state of a plugin left out of its name', () => {
+  const out = 'plugins :\n  - a@m (désactivé) (référence : activé)\n  ? c@m (installé, absent du profil : inactif) (référence : activé)\nplugins différents du profil de référence : a@m, c@m\n'
+  expect(parseShow(out)).toEqual([
+    { text: 'plugins :' },
+    { plugin: 'a@m', isOn: false, isListed: true },
+    { plugin: 'c@m', isOn: false, isListed: false },
+    { text: 'plugins différents du profil de référence : a@m, c@m' },
+  ])
+})
+
 test('a draft holds only the plugins changed: flipped back, dropped', () => {
   const once = toggleDraft({}, 'a@m', true)
   expect(once).toEqual({ 'a@m': false })

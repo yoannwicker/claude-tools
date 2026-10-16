@@ -23,7 +23,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 |---|---|---|
 | Claude Code (settings, status line) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
 | Plugins `pr-comments` (fils de review non résolus), `intellij` (MCP IntelliJ + consigne), `profiles` (commande `/profile`), `git-nav` (skills `/pr`, `/br`, `/worktree` ; `gpr`, `gbr` liés dans `~/.local/bin` pour le terminal), `notify` (notifications desktop), `herdr-session` (reprise des sessions par herdr), `build-brief` (consigne et garde-fou Gradle) | `./setup/60-plugins.sh` | `claude` ≥ 2.1.287, `gh` authentifié, `jq`, `git` ; IntelliJ avec le serveur MCP sur le port 64342 ; `notify` : `python3-gi`, `gdbus`, `xprop`, gnome-terminal ; `build-brief` : `build-brief` dans le PATH, `python3` |
-| Profils (commande `claude-profile`, fonction shell `claude`) | `./install.sh link && ./setup/60-plugins.sh` (lie `claude-profile` dans `~/.local/bin`, pose le profil par défaut `vidal` → `~/.claude/settings.json`) | `jq` |
+| Profils (commande `claude-profile`, fonction shell `claude`) | `./install.sh link && ./setup/60-plugins.sh` (lie `claude-profile` dans `~/.local/bin`, génère les profils depuis le profil de référence `~/.claude/settings.json`) | `jq` |
 
 À la carte, outils externes (détail : [TOOLS.md](TOOLS.md)) :
 
@@ -46,10 +46,12 @@ demander une déconnexion/reconnexion de session.
   projet des espaces de travail choisis à l'installation (nom exact, sinon partiel
   insensible à la casse, sinon menu). `cl --list | --add [chemin] | --remove <n>` pour les
   faire évoluer, `cl --setup` pour refaire la sélection.
-- Profils : `claude-profile switch <profil>` (ou `cl -P <profil> <projet>`) lance Claude sur
-  `~/.claude-profiles/<profil>/`, généré depuis `~/.claude` avec pour `settings.json`
-  `profiles/<profil>.json` ; `claude` seul est sur le profil par défaut (`vidal` à
-  l'installation ; `claude-profile default <profil>`, `/profile default`). Dans une
+- Profils : `~/.claude/settings.json` est le profil de référence
+  (`home/.claude/settings.json`) ; un profil (`profiles/<profil>.json`) n'en surcharge que les plugins
+  actifs. `claude-profile switch <profil>` (ou `cl -P <profil> <projet>`) lance Claude sur
+  `~/.claude-profiles/<profil>/`, généré depuis `~/.claude` ; `claude` seul part sur le
+  profil par défaut s'il y en a un (`claude-profile default <profil>`, `/profile default`),
+  sinon sur le profil de référence. Dans une
   session, `/profile` propose la liste des profils et `/profile <profil>` relance la
   conversation dans ce profil ; `/profile show [<profil>]` montre ce qui y est actif et
   (dés)active ses plugins, `/profile create <nom>` crée un profil.
@@ -73,7 +75,7 @@ demander une déconnexion/reconnexion de session.
 install.sh          link | setup | status | adopt | capture (défaut : link + setup)
 home/               miroir de $HOME, un lien par fichier
   .bash_aliases     charge .config/shell/*.sh (outils shell, voir TOOLS.md)
-  .claude/          statusline-*.sh
+  .claude/          settings.json (le profil de référence, voir CLAUDE-CODE.md), statusline-*.sh
   .config/          herdr/config.toml, mise/config.toml, shell/{git-tools,claude-profile}.sh
   .local/           bin/{cl,dot}, share/gnome-shell/extensions/claude-notify@ywicker/
 .claude-plugin/     marketplace.json : ce dépôt comme marketplace locale « claude-tools »
@@ -81,7 +83,7 @@ plugins/            plugins Claude Code : pr-comments/ (repris d'aguiddir/claude
                     git-nav/ (skills /pr, /br, /worktree, bin/{gpr,gbr}, lib/git-tools.sh),
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle)
-profiles/           profils (<nom>.json : settings.json complet de chaque profil — vidal, basic —, voir `claude-profile`)
+profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, basic —, voir `claude-profile`)
 setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 50-cl, 60-plugins
 CLAUDE-CODE.md      Claude Code : settings, profils, plugins
 TOOLS.md            outils hors Claude : cl, extension GNOME, herdr, mise

@@ -10,7 +10,7 @@ if claude plugin marketplace list 2>/dev/null | grep -q 'claude-tools'; then
 else
   claude plugin marketplace add "$repo"
   # `add` recopie le chemin absolu du dépôt dans ~/.claude/settings.json (propre à la machine ;
-  # régénéré depuis profiles/ de toute façon) : on l'en retire, la marketplace reste connue via
+  # c'est le profil de référence versionné, home/.claude/settings.json) : on l'en retire, la marketplace reste connue via
   # known_marketplaces.json.
   settings=$HOME/.claude/settings.json
   if command -v jq >/dev/null 2>&1 && jq -e '.extraKnownMarketplaces."claude-tools"' "$settings" >/dev/null 2>&1; then
@@ -47,10 +47,11 @@ r=$HOME/.claude/rules/build-brief.md
 [ -L "$r" ] && [ "$(readlink "$r")" = "$repo/home/.claude/rules/build-brief.md" ] && rm "$r"
 rmdir "$HOME/.claude/rules" 2>/dev/null || true
 
-# Dossiers de profil régénérés depuis profiles/*.json (réglages à jour, liens morts retirés).
+# Dossiers de profil régénérés : le profil de référence (~/.claude/settings.json) surchargé par
+# profiles/*.json, liens morts retirés. Un ~/.claude/settings.json encore lié à un profil généré
+# (ancien modèle, avant le profil de référence versionné) est relié au profil de référence par ./install.sh link ;
+# sans lui, generate le signale.
 "$repo/plugins/profiles/bin/claude-profile" generate --all
-# ~/.claude/settings.json : celui du profil par défaut (vidal si aucun n'est encore choisi).
-"$repo/plugins/profiles/bin/claude-profile" default >/dev/null 2>&1 || "$repo/plugins/profiles/bin/claude-profile" default vidal
 # Ancien nom de la commande (profile), lien laissé par une installation précédente.
 [ -L "$HOME/.local/bin/profile" ] && [ "$(readlink "$HOME/.local/bin/profile")" = "$repo/plugins/profiles/bin/profile" ] && rm "$HOME/.local/bin/profile"
 

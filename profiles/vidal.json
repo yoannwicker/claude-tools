@@ -1,26 +1,5 @@
 {
   "description": "Config complète : pr-comments, MCP IntelliJ",
-  "model": "opus",
-  "worktree": {
-    "baseRef": "fresh"
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "bash ~/.claude/statusline-command.sh",
-    "padding": 0,
-    "refreshInterval": 10
-  },
-  "modelSettings": {
-    "claude-fable-5-1": {
-      "effortLevel": "high"
-    },
-    "claude-opus-5-5": {
-      "effortLevel": "medium"
-    }
-  },
-  "theme": "dark",
-  "autoContinueAtUsageLimit": false,
-  "inputNeededNotifEnabled": true,
   "enabledPlugins": {
     "pr-comments@claude-tools": true,
     "intellij@claude-tools": true,

@@ -92,7 +92,7 @@ export const register: Register = on => {
       await run($, 'generate', create[1])
       const isShown = await openDetail($, create[1], true)
 
-      return { text: `Profil ${create[1]} créé (copie du profil par défaut)${isShown ? ' : choisir ses plugins dans la vue, puis v pour valider' : ''}.` }
+      return { text: `Profil ${create[1]} créé (plugins du profil de référence)${isShown ? ' : choisir ses plugins dans la vue, puis v pour valider' : ''}.` }
     }
     const show = /^show(?:\s+(\S+))?$/.exec(args)
     if (show?.[1]) {
@@ -113,7 +113,7 @@ export const register: Register = on => {
       if (await openPicker($, DEFAULTER)) return { text: 'Profil par défaut (Entrée : le choisir, Échap : annuler).' }
       const now = await run($, 'default')
 
-      return { text: `Profil par défaut : ${now.stdout.trim() || 'aucun'}. /profile default <profil> pour le changer.` }
+      return { text: `Profil par défaut : ${now.stdout.trim() || 'reference'}. /profile default <profil> pour le changer, /profile default reference pour n'en garder aucun.` }
     }
     if (args) return { text: await switchTo($, args) }
     if (await openPicker($, PICKER)) return { text: 'Choix du profil (Entrée : relancer dedans, Échap : annuler).' }
@@ -140,7 +140,7 @@ export const register: Register = on => {
     const hint = {
       [PICKER]: 'Entrée : relancer la conversation dans ce profil',
       [VIEWER]: 'Entrée : voir ce profil',
-      [DEFAULTER]: 'Entrée : en faire le profil par défaut (claude sans profil)',
+      [DEFAULTER]: 'Entrée : en faire le profil par défaut (nouvelles sessions de la fonction shell claude, cl ; reference : aucun)',
     }[e.requestId]
 
     return (
