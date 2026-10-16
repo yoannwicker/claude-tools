@@ -1,7 +1,6 @@
 {
-  "description": "Config complète : pr-comments, MCP IntelliJ",
+  "description": "Config complète : superpowers, MCP IntelliJ",
   "enabledPlugins": {
-    "pr-comments@claude-tools": true,
     "intellij@claude-tools": true,
     "profiles@claude-tools": true,
     "git-nav@claude-tools": true,

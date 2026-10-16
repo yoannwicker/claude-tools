@@ -1,7 +1,6 @@
 {
-  "description": "Sans pr-comments",
+  "description": "Sans superpowers",
   "enabledPlugins": {
-    "pr-comments@claude-tools": false,
     "intellij@claude-tools": true,
     "profiles@claude-tools": true,
     "git-nav@claude-tools": true,

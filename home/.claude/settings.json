@@ -21,7 +21,6 @@
   "autoContinueAtUsageLimit": false,
   "inputNeededNotifEnabled": true,
   "enabledPlugins": {
-    "pr-comments@claude-tools": true,
     "intellij@claude-tools": true,
     "profiles@claude-tools": true,
     "git-nav@claude-tools": true,

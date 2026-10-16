@@ -48,10 +48,11 @@ profils) ne distingue pas les profils : couper un MCP par profil passe par
 `claude-profile mcp` ou `/profile show`. Une modification commune (un
 réglage, la statusline) se fait donc une fois, dans le profil de référence.
 
-Profils versionnés : `vidal` (config complète : tous les plugins, plus `superpowers`, à installer
-une fois dans Claude Code : `/plugin install superpowers@claude-plugins-official`) et
-`basic` (le même sans `pr-comments`). Aucun profil par défaut à l'installation : `claude`
-part sur le profil de référence.
+Profils versionnés : `vidal` (config complète : tous les plugins du dépôt sauf `pr-comments`,
+plus `superpowers`, à installer une fois dans Claude Code :
+`/plugin install superpowers@claude-plugins-official`) et `basic` (le même sans
+`superpowers`). Aucun profil par défaut à l'installation : `claude` part sur le profil de
+référence (tous les plugins du dépôt sauf `pr-comments`).
 
 Passer d'un profil à l'autre demande le plugin [`profiles`](#profiles) (`/profile`,
 `claude-profile`).
@@ -161,7 +162,7 @@ outil à vérifier). Pas de `setup.sh` : le plugin n'a rien hors de lui (`pr-com
 
 **Rôle** : fils de review non résolus des PR du dépôt, au-dessus du prompt et dans un panneau.
 
-**Fichiers** : `plugins/pr-comments/`. **Activé dans** : `vidal` (pas `basic`).
+**Fichiers** : `plugins/pr-comments/`. **Activé dans** : aucun profil versionné (à allumer par `/profile show` ou `claude-profile plugin`).
 
 **Prérequis** : `gh` authentifié, Claude Code ≥ 2.1.287. Tests : `claude plugin test plugins/pr-comments`.
 
