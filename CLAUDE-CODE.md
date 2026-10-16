@@ -221,7 +221,8 @@ variable (nom réservé `reference`).
   `profiles/<nom>.json` pour les plugins.
 - Profil par défaut, facultatif (`claude-profile default <nom>`) : nommé dans
   `~/.claude-profiles/.default`, c'est celui des nouvelles sessions lancées par
-  `claude-profile run` (fonction shell `claude`, `cl`) ; sans lui, elles partent sur le
+  `claude-profile run` (fonction shell `claude`, `cl`) ; une reprise par `run`
+  (`--continue`, `--resume`) part elle sur le dernier profil de la conversation ; sans lui, elles partent sur le
   profil de référence. `~/.claude/settings.json` reste le lien vers le profil de référence : une session
   lancée sans passer par `run` (IDE, lanceur graphique, `command claude`, herdr) part sur
   le profil de référence ; `/profile <nom>` reste possible, avec relance manuelle.
@@ -281,6 +282,11 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
   variable) ; deux terminaux peuvent tourner sur deux profils ;
 - `claude-profile run [arguments claude…]` : lance `claude` sur le profil par défaut (sinon
   le profil de référence), ou sans toucher au profil courant dans une session de profil ;
+  une reprise (`--resume <id>`, ou `--continue` : la conversation la plus récente du
+  dossier) part sur le dernier profil de la conversation, s'il est connu et existe encore ;
+- `claude-profile remember <session>` : retient le profil courant pour la session, dans
+  `~/.claude-profiles/.sessions` (1000 dernières) ; appelé par le plugin au démarrage de
+  chaque session, dont les relances d'une bascule ;
 - `claude-profile request <nom> <session>|--cancel` : demande de bascule, déposée (ou retirée)
   par `/profile` ; `claude-profile background` : code 0 dans une session d'arrière-plan.
 

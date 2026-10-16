@@ -72,6 +72,8 @@ async function openDetail($: EngineInterface, name: string, isEditing = false) {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
+    // The profile of this session, for claude-profile run to resume it there.
+    void run($, 'remember', await $.session.id())
     await $.command.register({
       name: 'profile',
       description:

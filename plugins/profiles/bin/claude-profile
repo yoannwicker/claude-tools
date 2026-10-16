@@ -12,7 +12,8 @@
 #   Dossier généré : ~/.claude-profiles/<nom>/ (tout le reste en liens vers ~/.claude).
 #   switch/run lancent claude dans une boucle : /profile <nom> (plugin profiles) y dépose une
 #   demande (request) puis quitte, et la boucle relance la même session dans <nom>. run hors
-#   profil part sur le profil par défaut, sinon sur le profil de référence.
+#   profil part sur le profil par défaut, sinon sur le profil de référence ; une reprise
+#   (--continue, --resume <id>) part sur le dernier profil de la conversation (remember <session>).
 set -u
 repo=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../.." && pwd)
 profiles_dir=$repo/profiles
@@ -20,6 +21,8 @@ base=$HOME/.claude
 out_root=$HOME/.claude-profiles
 main=$base/settings.json
 default_file=$out_root/.default
+# Dernier profil de chaque session, « <session> <profil> » par ligne (claude-profile remember).
+sessions_file=$out_root/.sessions
 # Clés qu'un profil peut porter : les sections surchargées (remplacées en entier) et sa description.
 overridable='["description", "enabledPlugins", "deniedMcpServers", "disableClaudeAiConnectors"]'
 # Serveurs MCP connus (nom, url), relevés par claude mcp list (mcp-scan).
@@ -32,7 +35,7 @@ jq_mcp='
   def denied($s; $d): any($d[]; .serverName == $s.name or urlmatch(.serverUrl; $s.url));
 '
 
-usage() { sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "$*" >&2; exit 2; }
 
 names() { local f; for f in "$profiles_dir"/*.json; do [ -e "$f" ] && basename "$f" .json; done; }
@@ -73,6 +76,47 @@ current() {
     "") echo reference ;;
     *) echo "autre ($CLAUDE_CONFIG_DIR)" ;;
   esac
+}
+
+# Dernier profil d'une session (rien si inconnu, ou si le profil n'existe plus).
+session_profile() {
+  local p
+  p=$(awk -v id="$1" '$1 == id { p = $2 } END { print p }' "$sessions_file" 2>/dev/null)
+  if [ -n "$p" ] && { [ "$p" = reference ] || [ -f "$profiles_dir/$p.json" ]; }; then echo "$p"; fi
+  return 0
+}
+
+# Retient le profil de la session courante pour la session <session> (hook de démarrage du
+# plugin) ; les 1000 dernières sessions sont gardées.
+cmd_remember() {
+  [ $# -eq 1 ] || die "usage : claude-profile remember <session>"
+  local p tmp
+  p=$(current)
+  case "$p" in autre*) return 0 ;; esac
+  mkdir -p "$out_root"
+  tmp=$(mktemp "$out_root/.sessions.XXXXXX")
+  { grep -v "^$1 " "$sessions_file" 2>/dev/null | tail -n 999; echo "$1 $p"; } > "$tmp" \
+    && mv "$tmp" "$sessions_file" || rm -f "$tmp"
+}
+
+# Session reprise par des arguments claude : --resume/-r <id ou chemin du transcript>, sinon
+# --continue/-c, la conversation la plus récente du dossier courant (comme claude).
+resumed_session() {
+  local a prev="" dir
+  for a in "$@"; do
+    case "$prev" in --resume|-r) case "$a" in -*) ;; *) a=${a##*/}; echo "${a%.jsonl}"; return ;; esac ;; esac
+    case "$a" in --resume=*) a=${a#--resume=}; a=${a##*/}; echo "${a%.jsonl}"; return ;; esac
+    prev=$a
+  done
+  for a in "$@"; do
+    case "$a" in
+      --continue|-c)
+        dir=$base/projects/$(pwd | sed 's/[^A-Za-z0-9-]/-/g')
+        a=$(ls -t "$dir"/*.jsonl 2>/dev/null | head -n 1)
+        [ -n "$a" ] && basename "$a" .jsonl
+        return ;;
+    esac
+  done
 }
 
 # settings.json d'un profil : le profil de référence, ses sections surchargées remplacées par celles du profil.
@@ -361,11 +405,17 @@ case "${1:-}" in
   mcp-scan) mcp_scan && jq -r '.[] | "\(.name)\(if .url then "  \(.url)" else "" end)"' "$mcp_cache" ;;
   check)    [ $# -eq 2 ] || die "usage : claude-profile check <nom>"; check "$2" ;;
   request)  shift; cmd_request "$@" ;;
+  remember) shift; cmd_remember "$@" ;;
   background) [ -n "${CLAUDE_JOB_DIR:-}" ] ;;
   run)      shift
-            # Hors session de profil, une nouvelle session part sur le profil par défaut.
+            # Hors session de profil : une reprise part sur le dernier profil de la conversation,
+            # une nouvelle session sur le profil par défaut.
             name=""
-            [ -z "${CLAUDE_CONFIG_DIR:-}" ] && name=$(default_profile)
+            if [ -z "${CLAUDE_CONFIG_DIR:-}" ]; then
+              id=$(resumed_session "$@")
+              [ -n "$id" ] && name=$(session_profile "$id")
+              if [ -n "$name" ]; then echo "→ profil $name (dernier de cette conversation)" >&2; else name=$(default_profile); fi
+            fi
             launch_loop "$name" "$@" ;;
   generate)
     [ $# -eq 2 ] || die "usage : claude-profile generate <nom>|--all"
