@@ -12,7 +12,7 @@ mode, prérequis) met à jour la doc **dans le même commit** que le code.
   *Gabarit pour un nouveau plugin* (voir *Documenter un plugin* ci-dessous) ; un nouveau
   skill, la sienne dans *Skills*.
 - **[TOOLS.md](TOOLS.md)** — même règle pour les outils hors Claude (`cl`, extension GNOME,
-  herdr, mise, `home/.config/shell/`) ;
+  herdr, mise, chargement du shell) ;
   un nouvel outil reçoit sa section selon le *Gabarit pour un nouvel outil*.
 - **[README.md](README.md)** — seulement si la vue d'ensemble change :
   - installation ajoutée, supprimée ou modifiée (tableau *À la carte*, scripts `setup/`,
@@ -29,8 +29,8 @@ Si aucune mise à jour n'est nécessaire, le dire explicitement dans le compte r
 Un plugin peut être installé seul, sans le reste de la config : sa sous-section dans
 *Plugins* de CLAUDE-CODE.md se suffit à elle-même.
 
-- Tout ce qui le concerne y est : rôle, fichiers (y compris ceux hors de `plugins/<plugin>/`,
-  comme un script shell de `home/`), profils où il est activé, prérequis, tests,
+- Tout ce qui le concerne y est : rôle, fichiers (y compris ce qu'il pose hors de
+  `plugins/<plugin>/`, comme les liens de son `setup.sh`), profils où il est activé, prérequis, tests,
   fonctionnement complet (commandes, touches, configuration). Découper en `####` si la
   section est longue.
 - Ailleurs dans la doc, ne pas redécrire le plugin : une phrase et un lien vers sa
@@ -39,8 +39,27 @@ Un plugin peut être installé seul, sans le reste de la config : sa sous-sectio
   quelqu'un qui ne clone le dépôt que pour ce plugin (marketplace, `claude plugin install`,
   liens, premiers réglages), et ce qui l'empêche de s'installer autrement (ex. depuis
   GitHub) s'il dépend du dépôt.
-- Le lister aussi dans la ligne **Fichiers** en tête de CLAUDE-CODE.md et dans la boucle de
-  `setup/60-plugins.sh`.
+- Le lister aussi dans la ligne **Fichiers** en tête de CLAUDE-CODE.md, et le déclarer dans
+  `.claude-plugin/marketplace.json` : c'est la liste que lit `./install.sh plugin`.
+
+### Ce qu'un plugin fournit pour s'installer seul
+
+`./install.sh plugin <plugin>` doit suffire à l'installer, le mettre à jour et le retirer
+(détail : CLAUDE-CODE.md, *Installation des plugins*).
+
+- Tout ce dont il a besoin hors de lui (lien vers un script de `bin/` pour le terminal,
+  fonction shell pour `~/.config/shell/`, contrôle d'un outil externe, ménage d'un réglage)
+  est déclaré dans `plugins/<plugin>/setup.sh` : `links=( "<chemin dans le plugin>
+  <destination>" … )`, et seulement si un lien ne suffit pas, `on_install`, `on_remove`,
+  `on_status` (idempotents, `note` pour un simple avertissement).
+- Jamais dans `home/` (relié par `./install.sh link`, pour tous) ni dans `setup/` (outils
+  hors plugins) : un fichier du plugin vit dans `plugins/<plugin>/`, même s'il est utilisé
+  hors de Claude.
+- Pas de ménage écrit à la main pour les anciens liens d'avant le plugin : devenus morts,
+  ils sont retirés par `./install.sh`.
+- Vérifier sur un HOME de test (`HOME=$(mktemp -d)`, depuis une copie du dépôt pour ne pas
+  toucher au `settings.json` versionné) : `./install.sh plugin <plugin>`, `status`,
+  `plugin --remove <plugin>`, `status`.
 
 ## Ne jamais ajouter
 

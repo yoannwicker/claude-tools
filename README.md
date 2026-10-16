@@ -3,14 +3,16 @@
 Configuration locale versionnée de mes outils de développement assisté par IA :
 [Claude Code](https://code.claude.com/docs) (settings, status line, notifications desktop,
 skills), [herdr](https://herdr.dev), l'extension GNOME `claude-notify` et les outils
-`mise` globaux — appliquée dans `$HOME` par symlinks via `install.sh`.
+`mise` globaux — appliquée dans `$HOME` par `install.sh` : symlinks pour la config, et
+installation plugin par plugin pour les plugins Claude Code (chacun avec ce qu'il pose hors de
+lui).
 Le détail (fonctionnalités, prérequis, installation, configuration spécifique) est dans
 [CLAUDE-CODE.md](CLAUDE-CODE.md) pour Claude Code et ses plugins, et dans
 [TOOLS.md](TOOLS.md) pour les outils hors Claude (`cl`, extension GNOME, herdr, mise).
 
 ## Installer
 
-Tout d'un coup (liens + scripts `setup/`) :
+Tout d'un coup (liens, tous les plugins, scripts `setup/`) :
 
 ```bash
 git clone git@github.com:yoannwicker/claude-tools.git ~/workspace_perso/claude-tools
@@ -22,8 +24,17 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Outil | Commande | Prérequis |
 |---|---|---|
 | Claude Code (settings, status line) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
-| Plugins `pr-comments` (fils de review non résolus), `intellij` (MCP IntelliJ + consigne), `profiles` (commande `/profile`), `git-nav` (skills `/pr`, `/br`, `/worktree` ; `gpr`, `gbr` liés dans `~/.local/bin` pour le terminal), `notify` (notifications desktop), `herdr-session` (reprise des sessions par herdr), `build-brief` (consigne et garde-fou Gradle) | `./setup/60-plugins.sh` | `claude` ≥ 2.1.287, `gh` authentifié, `jq`, `git` ; IntelliJ avec le serveur MCP sur le port 64342 ; `notify` : `python3-gi`, `gdbus`, `xprop`, gnome-terminal ; `build-brief` : `build-brief` dans le PATH, `python3` |
-| Profils (commande `claude-profile`, fonction shell `claude`) | `./install.sh link && ./setup/60-plugins.sh` (lie `claude-profile` dans `~/.local/bin`, génère les profils depuis le profil de référence `~/.claude/settings.json`) | `jq` |
+| Plugin `profiles` (commande `/profile`, `claude-profile` et fonction shell `claude` pour le terminal) | `./install.sh plugin profiles` | `jq` ; le profil de référence de `./install.sh link` |
+| Plugin `git-nav` (skills `/pr`, `/br`, `/worktree` ; `gpr`, `gbr` pour le terminal) | `./install.sh plugin git-nav` | `git` ; `gh` authentifié |
+| Plugin `pr-comments` (fils de review non résolus) | `./install.sh plugin pr-comments` | `claude` ≥ 2.1.287, `gh` authentifié |
+| Plugin `intellij` (MCP IntelliJ + consigne) | `./install.sh plugin intellij` | IntelliJ avec le serveur MCP sur le port 64342 |
+| Plugin `notify` (notifications desktop) | `./install.sh plugin notify` | `python3-gi`, `gdbus`, `xprop`, `jq`, gnome-terminal |
+| Plugin `herdr-session` (reprise des sessions par herdr) | `./install.sh plugin herdr-session` | herdr et son intégration Claude (`./setup/20-herdr.sh`) |
+| Plugin `build-brief` (consigne et garde-fou Gradle) | `./install.sh plugin build-brief` | `build-brief` dans le PATH, `python3` |
+
+Plusieurs plugins d'un coup : `./install.sh plugin <nom>…`, tous : `./install.sh plugin --all`
+(c'est ce que fait `./install.sh`). Relancer met à jour. `./install.sh plugin --remove <nom>…`
+désinstalle, liens compris. Activer un plugin installé dans un profil reste à `/profile show`.
 
 À la carte, outils externes (détail : [TOOLS.md](TOOLS.md)) :
 
@@ -32,7 +43,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | mise (outils globaux) | `./setup/10-mise.sh` | `curl` |
 | herdr (+ intégrations Claude/Copilot) | `./setup/20-herdr.sh` | `curl` ; Linux ou macOS |
 | Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
-| Extension GNOME `claude-notify` (pastille des notifications du plugin `notify`) | `./install.sh link && ./setup/60-plugins.sh && ./setup/30-gnome.sh` | GNOME Shell 46 |
+| Extension GNOME `claude-notify` (pastille des notifications du plugin `notify`) | `./install.sh link && ./install.sh plugin notify && ./setup/30-gnome.sh` | GNOME Shell 46 |
 
 Sans GNOME : désactiver le plugin `notify` dans chaque profil (`"notify@claude-tools": false`
 dans `enabledPlugins` de `profiles/*.json`, ou `/profile show`). Le premier `enable` d'une extension GNOME fraîchement liée peut
@@ -62,29 +73,34 @@ demander une déconnexion/reconnexion de session.
   la charger en contexte et se placer dessus (branche courante ou worktree) ;
   `/worktree clear` supprime les worktrees qu'aucune session n'utilise (plugin `git-nav` ;
   `gpr`, `gbr` dans le terminal).
-- `dot` (lié dans `~/.local/bin`) : dérive git, état des liens, `mise upgrade`,
+- `dot` (lié dans `~/.local/bin`) : dérive git, état des liens et des plugins, `mise upgrade`,
   `herdr update`, `claude update`.
 - `./install.sh adopt <fichier>` : versionner un nouveau fichier de `$HOME` (déplacé dans
-  `home/`, remplacé par un lien). `./install.sh status` : état de chaque fichier géré.
+  `home/`, remplacé par un lien). `./install.sh status` : état de chaque fichier géré et de
+  chaque plugin (installé ou non, à jour ou non, liens posés), liens morts vers le dépôt.
+- Après un `git pull` qui touche `plugins/` : `./install.sh plugin <nom>` (ou `--all`) ;
+  `./install.sh plugin --remove <nom>` pour retirer un plugin et ce qu'il a posé.
 - `./install.sh capture <fichier>` : repli pour un fichier qu'un outil réécrit en
   remplaçant le lien (recopie `$HOME` → `home/`).
 
 ## Structure
 
 ```
-install.sh          link | setup | status | adopt | capture (défaut : link + setup)
+install.sh          link | plugin | setup | status | adopt | capture (défaut : link + plugin --all + setup)
 home/               miroir de $HOME, un lien par fichier
-  .bash_aliases     charge .config/shell/*.sh (outils shell, voir TOOLS.md)
+  .bash_aliases     charge .config/shell/*.sh (posés par les plugins profiles et git-nav, voir TOOLS.md)
   .claude/          settings.json (le profil de référence, voir CLAUDE-CODE.md), statusline-*.sh
-  .config/          herdr/config.toml, mise/config.toml, shell/{git-tools,claude-profile}.sh
+  .config/          herdr/config.toml, mise/config.toml
   .local/           bin/{cl,dot}, share/gnome-shell/extensions/claude-notify@ywicker/
 .claude-plugin/     marketplace.json : ce dépôt comme marketplace locale « claude-tools »
-plugins/            plugins Claude Code : pr-comments/ (repris d'aguiddir/claude-config), intellij/, profiles/ (avec bin/claude-profile),
-                    git-nav/ (skills /pr, /br, /worktree, bin/{gpr,gbr}, lib/git-tools.sh),
+plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quelque chose hors de lui
+                    (liens, contrôles ; lu par install.sh plugin) : pr-comments/ (repris
+                    d'aguiddir/claude-config), intellij/, profiles/ (bin/claude-profile, shell/claude-profile.sh),
+                    git-nav/ (skills /pr, /br, /worktree, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, basic —, voir `claude-profile`)
-setup/              scripts idempotents : 10-mise, 20-herdr, 30-gnome, 50-cl, 60-plugins
+setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
 CLAUDE-CODE.md      Claude Code : settings, profils, plugins
 TOOLS.md            outils hors Claude : cl, extension GNOME, herdr, mise
 AGENTS.md           consignes pour les agents (CLAUDE.md l'importe)

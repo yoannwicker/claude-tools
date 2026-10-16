@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # herdr : installe le binaire si absent, pose les intégrations agents, retire le hook Claude de
-# settings.json (il vient du plugin herdr-session).
+# settings.json (il vient du plugin herdr-session, quand celui-ci est installé).
 set -eu
 if ! command -v herdr >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/herdr" ]; then
   curl -fsSL https://herdr.dev/install.sh | sh
@@ -18,11 +18,13 @@ for agent in $integrations; do
 done
 
 # `herdr integration install claude` ajoute à ~/.claude/settings.json un hook SessionStart vers
-# son script, avec un chemin absolu. Le branchement vient du plugin herdr-session : on retire de
-# settings.json tout hook herdr (absolu ou ancienne variante portable des profils), en écrivant
-# à travers le lien (jamais de mv).
+# son script, avec un chemin absolu. Le branchement vient du plugin herdr-session : s'il est installé,
+# on retire de settings.json tout hook herdr (absolu ou ancienne variante portable des profils), en
+# écrivant à travers le lien (jamais de mv). Sans le plugin, ce hook est le seul branchement herdr.
 settings=$HOME/.claude/settings.json
-if [ -f "$settings" ] && command -v python3 >/dev/null 2>&1; then
+if ! claude plugin list --json 2>/dev/null | jq -e 'any(.[]; .id == "herdr-session@claude-tools")' >/dev/null 2>&1; then
+  echo "plugin herdr-session absent : hook herdr gardé dans settings.json (./install.sh plugin herdr-session pour passer par le plugin)"
+elif [ -f "$settings" ] && command -v python3 >/dev/null 2>&1; then
   python3 - "$settings" <<'PY'
 import json, sys
 p = sys.argv[1]

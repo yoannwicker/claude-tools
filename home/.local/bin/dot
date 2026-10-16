@@ -10,8 +10,8 @@ if git -C "$repo" remote get-url origin >/dev/null 2>&1; then
   say "git pull"; git -C "$repo" pull --ff-only
 fi
 
-say "Liens :"
-"$repo/install.sh" status || echo "→ ./install.sh link (ou adopt/capture) pour corriger"
+say "État (liens, plugins) :"
+"$repo/install.sh" status || echo "→ ./install.sh link (ou adopt/capture), ./install.sh plugin <nom> pour corriger"
 
 if command -v mise >/dev/null 2>&1; then
   say "mise"; mise self-update --yes 2>/dev/null || true; mise upgrade --yes || true

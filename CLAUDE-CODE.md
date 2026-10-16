@@ -8,9 +8,8 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 
 **Fichiers** : `home/.claude/settings.json` (le profil de référence), `profiles/*.json` (surcharges, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh` ;
 plugins : `.claude-plugin/marketplace.json`,
-`plugins/{pr-comments,intellij,profiles,git-nav,notify,herdr-session,build-brief}/`,
-`setup/60-plugins.sh`, `home/.config/shell/claude-profile.sh` (plugin [`profiles`](#profiles)),
-`home/.config/shell/git-tools.sh` (plugin [`git-nav`](#git-nav)).
+`plugins/{pr-comments,intellij,profiles,git-nav,notify,herdr-session,build-brief}/` (avec
+leur `setup.sh`), `install.sh plugin` (voir [Installation des plugins](#installation-des-plugins)).
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line) ; `gh`
 authentifié (plugin [`git-nav`](#git-nav), badge PR de la status line) ; Linux + GNOME pour
@@ -18,8 +17,8 @@ les notifications (plugin [`notify`](#notify)) ;
 IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [`intellij`](#intellij)) ;
 `build-brief` dans le PATH pour Gradle (plugin [`build-brief`](#build-brief)).
 
-**Installation** : `./install.sh link`, puis `./setup/60-plugins.sh` pour les plugins et les
-profils (voir [Plugins](#plugins)). Les fichiers d'état et de secrets restent locaux
+**Installation** : `./install.sh link`, puis `./install.sh plugin <nom>…` ou
+`./install.sh plugin --all` pour les plugins (voir [Installation des plugins](#installation-des-plugins)). Les fichiers d'état et de secrets restent locaux
 (`~/.claude.json`, `.credentials.json`, `projects/`, `plugins/`).
 
 ## `settings.json`
@@ -86,19 +85,76 @@ Ils sont installés une fois et allumés ou éteints dans `enabledPlugins` du `s
 donc par profil (voir [Profils](#profils) ; `/profile show` du plugin
 [`profiles`](#profiles) pour les (dés)activer).
 
-**Installation** : `./setup/60-plugins.sh` déclare la marketplace (`claude plugin marketplace
-add`, sinon `update`), installe chaque plugin s'il manque ou le met à jour, lie
-`claude-profile`, `gpr`, `gbr` et `claude-notify-click` dans `~/.local/bin`, régénère les
-dossiers de profil depuis le profil de référence et `profiles/*.json` (`claude-profile generate --all`). `marketplace add` écrit le chemin absolu du dépôt dans `extraKnownMarketplaces` de
-`~/.claude/settings.json` ; le script l'en retire (la marketplace reste connue via
-`~/.claude/plugins/known_marketplaces.json`). Prérequis : `claude` ≥ 2.1.287, `jq`.
-
 Un plugin est lu directement depuis `plugins/<plugin>/` : une modification y prend effet
 au démarrage de session suivant ou avec `/reload-plugins`. Tests :
 `claude plugin test plugins/<plugin>`.
 
 Même gabarit pour chaque plugin : **Rôle**, **Fichiers** et **Activé dans** (profils),
 **Prérequis**, l'installation hors de ce dépôt s'il s'utilise seul, puis le fonctionnement.
+
+### Installation des plugins
+
+Un plugin à la fois, avec ce qu'il pose hors de lui :
+
+```
+./install.sh plugin <nom>…           installe, ou met à jour s'il l'est déjà
+./install.sh plugin --all            tous ceux de marketplace.json (ce que fait ./install.sh)
+./install.sh plugin --remove <nom>…  désinstalle (--remove --all : tous)
+./install.sh plugin                  état des plugins (aussi dans ./install.sh status)
+```
+
+`--all` et `./install.sh` ne font qu'appeler l'installation de chaque plugin l'une après
+l'autre : pas d'étape globale en plus. Il n'y a besoin ni de `./install.sh link` ni de
+`setup/` pour installer un plugin seul. Prérequis : `claude` ≥ 2.1.287, `jq`.
+
+Déroulé d'un appel :
+
+1. Ménage : les liens morts vers le dépôt (restes d'anciennes installations : fichier
+   déplacé de `home/` dans un plugin, lien `~/.claude/rules/…`, `~/.claude/skills/…`) sont
+   retirés de `~/.claude`, `~/.claude-profiles/*`, `~/.config/shell` et `~/.local/bin`,
+   ainsi que le dossier de `~/.claude` qui les contenait s'il en reste vide. Seuls ces
+   liens sont visés, jamais un fichier ordinaire ni un lien vers ailleurs
+   (`./install.sh link` fait le même ménage).
+2. Marketplace `claude-tools` déclarée (`claude plugin marketplace add`, sinon `update`).
+3. Pour chaque plugin : `claude plugin install <p>@claude-tools`, ou `update` s'il est
+   installé ; puis les liens déclarés dans son `setup.sh` (un fichier ordinaire différent
+   déjà en place est sauvegardé en `*.bak.<date>`) ; puis son `on_install`. Au retrait :
+   `on_remove`, liens retirés s'ils pointent bien vers le plugin (sinon laissés et
+   signalés), `claude plugin uninstall`, et la liste des profils (référence comprise) qui
+   l'activent encore, avec la commande pour l'y éteindre.
+4. Profil de référence remis tel qu'il était : `claude plugin` écrit dans
+   `~/.claude/settings.json`, donc dans `home/.claude/settings.json` versionné
+   (`extraKnownMarketplaces`, `model`, entrée `enabledPlugins` retirée par `uninstall`).
+   Seule exception : un plugin installé qui n'a aucune entrée dans `enabledPlugins` y est
+   mis à `true`. Activer ou éteindre un plugin dans un profil reste à
+   [`/profile show`](#profile) et `claude-profile plugin`.
+5. Si `profiles` est installé : `claude-profile generate --all`.
+
+`./install.sh status` (et `./install.sh plugin` sans argument) donne pour chaque plugin de
+`marketplace.json` : `absent` (pas une erreur, installation à la carte), `ok` ou `UPDATE`
+(un commit a touché `plugins/<p>/` depuis la version installée, le SHA du dépôt à
+l'install/update), puis l'état de ses liens (`ok`, `MISSING`, `WRONG`, `DIFF`) et ce que
+signale son `on_status` (`note` : avertissement ; échec : erreur). Les liens morts vers le
+dépôt sortent en `ORPHAN`. Code retour 1 si quelque chose cloche.
+
+#### `setup.sh` d'un plugin
+
+Ce qu'un plugin pose ou vérifie hors de lui est déclaré dans `plugins/<p>/setup.sh`,
+fichier facultatif sourcé par `install.sh` (Claude Code l'ignore) :
+
+```bash
+links=(                                  # <chemin dans le plugin>  <destination>
+  "bin/gpr              ~/.local/bin/gpr"
+  "shell/git-tools.sh   ~/.config/shell/git-tools.sh"
+)
+on_install() { …; }   # facultatifs et idempotents ; ils voient $repo, $plugin_dir
+on_remove()  { …; }   # et note "<message>" (avertissement affiché par status)
+on_status()  { …; }   # retour non nul = erreur
+```
+
+Les liens suffisent au cas courant : pose, contrôle et retrait sont faits par
+`install.sh`. Les hooks ne servent qu'à ce qui ne se ramène pas à un lien (MCP à retirer,
+outil à vérifier). Pas de `setup.sh` : le plugin n'a rien hors de lui (`pr-comments`).
 
 ### `pr-comments`
 
@@ -158,17 +214,19 @@ Couper seulement le serveur dans un profil (`plugin:intellij:intellij`, voir
 [`claude-profile mcp`](#claude-profile)) laisse la consigne injectée, qui citerait des outils
 absents : mieux vaut éteindre le plugin entier.
 
-Installation : `./setup/60-plugins.sh` retire aussi l'ancien serveur `intellij` de
-scope user (`~/.claude.json`, ex-`setup/40-mcp.sh`) : à même URL, Claude Code garderait
-celui-ci et ignorerait celui du plugin.
+`setup.sh` : `on_install` retire l'ancien serveur `intellij` de scope user
+(`~/.claude.json`, ex-`setup/40-mcp.sh`) — à même URL, Claude Code garderait celui-ci et
+ignorerait celui du plugin — et `on_status` le signale en erreur s'il est encore là.
 
 ### `profiles`
 
 **Rôle** : lancer Claude sur un profil et en changer en cours de session — commande
 `claude-profile` et commande `/profile`.
 
-**Fichiers** : `plugins/profiles/` (`bin/claude-profile`, mod `/profile` dans `hooks/`),
-`home/.config/shell/claude-profile.sh`. **Activé dans** : tous les profils
+**Fichiers** : `plugins/profiles/` (`bin/claude-profile`, mod `/profile` dans `hooks/`,
+`shell/claude-profile.sh`, `setup.sh`) ; hors du plugin, les liens
+`~/.local/bin/claude-profile` et `~/.config/shell/claude-profile.sh` posés par
+`./install.sh plugin profiles`. **Activé dans** : tous les profils
 (`profiles@claude-tools` doit y rester activé, sinon pas de `/profile` ; `generate` prévient).
 
 **Prérequis** : `jq`. Tests : `claude plugin test plugins/profiles`.
@@ -182,9 +240,7 @@ son propre `~/.claude/settings.json`, tel quel.
 
 ```bash
 git clone https://github.com/yoannwicker/claude-tools.git ~/claude-tools
-claude plugin marketplace add ~/claude-tools
-claude plugin install profiles@claude-tools
-ln -s ~/claude-tools/plugins/profiles/bin/claude-profile ~/.local/bin/   # terminal
+~/claude-tools/install.sh plugin profiles   # marketplace locale, plugin, claude-profile et claude-profile.sh liés
 
 # Premier profil : les plugins du profil de référence (~/.claude/settings.json), à adapter
 claude-profile new perso "ma config"
@@ -194,7 +250,7 @@ Les profils `vidal` et `basic` du dépôt sont ceux de l'auteur : à supprimer o
 exemples. Ensuite, `/profile show <nom>` pour choisir ses plugins, et au besoin
 `claude-profile default <nom>`. Pour que `claude` tapé à la main permette
 `/profile <nom>` sans relance manuelle, charger
-`~/claude-tools/home/.config/shell/claude-profile.sh` depuis `~/.bashrc` (voir
+`~/.config/shell/claude-profile.sh` (lien posé ci-dessus) depuis `~/.bashrc` (voir
 [Bascule depuis une session](#bascule-depuis-une-session)).
 
 #### Dossiers de profil
@@ -233,7 +289,7 @@ variable (nom réservé `reference`).
 #### `claude-profile`
 
 Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le terminal,
-`setup/60-plugins.sh` la lie dans `~/.local/bin`.
+`./install.sh plugin profiles` la lie dans `~/.local/bin`.
 
 - `claude-profile list` : `reference` en tête, puis les profils ; `*` sur celui de la
   session, dossier généré ou non, `par défaut` sur le profil par défaut (le profil de référence s'il
@@ -298,7 +354,7 @@ Le dossier de config est fixé au lancement, il faut donc un nouveau processus. 
 (`/exit`) ; la boucle régénère `<nom>` et relance `claude --resume <session>` (session
 neuve si la session quittée était encore vide), soit la même conversation dans le nouveau
 profil. Pour que `claude` tapé à la main passe par la boucle,
-`home/.config/shell/claude-profile.sh` (chargé par `~/.bash_aliases`) le définit comme
+`shell/claude-profile.sh` du plugin (lié dans `~/.config/shell/`, chargé par `~/.bash_aliases`) le définit comme
 fonction appelant `claude-profile run` ; `cl` y passe aussi. Lancé autrement (IDE, lanceur
 graphique, `command claude`), `/profile` donne la relance manuelle : `/exit` puis
 `claude-profile switch <nom> --continue`. Une session passée en arrière-plan (sous
@@ -349,9 +405,9 @@ mod (brouillon de chaque vue en édition).
 [`gpr`, `gbr` dans le terminal](#gpr-gbr-dans-le-terminal)).
 
 **Fichiers** : `plugins/git-nav/` (`skills/{pr,br,worktree}/SKILL.md`,
-`bin/{gpr,gbr,worktree-scan}`, `lib/git-tools.sh`) ; hors du plugin,
-`home/.config/shell/git-tools.sh` (fonctions shell `gpr`/`gbr`, alias) et les liens
-`~/.local/bin/{gpr,gbr}` posés par `setup/60-plugins.sh`. **Activé dans** : `vidal` et
+`bin/{gpr,gbr,worktree-scan}`, `lib/git-tools.sh`, `shell/git-tools.sh`, `setup.sh`) ; hors
+du plugin, les liens `~/.local/bin/{gpr,gbr}` et `~/.config/shell/git-tools.sh` (fonctions
+shell `gpr`/`gbr`, alias) posés par `./install.sh plugin git-nav`. **Activé dans** : `vidal` et
 `basic`.
 
 **Prérequis** : `git` ; `gh` authentifié (`/pr`, facultatif pour `/br`) ; Linux pour
@@ -364,8 +420,8 @@ emplacement réel (`readlink -f`), valable depuis la copie du plugin comme depui
 `~/.local/bin`. Les skills gardent leur `name:` : `/pr`, `/br`, `/worktree` s'invoquent sans
 préfixe tant qu'aucune autre commande ne porte ce nom (sinon `/git-nav:pr`…).
 
-Ménage par `setup/60-plugins.sh` : les anciens liens `~/.claude/skills/{pr,br,worktree}/`
-(d'avant le plugin) sont retirés, `~/.local/bin/{gpr,gbr}` repointés vers le plugin.
+Les anciens liens `~/.claude/skills/{pr,br,worktree}/` (d'avant le plugin), devenus morts,
+sont retirés par le ménage de `./install.sh` (voir [Installation des plugins](#installation-des-plugins)).
 
 #### Installation hors de ce dépôt
 
@@ -376,9 +432,10 @@ claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
 claude plugin install git-nav@claude-tools
 ```
 
-Pour `gpr`/`gbr` dans le terminal (facultatif), depuis un clone : lier
-`plugins/git-nav/bin/{gpr,gbr}` dans `~/.local/bin`, et sourcer
-`home/.config/shell/git-tools.sh` pour le `cd` final et les alias.
+Pour `gpr`/`gbr` dans le terminal (facultatif), passer plutôt par un clone :
+`./install.sh plugin git-nav` y installe le plugin et lie `gpr`, `gbr` dans `~/.local/bin`
+et `git-tools.sh` (`cd` final, alias) dans `~/.config/shell/`, à charger depuis
+`~/.bashrc` s'il ne charge pas `~/.bash_aliases`.
 
 #### `/pr`
 
@@ -424,8 +481,8 @@ Prérequis : Linux (`/proc`).
 
 Les skills reposent sur `gpr` (PR) et `gbr` (branches), qui servent aussi dans le
 terminal (liens `~/.local/bin`) : même parcours — trouver, afficher, se placer dessus —
-et code partagé dans `lib/git-tools.sh`. `home/.config/shell/git-tools.sh` (lié par
-`./install.sh link`, chargé par `~/.bash_aliases`, voir
+et code partagé dans `lib/git-tools.sh`. `shell/git-tools.sh` (lié dans `~/.config/shell/` par
+`./install.sh plugin git-nav`, chargé par `~/.bash_aliases`, voir
 [TOOLS.md](TOOLS.md#chargement-du-shell)) les enveloppe dans des fonctions shell et
 ajoute des alias.
 
@@ -492,8 +549,8 @@ ajoute des alias.
 permission, question) ; un clic ramène l'onglet gnome-terminal de la session.
 
 **Fichiers** : `plugins/notify/` (`hooks/hooks.json`,
-`scripts/{notify.sh,notify-click.sh,claude-notify.py}`) ; hors du plugin, le lien
-`~/.local/bin/claude-notify-click` posé par `setup/60-plugins.sh` pour l'extension GNOME
+`scripts/{notify.sh,notify-click.sh,claude-notify.py}`, `setup.sh`) ; hors du plugin, le lien
+`~/.local/bin/claude-notify-click` posé par `./install.sh plugin notify` pour l'extension GNOME
 `claude-notify@ywicker` ([TOOLS.md](TOOLS.md#extension-gnome-claude-notifyywicker)).
 **Activé dans** : `vidal` et `basic`.
 
@@ -511,8 +568,8 @@ claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
 claude plugin install notify@claude-tools
 ```
 
-Pour la pastille GNOME (facultative), depuis un clone : lier
-`plugins/notify/scripts/notify-click.sh` en `~/.local/bin/claude-notify-click`, lier
+Pour la pastille GNOME (facultative), passer plutôt par un clone : `./install.sh plugin
+notify` (plugin et lien `~/.local/bin/claude-notify-click`), lier
 `home/.local/share/gnome-shell/extensions/claude-notify@ywicker/` dans
 `~/.local/share/gnome-shell/extensions/`, puis `gnome-extensions enable
 claude-notify@ywicker` (au premier lien, GNOME Shell ne la voit qu'après une
@@ -539,9 +596,9 @@ L'extension GNOME lit le même état et appelle `notify-click.sh` via
 l'emplacement du plugin installé dépend de sa source (dossier du clone ou
 `~/.claude/plugins/cache/…/<version>/`) ; le lien donne un chemin fixe.
 
-Ménage par `setup/60-plugins.sh` : les anciens liens `notify.sh`, `notify-click.sh`,
-`claude-notify.py` de `~/.claude` et de `~/.claude-profiles/*/` (d'avant le plugin, liés
-par `install.sh`) sont retirés.
+Les anciens liens `notify.sh`, `notify-click.sh`, `claude-notify.py` de `~/.claude` et de
+`~/.claude-profiles/*/` (d'avant le plugin), devenus morts, sont retirés par le ménage de
+`./install.sh`. `status` note une extension GNOME inactive (`on_status`).
 
 #### Sans et avec herdr
 
@@ -576,7 +633,8 @@ plus les notifications propres à herdr (`ui.toast.delivery`, `off` par défaut 
 **Rôle** : signaler la session Claude au pane herdr qui l'héberge, pour que herdr la reprenne
 après un redémarrage.
 
-**Fichiers** : `plugins/herdr-session/` (`hooks/hooks.json`) ; hors du plugin, le script
+**Fichiers** : `plugins/herdr-session/` (`hooks/hooks.json`, `setup.sh` : `status` note
+l'absence du script herdr) ; hors du plugin, le script
 `~/.claude/hooks/herdr-agent-state.sh`, généré et réécrit par herdr (non versionné), et le
 ménage de `setup/20-herdr.sh`. **Activé dans** : `vidal` et `basic`.
 
@@ -618,10 +676,12 @@ Non vérifié : herdr relance `claude` sans `CLAUDE_CONFIG_DIR`, donc a priori s
 profil de référence (pas par `claude-profile run`, qui appliquerait le profil par défaut) ; la
 conversation est retrouvée (`projects/` est partagé entre profils).
 
-Ménage par `setup/20-herdr.sh` (rejoué par `dot` après `herdr update`) : tout hook
-`herdr-agent-state.sh` de `~/.claude/settings.json` (celui que herdr ajoute à chaque
-installation, ou l'ancienne variante portable des profils) est retiré, en écrivant à
-travers le lien.
+Ménage par `setup/20-herdr.sh` (rejoué par `dot` après `herdr update`), seulement si ce
+plugin est installé : tout hook `herdr-agent-state.sh` de `~/.claude/settings.json` (celui
+que herdr ajoute à chaque installation, ou l'ancienne variante portable des profils) est
+retiré, en écrivant à travers le lien. Sans le plugin, ce hook est gardé : c'est alors le
+seul branchement herdr (`./install.sh plugin --remove herdr-session` le rappelle).
+`./install.sh` installe les plugins avant de lancer `setup/`, pour que ce ménage voie le plugin.
 
 ### `build-brief`
 
@@ -629,8 +689,8 @@ travers le lien.
 réduite) — consigne d'usage et garde-fou qui refuse un Gradle brut.
 
 **Fichiers** : `plugins/build-brief/` (`instructions.md`, `hooks/hooks.json`,
-`hooks/gradle-guard.py`, `tests/gradle-guard.test.sh`) ; hors du plugin, le ménage de
-`setup/60-plugins.sh`. **Activé dans** : `vidal` et `basic`.
+`hooks/gradle-guard.py`, `tests/gradle-guard.test.sh`, `setup.sh` : `status` note
+`build-brief` absent du PATH). **Activé dans** : `vidal` et `basic`.
 
 **Prérequis** : `build-brief` dans le PATH (sans lui, le garde-fou laisse tout passer) ;
 `python3`. Tests : `bash plugins/build-brief/tests/gradle-guard.test.sh` (hook commande,
@@ -674,18 +734,19 @@ appel dont toutes les options sont `--stop`, `--status`, `--version` ou `-v`, co
 illisible (guillemet non fermé). Non inspectés : `bash -c '…'`, `eval`, scripts, builds
 lancés par l'IDE.
 
-Ménage par `setup/60-plugins.sh` : l'ancien lien `~/.claude/rules/build-brief.md` est
-retiré, puis `~/.claude/rules/` s'il est vide ; les liens `rules` des dossiers de profil,
-devenus morts, disparaissent à la régénération qui suit.
+L'ancien lien `~/.claude/rules/build-brief.md`, devenu mort, est retiré par le ménage de
+`./install.sh`, puis `~/.claude/rules/` s'il est vide ; les liens `rules` des dossiers de
+profil, devenus morts, disparaissent à la régénération qui suit.
 
 ## Gabarit pour un nouveau plugin
 
 ```
 ### <plugin>
 **Rôle** : …
-**Fichiers** : plugins/<plugin>/. **Activé dans** : <profils>
+**Fichiers** : plugins/<plugin>/ (dont setup.sh s'il pose ou vérifie quelque chose hors de lui) ;
+  hors du plugin, ce que setup.sh y pose. **Activé dans** : <profils>
 **Prérequis** : … Tests : claude plugin test plugins/<plugin>
-#### Installation hors de ce dépôt   (si le plugin s'utilise seul)
+#### Installation hors de ce dépôt   (si le plugin s'utilise seul ; ./install.sh plugin <plugin> depuis un clone)
 Fonctionnement, commandes, touches, configuration spécifique
 (#### par partie si la section est longue).
 ```

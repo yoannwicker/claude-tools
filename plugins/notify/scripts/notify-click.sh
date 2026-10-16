@@ -2,7 +2,7 @@
 # Brings the gnome-terminal tab hosting a Claude session to the front, and
 # clears pending notifications. Called by claude-notify.py on click and by
 # the GNOME Shell extension (claude-notify@ywicker) from its menu, through the
-# ~/.local/bin/claude-notify-click link (setup/60-plugins.sh).
+# ~/.local/bin/claude-notify-click link (./install.sh plugin notify).
 #   --open <state.json>          focus the session, close its notification
 #   --clear-session <session_id> close the pending notifications of a session
 #   --clear-all                  close every pending notification

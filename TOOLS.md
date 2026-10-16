@@ -7,7 +7,9 @@ par outil, même gabarit (voir [Gabarit pour un nouvel outil](#gabarit-pour-un-n
 ## Chargement du shell
 
 `home/.bash_aliases` ne contient rien d'autre que le chargement de
-`~/.config/shell/*.sh`, un fichier par famille d'outils. Le `.bashrc` Ubuntu par défaut
+`~/.config/shell/*.sh`, un fichier par famille d'outils, posés par les plugins qui les
+portent (`claude-profile.sh` par [`profiles`](CLAUDE-CODE.md#profiles), `git-tools.sh` par
+[`git-nav`](CLAUDE-CODE.md#git-nav), via `./install.sh plugin <nom>`). Le `.bashrc` Ubuntu par défaut
 source `~/.bash_aliases` (sinon y ajouter `. ~/.bash_aliases`). Fonctions et alias n'y
 sont chargés que dans un shell interactif : ils n'existent pas dans les commandes `!` ni
 dans le shell de Claude, qui n'utilisent que les scripts de `~/.local/bin`.
@@ -61,9 +63,9 @@ attente ; menu pour revenir sur une session ou tout effacer.
 **Prérequis** : GNOME Shell 46 (`shell-version` dans `metadata.json`), les scripts de
 notification de Claude, plugin [`notify`](CLAUDE-CODE.md#notify) (l'extension appelle
 `~/.local/bin/claude-notify-click`, lien vers son `notify-click.sh` posé par
-`setup/60-plugins.sh`).
+`./install.sh plugin notify`).
 
-**Installation** : `./install.sh link`, `./setup/60-plugins.sh` (plugin et lien) puis `./setup/30-gnome.sh`
+**Installation** : `./install.sh link`, `./install.sh plugin notify` (plugin et lien) puis `./setup/30-gnome.sh`
 (`gnome-extensions enable claude-notify@ywicker`). Après un premier lien, GNOME Shell ne
 voit l'extension qu'au prochain login : se déconnecter/reconnecter puis relancer le script.
 

@@ -10,7 +10,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 const STATE_DIR = GLib.build_filenamev([GLib.get_user_state_dir(), 'claude-notify']);
-// Link to notify-click.sh of the notify Claude Code plugin, set by setup/60-plugins.sh
+// Link to notify-click.sh of the notify Claude Code plugin, set by ./install.sh plugin notify
 const CLICK_SCRIPT = GLib.build_filenamev([GLib.get_home_dir(), '.local', 'bin', 'claude-notify-click']);
 
 function run(...args) {
