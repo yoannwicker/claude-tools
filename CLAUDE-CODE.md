@@ -48,7 +48,8 @@ profils) ne distingue pas les profils : couper un MCP par profil passe par
 `claude-profile mcp` ou `/profile show`. Une modification commune (un
 réglage, la statusline) se fait donc une fois, dans le profil de référence.
 
-Profils versionnés : `vidal` (config complète : tous les plugins, comme le profil de référence) et
+Profils versionnés : `vidal` (config complète : tous les plugins, plus `superpowers`, à installer
+une fois dans Claude Code : `/plugin install superpowers@claude-plugins-official`) et
 `basic` (le même sans `pr-comments`). Aucun profil par défaut à l'installation : `claude`
 part sur le profil de référence.
 
