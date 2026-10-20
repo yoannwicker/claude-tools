@@ -209,10 +209,12 @@ déconnecté.
 
 - `.mcp.json` : serveur `intellij`, transport SSE sur `http://127.0.0.1:64342/sse`
   (plugin MCP Server d'IntelliJ). Outils exposés sous `mcp__plugin_intellij_intellij__*`.
-- `instructions.md` : recherche, refactoring et diff via ces outils plutôt que
-  `grep`/`find`, sauf MCP injoignable ou projet non ouvert dans l'IDE. Injectée dans le
-  contexte par un hook `SessionStart` du plugin (`hooks/hooks.json`, au démarrage, à la
-  reprise, après `/clear` et `/compact`) : un plugin ne porte ni `CLAUDE.md` ni rules.
+- `instructions.md` : ces outils sont obligatoires au lieu de `grep`/`find` pour la
+  recherche, le refactoring et le diff, sauf MCP injoignable, projet non ouvert dans l'IDE
+  ou agent sans outils `mcp__plugin_intellij_*` ; un outil cité par une skill projet y est lu comme une
+  intention, pas une obligation. Injectée dans le contexte par un hook `SessionStart` du
+  plugin (`hooks/hooks.json`, au démarrage, à la reprise, après `/clear` et `/compact`) :
+  un plugin ne porte ni `CLAUDE.md` ni rules.
 
 Couper seulement le serveur dans un profil (`plugin:intellij:intellij`, voir
 [`claude-profile mcp`](#claude-profile)) laisse la consigne injectée, qui citerait des outils

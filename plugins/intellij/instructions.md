@@ -4,15 +4,20 @@ Les outils JetBrains MCP (serveur `intellij` du plugin `intellij`, outils
 `mcp__plugin_intellij_intellij__*`, à charger via ToolSearch s'ils sont différés) sont
 **OBLIGATOIRES** pour toute opération listée ci-dessous. Il est **INTERDIT** d'utiliser
 `grep`/`rg`/`find`/`cat` (Bash) comme substitut, même pour une recherche "rapide" ou
-"simple", sauf dans les deux cas d'exception suivants :
+"simple", sauf dans les cas d'exception suivants :
 
 - le serveur MCP `intellij` n'est pas disponible/joignable dans la session en cours ;
 - le repo/projet concerné n'est pas accessible via ce MCP (projet non ouvert dans l'IDE,
-  hors du scope des projets listés par le serveur, etc.).
+  hors du scope des projets listés par le serveur, etc.) ;
+- l'agent (sous-agent, agent spécialisé) n'a pas d'outils `mcp__plugin_intellij_*` à sa
+  disposition.
 
 Dans ces cas d'exception **UNIQUEMENT**, retomber sur Bash (`grep`/`find`) est autorisé. En
 dehors de ces cas, si un outil JetBrains MCP existe pour l'opération demandée, il doit être
 utilisé — **PAS DE CONTOURNEMENT**.
+
+Un outil cité par une skill projet (`grep`, `find`, `git diff`…) désigne une intention, pas
+une obligation : l'opération peut passer par l'outil JetBrains MCP équivalent.
 
 ## Search
 
