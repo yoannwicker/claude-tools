@@ -287,7 +287,14 @@ variable (nom réservé `reference`).
   `~/.claude-profiles/.default`, c'est celui des nouvelles sessions lancées par
   `claude-profile run` (fonction shell `claude`, `cl`) ; une reprise par `run`
   (`--continue`, `--resume`) part elle sur le dernier profil de la conversation ; sans lui, elles partent sur le
-  profil de référence. `~/.claude/settings.json` reste le lien vers le profil de référence : une session
+  profil de référence.
+- Profil d'un projet, facultatif (`claude-profile project <nom>`, depuis le projet) : nommé
+  dans `.claude/profile.local` à la racine du projet (dépôt git, sinon dossier courant), il
+  passe avant le profil par défaut pour les nouvelles sessions de `run` lancées dans le
+  projet (ou un de ses sous-dossiers ; les autres worktrees du dépôt reprennent celui du
+  worktree principal). Non versionné : la commande génère `.claude/.gitignore` (qui ignore
+  `profile.local` et s'ignore lui-même), ou complète celui du projet s'il existe. Un nom de
+  profil qui n'existe plus est signalé et ignoré. `~/.claude/settings.json` reste le lien vers le profil de référence : une session
   lancée sans passer par `run` (IDE, lanceur graphique, `command claude`, herdr) part sur
   le profil de référence ; `/profile <nom>` reste possible, avec relance manuelle.
 - Migration depuis l'ancien modèle (profils complets, `~/.claude/settings.json` lien vers
@@ -301,12 +308,16 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
 
 - `claude-profile list` : `reference` en tête, puis les profils ; `*` sur celui de la
   session, dossier généré ou non, `par défaut` sur le profil par défaut (le profil de référence s'il
-  n'y en a pas) ;
+  n'y en a pas), `projet` sur celui du projet courant ;
 - `claude-profile current` : profil de la session (d'après `CLAUDE_CONFIG_DIR`, sinon
   `reference`) ;
 - `claude-profile default [<nom>|--unset]` : affiche le profil par défaut (`reference` s'il
   n'y en a pas), ou en fait `<nom>` (il est généré) ; `reference` ou `--unset` le retire ;
   vaut pour les nouvelles sessions de `run` ;
+- `claude-profile project [<nom>|--unset]` : affiche le profil du projet courant (avec son
+  fichier), ou en fait `<nom>` (il est généré ; `.claude/profile.local` et son
+  `.gitignore` écrits à la racine du projet) ; `--unset` retire le fichier (et le
+  `.gitignore` s'il est resté tel que généré) ; refusé dans `$HOME` ;
 - `claude-profile show [<nom>]` : ce qui est actif sur un profil (celui de la session par
   défaut) — plugins activés (`+`) ou non (`-`, ou `?` pour un plugin installé que le profil
   ne mentionne pas), avec `(référence : activé|désactivé)` quand la référence diffère ;
@@ -315,7 +326,7 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
   des `.mcp.json` des plugins activés) ; modèle, et la liste des plugins différents du
   profil de référence ;
 - `claude-profile new <nom> [description…]` : crée `profiles/<nom>.json` avec les plugins
-  du profil de référence (noms réservés : `reference`, `default`, `show`, `create`,
+  du profil de référence (noms réservés : `reference`, `default`, `project`, `show`, `create`,
   `stop`, `cancel`) ;
 - `claude-profile plugin <nom> <plugin>@<marketplace> on|off` : active ou désactive un plugin
   dans `enabledPlugins` du profil, puis le régénère ; `reference` l'écrit dans
@@ -344,8 +355,8 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
 - `claude-profile switch <nom> [arguments claude…]` : régénère puis lance
   `CLAUDE_CONFIG_DIR=~/.claude-profiles/<nom> claude …` (`reference` : `claude` sans la
   variable) ; deux terminaux peuvent tourner sur deux profils ;
-- `claude-profile run [arguments claude…]` : lance `claude` sur le profil par défaut (sinon
-  le profil de référence), ou sans toucher au profil courant dans une session de profil ;
+- `claude-profile run [arguments claude…]` : lance `claude` sur le profil du projet courant,
+  sinon le profil par défaut, sinon le profil de référence, ou sans toucher au profil courant dans une session de profil ;
   une reprise (`--resume <id>`, ou `--continue` : la conversation la plus récente du
   dossier) part sur le dernier profil de la conversation, s'il est connu et existe encore ;
 - `claude-profile remember <session>` : retient le profil courant pour la session, dans
@@ -396,6 +407,9 @@ Mod (`hooks/register.tsx`) :
 - `default [<profil>]` : choisit le profil par défaut (`claude-profile default`) dans la
   même liste (le profil par défaut présélectionné ; `reference` pour n'en garder aucun) ou
   celui donné ;
+- `project [<profil>|--unset]` : choisit le profil du projet de la session
+  (`claude-profile project`, lancé dans son dossier) dans la même liste (celui du projet
+  présélectionné) ou celui donné ; `--unset` le retire ;
 - `create <nom> [description]` : crée le profil (`claude-profile new`, plugins du
   profil de référence), le génère et ouvre sa vue en édition pour choisir ses plugins ;
 - `stop` / `cancel` : dans une session d'arrière-plan, l'arrêter pour que la bascule

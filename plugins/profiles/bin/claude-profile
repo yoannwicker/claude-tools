@@ -4,6 +4,7 @@
 #   claude-profile list | current | show [<nom>] | new <nom> [description…] | plugin <nom> <plugin> on|off | generate <nom>|--all | check <nom> | --help
 #   claude-profile mcp <nom> <serveur|url|claude.ai> on|off | mcp-scan : MCP coupés (deniedMcpServers), serveurs connus
 #   claude-profile default [<nom>|--unset] : profil par défaut (celui des nouvelles sessions de run), affiché ou changé
+#   claude-profile project [<nom>|--unset] : profil du projet courant (.claude/profile.local), prioritaire sur le défaut
 #   claude-profile switch <nom> [arguments claude…] | run [arguments claude…] | request <nom> <session>
 #   Profil de référence (reference) : ~/.claude/settings.json, ~/.claude sans profil.
 #   Profil : profiles/<nom>.json du dépôt, { description, enabledPlugins, deniedMcpServers,
@@ -12,7 +13,7 @@
 #   Dossier généré : ~/.claude-profiles/<nom>/ (tout le reste en liens vers ~/.claude).
 #   switch/run lancent claude dans une boucle : /profile <nom> (plugin profiles) y dépose une
 #   demande (request) puis quitte, et la boucle relance la même session dans <nom>. run hors
-#   profil part sur le profil par défaut, sinon sur le profil de référence ; une reprise
+#   profil part sur le profil du projet, sinon le profil par défaut, sinon le profil de référence ; une reprise
 #   (--continue, --resume <id>) part sur le dernier profil de la conversation (remember <session>).
 set -u
 repo=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../.." && pwd)
@@ -21,6 +22,10 @@ base=$HOME/.claude
 out_root=$HOME/.claude-profiles
 main=$base/settings.json
 default_file=$out_root/.default
+# Profil d'un projet : son nom dans ce fichier, à la racine du projet (non versionné).
+project_rel=.claude/profile.local
+# .claude/.gitignore généré à côté : ce fichier, et lui-même, hors de git.
+project_ignore=$'# claude-profile project : profil local à ce projet, non versionné\nprofile.local\n.gitignore'
 # Dernier profil de chaque session, « <session> <profil> » par ligne (claude-profile remember).
 sessions_file=$out_root/.sessions
 # Clés qu'un profil peut porter : les sections surchargées (remplacées en entier) et sa description.
@@ -63,6 +68,34 @@ default_profile() {
   local d
   d=$(cat "$default_file" 2>/dev/null) || return 0
   [ -n "$d" ] && [ -f "$profiles_dir/$d.json" ] && echo "$d"
+  return 0
+}
+
+# Racine du projet courant : celle du dépôt git, sinon le dossier courant.
+project_root() { git rev-parse --show-toplevel 2>/dev/null || pwd; }
+
+# Fichier de profil du projet courant : le plus proche en remontant depuis le dossier courant
+# (sans aller jusqu'à $HOME, dont ~/.claude est la config), sinon celui du worktree principal du
+# dépôt, que ses autres worktrees reprennent ainsi. Rien s'il n'y en a pas.
+project_file() {
+  local d=$PWD common
+  while [ "$d" != / ] && [ "$d" != "$HOME" ]; do
+    [ -f "$d/$project_rel" ] && { echo "$d/$project_rel"; return 0; }
+    d=$(dirname "$d")
+  done
+  common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 0
+  [ "$(basename "$common")" = .git ] && [ -f "$(dirname "$common")/$project_rel" ] && echo "$(dirname "$common")/$project_rel"
+  return 0
+}
+
+# Profil du projet courant (rien s'il n'y en a pas) ; un profil qui n'existe plus est signalé.
+project_profile() {
+  local f p
+  f=$(project_file)
+  [ -n "$f" ] || return 0
+  p=$(tr -d '[:space:]' < "$f")
+  if [ "$p" = reference ] || [ -f "$profiles_dir/$p.json" ]; then echo "$p"
+  elif [ -n "$p" ]; then echo "profil du projet inconnu, ignoré : $p (${f/#$HOME/\~})" >&2; fi
   return 0
 }
 
@@ -217,14 +250,17 @@ cmd_request() {
 }
 
 cmd_list() {
-  local cur def n state
+  local cur def proj n state
   cur=$(current)
   def=$(default_profile)
+  proj=$(project_profile 2>/dev/null)
   printf '%s %-16s %s [%s]\n' "$([ "$cur" = reference ] && echo '*' || echo ' ')" reference \
-    "Profil de référence (~/.claude/settings.json)" "référence$([ -z "$def" ] && echo ", par défaut")"
+    "Profil de référence (~/.claude/settings.json)" \
+    "référence$([ -z "$def" ] && echo ", par défaut")$([ "$proj" = reference ] && echo ", projet")"
   for n in $(names); do
     if [ -f "$out_root/$n/settings.json" ]; then state=généré; else state="non généré"; fi
     [ "$n" = "$def" ] && state="$state, par défaut"
+    [ "$n" = "$proj" ] && state="$state, projet"
     printf '%s %-16s %s [%s]\n' "$([ "$cur" = "$n" ] && echo '*' || echo ' ')" "$n" \
       "$(jq -r '.description // ""' "$profiles_dir/$n.json" 2>/dev/null)" "$state"
   done
@@ -317,7 +353,7 @@ cmd_new() {
   [ $# -ge 1 ] || die "usage : claude-profile new <nom> [description…]"
   local name=$1 f
   shift
-  case "$name" in reference|default|show|create|stop|cancel) die "nom réservé : $name" ;; esac
+  case "$name" in reference|default|project|show|create|stop|cancel) die "nom réservé : $name" ;; esac
   [[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "nom invalide : $name (minuscules, chiffres, tirets)"
   f=$profiles_dir/$name.json
   [ -e "$f" ] && die "existe déjà : $f"
@@ -392,12 +428,50 @@ cmd_default() {
   esac
 }
 
+# Profil du projet courant, celui des nouvelles sessions de claude-profile run lancées dans ce projet
+# (avant le profil par défaut) : nommé dans .claude/profile.local à la racine du projet (dépôt git,
+# sinon dossier courant), ignoré par git grâce au .claude/.gitignore généré à côté. --unset retire ce
+# fichier (et ce .gitignore s'il n'a que ce qui a été généré).
+cmd_project() {
+  [ $# -le 1 ] || die "usage : claude-profile project [<nom>|--unset]"
+  local f p root ignore
+  if [ $# -eq 0 ]; then
+    f=$(project_file)
+    p=$(project_profile)
+    if [ -n "$p" ]; then echo "$p (${f/#$HOME/\~})"; else echo "aucun profil de projet (nouvelles sessions : $(default_profile | grep . || echo reference))"; fi
+    return
+  fi
+  root=$(project_root)
+  [ "$root" != "$HOME" ] || die "pas de profil de projet pour \$HOME : se placer dans un projet"
+  f=$root/$project_rel
+  ignore=$root/.claude/.gitignore
+  if [ "$1" = --unset ]; then
+    rm -f "$f"
+    [ "$(cat "$ignore" 2>/dev/null)" = "$project_ignore" ] && rm -f "$ignore"
+    rmdir "$root/.claude" 2>/dev/null
+    echo "profil du projet retiré : ${root/#$HOME/\~} (nouvelles sessions : $(default_profile | grep . || echo reference))"
+    return
+  fi
+  check "$1"
+  generate "$1" || exit 2
+  mkdir -p "$root/.claude" && echo "$1" > "$f" || die "écriture impossible : $f"
+  # Non versionné : .claude/.gitignore généré, qui s'ignore lui-même ; s'il existe déjà (celui du
+  # projet), seulement complété.
+  if [ ! -e "$ignore" ]; then
+    echo "$project_ignore" > "$ignore"
+  elif ! grep -qxF -e "${project_rel#.claude/}" -e "/${project_rel#.claude/}" "$ignore"; then
+    echo "${project_rel#.claude/}" >> "$ignore" && echo "ajouté à ${ignore/#$HOME/\~} : ${project_rel#.claude/}"
+  fi
+  echo "profil du projet : $1 (${f/#$HOME/\~} ; nouvelles sessions lancées ici par claude-profile run : fonction shell claude, cl)"
+}
+
 command -v jq >/dev/null 2>&1 || die "jq requis"
 
 case "${1:-}" in
   list|"")  cmd_list ;;
   current)  current ;;
   default)  shift; cmd_default "$@" ;;
+  project)  shift; cmd_project "$@" ;;
   show)     shift; cmd_show "$@" ;;
   new)      shift; cmd_new "$@" ;;
   plugin)   shift; cmd_plugin "$@" ;;
@@ -409,12 +483,16 @@ case "${1:-}" in
   background) [ -n "${CLAUDE_JOB_DIR:-}" ] ;;
   run)      shift
             # Hors session de profil : une reprise part sur le dernier profil de la conversation,
-            # une nouvelle session sur le profil par défaut.
+            # une nouvelle session sur le profil du projet, sinon le profil par défaut.
             name=""
             if [ -z "${CLAUDE_CONFIG_DIR:-}" ]; then
               id=$(resumed_session "$@")
               [ -n "$id" ] && name=$(session_profile "$id")
-              if [ -n "$name" ]; then echo "→ profil $name (dernier de cette conversation)" >&2; else name=$(default_profile); fi
+              if [ -n "$name" ]; then echo "→ profil $name (dernier de cette conversation)" >&2
+              else
+                name=$(project_profile)
+                if [ -n "$name" ]; then echo "→ profil $name (projet)" >&2; else name=$(default_profile); fi
+              fi
             fi
             launch_loop "$name" "$@" ;;
   generate)

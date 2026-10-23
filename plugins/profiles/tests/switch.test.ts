@@ -26,9 +26,17 @@ test('an error: no exit, its message', () => {
 test('claude-profile list parsed: name, description, current', () => {
   const out = '  basic            Sans pr-comments [généré]\n* vidal            Config complète [généré, par défaut]\n  vide              [non généré]\n'
   expect(parseList(out)).toEqual([
-    { name: 'basic', description: 'Sans pr-comments', isCurrent: false, isDefault: false },
-    { name: 'vidal', description: 'Config complète', isCurrent: true, isDefault: true },
-    { name: 'vide', description: '', isCurrent: false, isDefault: false },
+    { name: 'basic', description: 'Sans pr-comments', isCurrent: false, isDefault: false, isProject: false },
+    { name: 'vidal', description: 'Config complète', isCurrent: true, isDefault: true, isProject: false },
+    { name: 'vide', description: '', isCurrent: false, isDefault: false, isProject: false },
+  ])
+})
+
+test('claude-profile list parsed: the project profile', () => {
+  const out = '* reference        Profil de référence (~/.claude/settings.json) [référence, par défaut]\n  basic            Sans pr-comments [généré, projet]\n'
+  expect(parseList(out)).toEqual([
+    { name: 'reference', description: 'Profil de référence (~/.claude/settings.json)', isCurrent: true, isDefault: true, isProject: false },
+    { name: 'basic', description: 'Sans pr-comments', isCurrent: false, isDefault: false, isProject: true },
   ])
 })
 
@@ -47,8 +55,8 @@ test('claude-profile show parsed: plugins on, off, unlisted; other lines as text
 test('claude-profile list with the reference: default when none is set', () => {
   const out = '* reference        Profil de référence (~/.claude/settings.json) [référence, par défaut]\n  basic            Sans pr-comments [généré]\n'
   expect(parseList(out)).toEqual([
-    { name: 'reference', description: 'Profil de référence (~/.claude/settings.json)', isCurrent: true, isDefault: true },
-    { name: 'basic', description: 'Sans pr-comments', isCurrent: false, isDefault: false },
+    { name: 'reference', description: 'Profil de référence (~/.claude/settings.json)', isCurrent: true, isDefault: true, isProject: false },
+    { name: 'basic', description: 'Sans pr-comments', isCurrent: false, isDefault: false, isProject: false },
   ])
 })
 

@@ -62,8 +62,9 @@ demander une déconnexion/reconnexion de session.
   (`home/.claude/settings.json`) ; un profil (`profiles/<profil>.json`) n'en surcharge que les plugins
   actifs et les MCP coupés. `claude-profile switch <profil>` (ou `cl -P <profil> <projet>`) lance Claude sur
   `~/.claude-profiles/<profil>/`, généré depuis `~/.claude` ; `claude` seul part sur le
-  profil par défaut s'il y en a un (`claude-profile default <profil>`, `/profile default`),
-  sinon sur le profil de référence. Dans une
+  profil du projet s'il y en a un (`claude-profile project <profil>`, `/profile project` :
+  `.claude/profile.local`, non versionné), sinon sur le profil par défaut s'il y en a un
+  (`claude-profile default <profil>`, `/profile default`), sinon sur le profil de référence. Dans une
   session, `/profile` propose la liste des profils et `/profile <profil>` relance la
   conversation dans ce profil ; `/profile show [<profil>]` montre ce qui y est actif et
   (dés)active ses plugins et MCP, `/profile create <nom>` crée un profil.

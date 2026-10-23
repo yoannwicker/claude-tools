@@ -5,17 +5,19 @@ import type { Draft } from '../types'
 import { afterRequest, draftChanges, draftKey, HINT, parseList, parseShow, toggleDraft } from './switch'
 import type { Profile } from './switch'
 
-// The dialogs: pick a profile to switch to, to view, or to make the default; one profile's view.
+// The dialogs: pick a profile to switch to, to view, to make the default or the project's; one profile's view.
 const PICKER = 'profile-picker'
 const VIEWER = 'profile-show'
 const DEFAULTER = 'profile-default'
+const PROJECTOR = 'profile-project'
 const DETAIL = 'profile-show--'
 // The drafts of the profile views in edit mode, by profile; each write redraws the views.
 const drafts = atom({ plugin: 'profiles', key: 'drafts' } as const, {} as Record<string, Draft>)
 
-// The claude-profile command, this plugin's bin/claude-profile.
-function run($: EngineInterface, ...args: string[]) {
-  return $.process.run([`${$.plugin.root}/bin/claude-profile`, ...args])
+// The claude-profile command, this plugin's bin/claude-profile, run in the session's folder (its
+// project, for `project` and the marks of `list`).
+async function run($: EngineInterface, ...args: string[]) {
+  return $.process.run([`${$.plugin.root}/bin/claude-profile`, ...args], { cwd: await $.session.cwd() })
 }
 
 async function profiles($: EngineInterface) {
@@ -42,8 +44,14 @@ async function setDefault($: EngineInterface, name: string) {
   return (set.exitCode === 0 ? set.stdout : set.stderr).trim()
 }
 
-// Opens the profile list, to switch (PICKER), to view (VIEWER) or for the default
-// (DEFAULTER); whether it is drawn.
+// Makes `name` the profile of the session's project (claude-profile project); the text to show.
+async function setProject($: EngineInterface, name: string) {
+  const set = await run($, 'project', name)
+  return (set.exitCode === 0 ? set.stdout : set.stderr).trim()
+}
+
+// Opens the profile list, to switch (PICKER), to view (VIEWER), for the default (DEFAULTER)
+// or for the project's (PROJECTOR); whether it is drawn.
 async function openPicker($: EngineInterface, id: string) {
   const list = await profiles($)
   const opened = await $.ui.open({ id, title: 'Profil Claude Code', focus: true, closeOnEscape: true, rows: list.length + 3 })
@@ -77,8 +85,8 @@ export const register: Register = on => {
     await $.command.register({
       name: 'profile',
       description:
-        'Choisir un profil dans une liste, relancer cette conversation dans le profil donné, voir ce qui est actif sur un profil (show), ou choisir le profil par défaut (default)',
-      argumentHint: '[<profil> | show [<profil>] | create <nom> | default [<profil>] | stop | cancel]',
+        'Choisir un profil dans une liste, relancer cette conversation dans le profil donné, voir ce qui est actif sur un profil (show), choisir le profil par défaut (default) ou celui du projet (project)',
+      argumentHint: '[<profil> | show [<profil>] | create <nom> | default [<profil>] | project [<profil>|--unset] | stop | cancel]',
     })
 
     return next(e)
@@ -117,6 +125,14 @@ export const register: Register = on => {
 
       return { text: `Profil par défaut : ${now.stdout.trim() || 'reference'}. /profile default <profil> pour le changer, /profile default reference pour n'en garder aucun.` }
     }
+    const project = /^project(?:\s+(\S+))?$/.exec(args)
+    if (project?.[1]) return { text: await setProject($, project[1]) }
+    if (project) {
+      if (await openPicker($, PROJECTOR)) return { text: 'Profil de ce projet (Entrée : le choisir, Échap : annuler).' }
+      const now = await run($, 'project')
+
+      return { text: `Profil du projet : ${now.stdout.trim()}. /profile project <profil> pour le changer, /profile project --unset pour le retirer.` }
+    }
     // A background session's switch: stop it (claude stop, the loop relaunching the
     // conversation once the claude of this terminal is quit), or cancel the request left.
     if (args === 'stop') {
@@ -139,7 +155,7 @@ export const register: Register = on => {
     return { text: (text.stdout || text.stderr).trimEnd() + HINT }
   })
 
-  on('ui.render', { component: 'Pane', requestId: [PICKER, VIEWER, DEFAULTER] }, async ($, e) => {
+  on('ui.render', { component: 'Pane', requestId: [PICKER, VIEWER, DEFAULTER, PROJECTOR] }, async ($, e) => {
     const elements = $.ui.resolve(e)
     const { Box, Text } = elements
     // The mobile app draws no Select yet: /profile [show] <profil> there.
@@ -148,16 +164,19 @@ export const register: Register = on => {
     const list = await profiles($)
     if (list.length === 0) return <Text dimColor>Aucun profil (claude-profile list n'a rien rendu).</Text>
     const label = (p: Profile) =>
-      `${p.name}${p.isCurrent ? ' (actuel)' : ''}${p.isDefault ? ' (par défaut)' : ''}${p.description ? ` — ${p.description}` : ''}`
+      `${p.name}${p.isCurrent ? ' (actuel)' : ''}${p.isDefault ? ' (par défaut)' : ''}${p.isProject ? ' (projet)' : ''}${p.description ? ` — ${p.description}` : ''}`
     const pick = async (name: string) => {
       await $.ui.close({ id: e.requestId })
       if (e.requestId === VIEWER) await openDetail($, name)
-      else $.ui.log(e.requestId === DEFAULTER ? await setDefault($, name) : await switchTo($, name))
+      else if (e.requestId === DEFAULTER) $.ui.log(await setDefault($, name))
+      else if (e.requestId === PROJECTOR) $.ui.log(await setProject($, name))
+      else $.ui.log(await switchTo($, name))
     }
     const hint = {
       [PICKER]: 'Entrée : relancer la conversation dans ce profil',
       [VIEWER]: 'Entrée : voir ce profil',
       [DEFAULTER]: 'Entrée : en faire le profil par défaut (nouvelles sessions de la fonction shell claude, cl ; reference : aucun)',
+      [PROJECTOR]: 'Entrée : en faire le profil de ce projet (nouvelles sessions lancées ici, avant le profil par défaut)',
     }[e.requestId]
 
     return (
@@ -167,7 +186,7 @@ export const register: Register = on => {
           label="Profil : "
           autoFocus
           options={list.map(p => ({ value: p.name, label: label(p) }))}
-          value={list.find(p => (e.requestId === DEFAULTER ? p.isDefault : p.isCurrent))?.name}
+          value={list.find(p => (e.requestId === DEFAULTER ? p.isDefault : e.requestId === PROJECTOR ? p.isProject : p.isCurrent))?.name}
           onSelect={(name: string) => void pick(name)}
         />
         <Text dimColor>

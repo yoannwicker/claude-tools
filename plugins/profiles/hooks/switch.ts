@@ -2,18 +2,22 @@
 
 export type Run = { exitCode: number; stdout: string; stderr: string }
 
-export type Profile = { name: string; description: string; isCurrent: boolean; isDefault: boolean }
+export type Profile = { name: string; description: string; isCurrent: boolean; isDefault: boolean; isProject: boolean }
 
 // The profiles of `claude-profile list`: `* name   description [state]`, `*` on the session's,
-// `par défaut` in the state of the default one (`reference`, the reference profile, when none is set).
+// `par défaut` in the state of the default one (`reference`, the reference profile, when none is set),
+// `projet` in that of the current project's.
 export const parseList = (stdout: string): Profile[] =>
   stdout.split('\n').flatMap(line => {
     const m = /^([* ]) (\S+)\s*(.*?)\s*(\[[^\]]*\])?$/.exec(line)
-    return m?.[2] ? [{ name: m[2], description: m[3] ?? '', isCurrent: m[1] === '*', isDefault: /par défaut/.test(m[4] ?? '') }] : []
+    const state = m?.[4] ?? ''
+    return m?.[2]
+      ? [{ name: m[2], description: m[3] ?? '', isCurrent: m[1] === '*', isDefault: /par défaut/.test(state), isProject: /projet/.test(state) }]
+      : []
   })
 
 export const HINT =
-  '\n/profile <profil> : relance cette conversation dans ce profil.\n/profile show [<profil>] : ce qui y est actif, ses plugins et MCP à (dés)activer ; /profile create <nom> : nouveau profil ; /profile default [<profil>] : profil par défaut des nouvelles sessions ; /profile reference : revenir au settings.json de référence.'
+  '\n/profile <profil> : relance cette conversation dans ce profil.\n/profile show [<profil>] : ce qui y est actif, ses plugins et MCP à (dés)activer ; /profile create <nom> : nouveau profil ; /profile default [<profil>] : profil par défaut des nouvelles sessions ; /profile project [<profil>|--unset] : profil des nouvelles sessions de ce projet ; /profile reference : revenir au settings.json de référence.'
 
 // Relaunch by hand, for a session no `claude-profile switch`/`run` loop started.
 export const manual = (name: string) =>
