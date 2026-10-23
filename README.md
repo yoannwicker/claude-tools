@@ -101,6 +101,8 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     build-brief/ (consigne et garde-fou Gradle)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, basic, lean —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
+docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés),
+                    pistes-amelioration/ (pistes préfixées par leur priorité 1, 2, 3)
 CLAUDE-CODE.md      Claude Code : settings, profils, plugins
 TOOLS.md            outils hors Claude : cl, extension GNOME, herdr, mise
 AGENTS.md           consignes pour les agents (CLAUDE.md l'importe)
