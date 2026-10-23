@@ -26,6 +26,7 @@
     "git-nav@claude-tools": true,
     "notify@claude-tools": true,
     "herdr-session@claude-tools": true,
-    "build-brief@claude-tools": true
+    "build-brief@claude-tools": true,
+    "session-analysis@claude-tools": true
   }
 }

@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+"""session-analysis-collect — collecte les données d'une analyse de sessions (AgentsView +
+transcripts), toujours avec la même méthode, pour que deux rapports restent comparables.
+
+  session-analysis-collect report --out DIR [--days 30] [--top 4] [--project P]...
+      30 derniers jours : API AgentsView en global puis par projet suivi (les --top plus
+      gros en messages, ou les --project donnés), transcripts des sessions de la période.
+      Écrit DIR/global/*.json, DIR/projects/<p>/*.json, DIR/transcripts.json et
+      DIR/indicators.json (le tableau d'indicateurs, global et par projet).
+  session-analysis-collect session --out DIR [SESSION_ID]
+      Une session (par défaut la plus récente du dossier courant) : DIR/session.json,
+      DIR/health.json, DIR/transcript.json.
+
+Lance AgentsView s'il ne tourne pas (agentsview-up).
+"""
+import argparse, collections, datetime, json, os, re, subprocess, sys
+import urllib.parse, urllib.request
+
+ENDPOINTS = ["summary", "projects", "tools", "skills", "signals", "sessions",
+             "top-sessions", "velocity", "activity", "hour-of-week"]
+PROJECT_ENDPOINTS = ["summary", "tools", "skills", "signals", "sessions", "top-sessions"]
+SIGNALS = ["tool_failure_signals", "short_prompt_count", "missing_success_criteria_count",
+           "runaway_tool_loop_count", "missing_verification_count", "duplicate_prompt_count"]
+READ_CMDS = ("sed", "grep", "rg", "cat", "find", "head", "tail", "ls", "python3", "jq")
+# gh / gpr appelés pour de vrai (début de commande ou après ; && | $( ), pas un mot d'un chemin
+GH_CALL = re.compile(r"(^|[;&|(]\s*|\$\(\s*)(gh (pr|api|run|issue)|gpr)\b")
+
+
+def die(msg):
+    sys.exit(f"session-analysis-collect: {msg}")
+
+
+def server_url():
+    here = os.path.dirname(os.path.realpath(__file__))
+    try:
+        return subprocess.run([os.path.join(here, "agentsview-up")], check=True,
+                              capture_output=True, text=True).stdout.strip()
+    except subprocess.CalledProcessError as e:
+        die(e.stderr.strip() or "agentsview-up a échoué")
+
+
+def api(base, endpoint, **params):
+    q = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
+    with urllib.request.urlopen(f"{base}/api/v1/analytics/{endpoint}?{q}", timeout=120) as r:
+        return json.load(r)
+
+
+def cli_json(*args):
+    out = subprocess.run(["agentsview", *args, "--json"], check=True, capture_output=True, text=True)
+    return json.loads(out.stdout)
+
+
+def save(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+
+
+def list_sessions(date_from, date_to):
+    sessions, cursor = [], None
+    while True:
+        args = ["session", "list", "--include-one-shot", "--include-source", "--limit", "500",
+                "--date-from", date_from, "--date-to", date_to]
+        page = cli_json(*args, *(["--cursor", cursor] if cursor else []))
+        sessions += page.get("sessions", [])
+        cursor = page.get("next_cursor")
+        if not cursor or not page.get("sessions"):
+            return sessions
+
+
+def error_kind(text, tool, cmd):
+    if "isolated in the worktree" in text:
+        return "refus isolation worktree"
+    m = re.search(r"PreToolUse:\w+ hook error: \[([\w-]+)\]", text)
+    if m:
+        return f"hook {m.group(1)}"
+    if "doesn't want to proceed" in text:
+        return f"refus utilisateur {tool}"
+    if "auto mode classifier" in text:
+        return "refus classifieur mode auto"
+    if "projectPath" in text or "target project for the current MCP" in text:
+        return "MCP IntelliJ : projet inconnu"
+    if tool == "Bash" and GH_CALL.search(cmd or ""):
+        return "échec gh/gpr"
+    return f"autre {tool}"
+
+
+def transcript_stats(paths):
+    """Compteurs tirés des transcripts Claude Code (JSONL), dédoublonnés par uuid."""
+    c = collections.Counter()
+    seen = set()
+    for path in paths:
+        uses = {}
+        try:
+            lines = open(path, errors="ignore")
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                j = json.loads(line)
+            except ValueError:
+                continue
+            if j.get("uuid") in seen:
+                continue
+            seen.add(j.get("uuid"))
+            m = j.get("message")
+            if not isinstance(m, dict):
+                continue
+            if j.get("type") == "assistant" and m.get("model"):
+                c[f"model:{m['model']}"] += 1
+            for b in m.get("content") or []:
+                if not isinstance(b, dict):
+                    continue
+                if b.get("type") == "tool_use":
+                    name, inp = b.get("name", "?"), b.get("input") or {}
+                    uses[b.get("id")] = (name, inp.get("command", ""))
+                    c["tool_calls"] += 1
+                    c[f"tool:{'mcp_intellij' if 'intellij' in name else name}"] += 1
+                    if name == "Bash":
+                        cmd = re.sub(r"^cd [^&;]+&&\s*", "", inp.get("command", "").strip())
+                        word = os.path.basename(cmd.split()[0]) if cmd.split() else ""
+                        if word in READ_CMDS:
+                            c[f"bash:{word}"] += 1
+                        if GH_CALL.search(inp.get("command", "")):
+                            c["gh_gpr_calls"] += 1
+                if b.get("type") == "tool_result" and b.get("is_error"):
+                    text = b.get("content")
+                    text = text if isinstance(text, str) else json.dumps(text, ensure_ascii=False)
+                    tool, cmd = uses.get(b.get("tool_use_id"), ("?", ""))
+                    c["errors"] += 1
+                    c[f"error:{error_kind(text, tool, cmd)}"] += 1
+    return dict(sorted(c.items()))
+
+
+def dist_count(dist, label):
+    return next((d["count"] for d in dist if d["label"] == label), 0)
+
+
+def indicators(d, t):
+    """Le tableau d'indicateurs d'un périmètre (global ou projet) : mêmes clés à chaque rapport."""
+    s, g, tools, sk, se = d["summary"], d["signals"], d["tools"], d["skills"], d["sessions"]
+    q = g.get("quality_health", {}).get("sessions_with_signal", {})
+    by_tool = {x["tool_name"]: x for x in tools.get("by_tool", [])}
+    claude = next((a for a in tools.get("by_agent", []) if a["agent"] == "claude"), None)
+    bash_claude = next((x["count"] for x in (claude or {}).get("categories", []) if x["category"] == "Bash"), 0)
+    models = {k[6:]: v for k, v in t.items() if k.startswith("model:")}
+    total_models = sum(models.values()) or 1
+    top = (d.get("top-sessions") or {}).get("sessions", [])
+    return {
+        "sessions": s.get("total_sessions"),
+        "sessions_par_agent": {a: v["sessions"] for a, v in (s.get("agents") or {}).items()},
+        "jours_actifs": s.get("active_days"),
+        "messages": s.get("total_messages"),
+        "tokens_sortie": s.get("total_output_tokens"),
+        "messages_par_session": {"mediane": s.get("median_messages"), "p90": s.get("p90_messages")},
+        "projets_actifs": s.get("active_projects"),
+        "sessions_notees": g.get("scored_sessions"),
+        "score_sante_moyen": g.get("avg_health_score"),
+        "notes": g.get("grade_distribution"),
+        "issues": g.get("outcome_distribution"),
+        "sessions_avec_echec_outil_pct": g.get("tool_health", {}).get("failure_rate"),
+        "signaux_echec": g.get("tool_health", {}).get("total_failure_signals"),
+        "reprises_edition": g.get("tool_health", {}).get("total_edit_churn"),
+        "sessions_compactees": g.get("context_health", {}).get("sessions_with_compaction"),
+        "boucles_outils_en_echec": q.get("runaway_tool_loop_count"),
+        "sessions_prompts_courts": q.get("short_prompt_count"),
+        "sessions_sans_critere_succes": q.get("missing_success_criteria_count"),
+        "sessions_plus_de_2h": dist_count(se.get("duration_distribution", []), "2h+"),
+        "appels_outils_claude": (claude or {}).get("total"),
+        "part_bash_claude_pct": round(100 * bash_claude / claude["total"], 1) if claude and claude["total"] else None,
+        "bash_lecture": {k[5:]: v for k, v in t.items() if k.startswith("bash:")},
+        "appels_mcp_intellij": t.get("tool:mcp_intellij", 0),
+        "appels_gh_gpr": t.get("gh_gpr_calls", 0),
+        "erreurs_outils": {k[6:]: v for k, v in t.items() if k.startswith("error:")},
+        "exit_plan_mode": {"appels": (by_tool.get("ExitPlanMode") or {}).get("call_count", 0),
+                           "repris": (by_tool.get("ExitPlanMode") or {}).get("recovered_sequences", 0)},
+        "ask_user_question": {"appels": (by_tool.get("AskUserQuestion") or {}).get("call_count", 0),
+                              "sessions": (by_tool.get("AskUserQuestion") or {}).get("session_count", 0)},
+        "skills": {"appels": sk.get("total_skill_calls"), "distincts": sk.get("distinct_skills"),
+                   "top": [(x["skill_name"], x["call_count"]) for x in sk.get("by_skill", [])[:5]]},
+        "plus_longue_session": ({"nom": top[0].get("display_name") or top[0].get("first_message", "")[:60],
+                                 "messages": top[0].get("message_count"),
+                                 "jours": round(top[0].get("duration_min", 0) / 1440, 1)} if top else None),
+        "modeles_pct": {k: round(100 * v / total_models, 1) for k, v in sorted(models.items(), key=lambda x: -x[1])},
+    }
+
+
+def cmd_report(a):
+    base = server_url()
+    today = datetime.date.today()
+    date_from, date_to = (today - datetime.timedelta(days=a.days)).isoformat(), today.isoformat()
+    win = {"from": date_from, "to": date_to}
+
+    data = {"global": {e: api(base, e, **win) for e in ENDPOINTS}}
+    for e, v in data["global"].items():
+        save(f"{a.out}/global/{e}.json", v)
+
+    all_projects = data["global"]["projects"].get("projects", [])
+    names = {p["name"] for p in all_projects}
+    if a.project:
+        unknown = [p for p in a.project if p not in names]
+        if unknown:
+            die(f"projet(s) sans session sur la période : {', '.join(unknown)} "
+                f"(projets connus : {', '.join(sorted(names))})")
+        followed = a.project
+    else:
+        followed = [p["name"] for p in sorted(all_projects, key=lambda p: -p["messages"])[:a.top]]
+
+    for p in followed:
+        d = {e: api(base, e, project=p, **win) for e in PROJECT_ENDPOINTS}
+        d["signal-sessions"] = {s: api(base, "signal-sessions", signal=s, project=p, **win) for s in SIGNALS}
+        data[p] = d
+        for e, v in d.items():
+            save(f"{a.out}/projects/{p}/{e}.json", v)
+    data["global"]["signal-sessions"] = {s: api(base, "signal-sessions", signal=s, **win) for s in SIGNALS}
+    save(f"{a.out}/global/signal-sessions.json", data["global"]["signal-sessions"])
+
+    sessions = list_sessions(date_from, date_to)
+    by_project = collections.defaultdict(list)
+    for s in sessions:
+        if s.get("file_path"):
+            by_project[s.get("project")].append(s["file_path"])
+    stats = {"global": transcript_stats(sorted({f for fs in by_project.values() for f in fs}))}
+    for p in followed:
+        stats[p] = transcript_stats(by_project.get(p, []))
+    save(f"{a.out}/transcripts.json", stats)
+
+    ind = {"periode": win, "projets_suivis": followed,
+           "selection_projets": "--project" if a.project else f"top {a.top} en messages",
+           "global": indicators(data["global"], stats["global"]),
+           "projets": {p: indicators(data[p], stats[p]) for p in followed}}
+    save(f"{a.out}/indicators.json", ind)
+    print(f"période {date_from} → {date_to}, projets suivis : {', '.join(followed)}")
+    print(f"données dans {a.out} (indicators.json : le tableau d'indicateurs)")
+
+
+def cmd_session(a):
+    server_url()
+    sid = a.session_id
+    if not sid or sid.startswith("${"):
+        cwd = os.getcwd()
+        today = datetime.date.today().isoformat()
+        cands = [s for s in list_sessions(today, today) if s.get("cwd") == cwd]
+        if not cands:
+            die(f"aucune session du jour dans {cwd} : passer l'identifiant de session")
+        sid = max(cands, key=lambda s: s.get("ended_at") or "")["id"]
+    subprocess.run(["agentsview", "session", "sync", sid], capture_output=True)
+    session = cli_json("session", "get", sid)
+    health = cli_json("health", sid)
+    path = session.get("file_path") or next(
+        (s.get("file_path") for s in list_sessions(session["started_at"][:10], datetime.date.today().isoformat())
+         if s["id"] == session["id"]), None)
+    save(f"{a.out}/session.json", session)
+    save(f"{a.out}/health.json", health)
+    save(f"{a.out}/transcript.json", transcript_stats([path] if path else []))
+    print(f"session {session['id']} ({session.get('project')}), note {health.get('health_grade')} "
+          f"({health.get('health_score')}), données dans {a.out}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("report")
+    r.add_argument("--out", required=True)
+    r.add_argument("--days", type=int, default=30)
+    r.add_argument("--top", type=int, default=4)
+    r.add_argument("--project", action="append")
+    s = sub.add_parser("session")
+    s.add_argument("--out", required=True)
+    s.add_argument("session_id", nargs="?")
+    a = ap.parse_args()
+    {"report": cmd_report, "session": cmd_session}[a.cmd](a)
+
+
+if __name__ == "__main__":
+    main()

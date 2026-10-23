@@ -8,14 +8,16 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 
 **Fichiers** : `home/.claude/settings.json` (le profil de référence), `profiles/*.json` (surcharges, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh` ;
 plugins : `.claude-plugin/marketplace.json`,
-`plugins/{pr-comments,intellij,profiles,git-nav,notify,herdr-session,build-brief}/` (avec
+`plugins/{pr-comments,intellij,profiles,git-nav,notify,herdr-session,build-brief,session-analysis}/` (avec
 leur `setup.sh`), `install.sh plugin` (voir [Installation des plugins](#installation-des-plugins)).
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line) ; `gh`
 authentifié (plugin [`git-nav`](#git-nav), badge PR de la status line) ; Linux + GNOME pour
 les notifications (plugin [`notify`](#notify)) ;
 IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [`intellij`](#intellij)) ;
-`build-brief` dans le PATH pour Gradle (plugin [`build-brief`](#build-brief)).
+`build-brief` dans le PATH pour Gradle (plugin [`build-brief`](#build-brief)) ;
+AgentsView pour l'analyse des sessions (plugin [`session-analysis`](#session-analysis), qui
+l'installe).
 
 **Installation** : `./install.sh link`, puis `./install.sh plugin <nom>…` ou
 `./install.sh plugin --all` pour les plugins (voir [Installation des plugins](#installation-des-plugins)). Les fichiers d'état et de secrets restent locaux
@@ -51,7 +53,7 @@ réglage, la statusline) se fait donc une fois, dans le profil de référence.
 Profils versionnés : `vidal` (config complète : tous les plugins du dépôt sauf `pr-comments`,
 plus `superpowers`, à installer une fois dans Claude Code :
 `/plugin install superpowers@claude-plugins-official`), `basic` (le même sans
-`superpowers`) et `lean` (comme `basic`, mais seuls les MCP `claude.ai Atlassian MCP` et
+`superpowers` ni `session-analysis`) et `lean` (comme `basic` avec `session-analysis`, mais seuls les MCP `claude.ai Atlassian MCP` et
 `plugin:intellij:intellij` restent allumés, les autres connecteurs claude.ai étant coupés par
 url dans `deniedMcpServers`). Aucun profil par défaut à l'installation : `claude` part sur le
 profil de référence (tous les plugins du dépôt sauf `pr-comments`).
@@ -74,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br` et `/worktree` sont dans le plugin [`git-nav`](#git-nav). Un skill
+Les skills `/pr`, `/br` et `/worktree` sont dans le plugin [`git-nav`](#git-nav), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -743,6 +745,87 @@ lancés par l'IDE.
 L'ancien lien `~/.claude/rules/build-brief.md`, devenu mort, est retiré par le ménage de
 `./install.sh`, puis `~/.claude/rules/` s'il est vide ; les liens `rules` des dossiers de
 profil, devenus morts, disparaissent à la régénération qui suit.
+
+### `session-analysis`
+
+**Rôle** : analyser l'usage des agents avec [AgentsView](https://agentsview.io) — rapport
+sur les 30 derniers jours (`/session-analysis:report`) et bilan de la session en cours
+(`/session-analysis:session`), avec ce qui s'est amélioré ou dégradé et des pistes
+d'amélioration. Les deux skills ne se lancent qu'à la demande
+(`disable-model-invocation`).
+
+**Fichiers** : `plugins/session-analysis/` (`skills/{report,session}/SKILL.md`,
+`bin/agentsview-up`, `bin/session-analysis-collect`, `setup.sh` : installe AgentsView,
+`status` note s'il manque ou ne tourne pas) ; hors du plugin, le binaire `agentsview`
+(`~/.local/bin`, ou `/usr/local/bin` s'il est inscriptible) et ses données
+(`~/.agentsview/`). **Activé dans** : `vidal` et `lean`.
+
+**Prérequis** : `python3`, `curl` (installation d'AgentsView) ; Linux ou macOS. Les
+transcripts lus sont ceux de Claude Code ; les autres agents (Copilot…) ne sont vus qu'à
+travers AgentsView.
+
+#### Installation hors de ce dépôt
+
+Le plugin ne dépend pas du reste de la config :
+
+```bash
+claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
+claude plugin install session-analysis@claude-tools
+curl -fsSL https://agentsview.io/install.sh | bash        # AgentsView, si absent
+```
+
+Depuis un clone, `./install.sh plugin session-analysis` fait les deux (AgentsView n'est
+installé que s'il manque ; `agentsview update` le met à jour). Au retrait, AgentsView reste
+installé : `status` le signale avec la commande pour l'enlever.
+
+#### AgentsView
+
+`agentsview-up` (dans le PATH de l'outil Bash) lance le serveur en arrière-plan
+(`agentsview daemon start`) s'il ne tourne pas, attend qu'il réponde et écrit son URL
+(par défaut `http://127.0.0.1:8080`, interface web comprise). Les deux skills passent par
+lui.
+
+#### Collecte
+
+`session-analysis-collect` fixe la méthode, pour que deux rapports restent comparables :
+
+- `report --out <dossier> [--days 30] [--top 4] [--project <p>]…` : API AgentsView
+  (`/api/v1/analytics/*`, `from`/`to` explicites) en global puis pour chaque projet suivi
+  — les 4 plus gros de la période en messages, ou ceux passés par `--project` (nom
+  AgentsView : `claude_tools`) — et transcripts des sessions de la période
+  (`agentsview session list --include-source`, dédoublonnés par `uuid`). Écrit les réponses
+  brutes, `transcripts.json` et `indicators.json`, le tableau d'indicateurs (mêmes clés à
+  chaque fois).
+- `session --out <dossier> [<id>]` : resynchronise une session (par défaut la plus récente
+  du dossier courant) et écrit `session.json`, `health.json` (note, pénalités) et
+  `transcript.json`.
+
+Compteurs des transcripts : outils appelés, premiers mots des commandes Bash de lecture
+(`sed`, `grep`, `cat`, `find`, `python3`…), appels MCP IntelliJ, appels `gh`/`gpr`
+(seulement quand ils sont la commande, pas un mot d'un chemin), erreurs d'outils par type
+(refus d'isolation worktree, hook `[nom]`, refus de l'utilisateur par outil, classifieur
+du mode auto, projet inconnu du MCP IntelliJ, échec `gh`/`gpr`), modèles.
+
+#### `/session-analysis:report`
+
+`/session-analysis:report [projet…] [--days N]` : collecte, puis rapport en français —
+méthode, vue d'ensemble, vue par projet, évolution (amélioré / dégradé / stable),
+constats avec un tableau par projet et une colonne *Concerné*, synthèse constats ×
+projets, pistes d'amélioration avec l'indicateur qui dira si elles ont marché. Le skill
+porte les règles d'analyse (vérifier une cause dans les transcripts : l'extrait de
+`signal-sessions` est le premier message de la session, pas l'appel en échec ; « trop peu
+pour conclure » sous 5 sessions notées…). Ce qui est propre au dépôt — où ranger le
+rapport et ses indicateurs bruts, avec quel rapport précédent le comparer, que faire des pistes — vient de ses
+consignes (`AGENTS.md`, `CLAUDE.md`) ; sans consigne, le rapport est rendu dans la
+conversation. Pour ce dépôt : [docs/README.md](docs/README.md).
+
+#### `/session-analysis:session`
+
+`/session-analysis:session [id]` : bilan court de la session en cours (identifiant donné au
+skill par `${CLAUDE_SESSION_ID}`) ou de celle passée en argument — note et pénalités,
+volume, échecs et refus avec leur cause, allers-retours, qualité des prompts, respect des
+consignes chargées —, puis 3 pistes au plus et un conseil pour la suite. Rendu dans la
+conversation, rien n'est écrit.
 
 ## Gabarit pour un nouveau plugin
 

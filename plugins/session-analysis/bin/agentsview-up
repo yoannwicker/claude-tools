@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# agentsview-up — s'assure qu'AgentsView tourne et écrit son URL sur stdout.
+#   agentsview-up    lance le serveur en arrière-plan (agentsview daemon start) s'il ne
+#                    tourne pas, attend qu'il réponde, puis écrit son URL
+# Code retour 1 si agentsview n'est pas installé (le message dit comment l'installer).
+set -euo pipefail
+
+if ! command -v agentsview >/dev/null 2>&1; then
+  echo "agentsview n'est pas installé : ./install.sh plugin session-analysis (depuis claude-tools)," >&2
+  echo "ou curl -fsSL https://agentsview.io/install.sh | bash" >&2
+  exit 1
+fi
+
+url_of_running() {
+  agentsview serve status 2>/dev/null | sed -n 's/^agentsview running at \(http[^ ]*\).*/\1/p' | head -1
+}
+
+url=$(url_of_running)
+if [[ -z $url ]]; then
+  agentsview daemon start >&2
+  for _ in $(seq 1 60); do
+    url=$(url_of_running)
+    [[ -n $url ]] && curl -fsS -m 2 -o /dev/null "$url/api/v1/analytics/summary" 2>/dev/null && break
+    sleep 1
+  done
+  [[ -n $url ]] || { echo "agentsview ne répond pas après 60 s (agentsview daemon status)" >&2; exit 1; }
+fi
+echo "$url"

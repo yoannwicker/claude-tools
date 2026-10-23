@@ -39,6 +39,11 @@
       "name": "build-brief",
       "source": "./plugins/build-brief",
       "description": "Consigne build-brief pour Gradle et garde-fou qui refuse un gradle/./gradlew lancé sans build-brief"
+    },
+    {
+      "name": "session-analysis",
+      "source": "./plugins/session-analysis",
+      "description": "Skills /session-analysis:report et /session-analysis:session : analyse des sessions d'agents avec AgentsView (30 derniers jours ou session en cours), ce qui s'est amélioré ou dégradé, pistes d'amélioration ; installe AgentsView"
     }
   ]
 }

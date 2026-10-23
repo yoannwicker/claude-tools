@@ -7,6 +7,7 @@
     "notify@claude-tools": true,
     "herdr-session@claude-tools": true,
     "build-brief@claude-tools": true,
+    "session-analysis@claude-tools": true,
     "superpowers@claude-plugins-official": true
   }
 }

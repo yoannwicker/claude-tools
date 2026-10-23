@@ -1,0 +1,530 @@
+{
+ "periode": {
+  "from": "2026-09-23",
+  "to": "2026-10-23"
+ },
+ "projets_suivis": [
+  "renoshield",
+  "claude_tools",
+  "petsitter_harnessed",
+  "renoshield_backend_nullaway"
+ ],
+ "selection_projets": "top 4 en messages",
+ "global": {
+  "sessions": 270,
+  "sessions_par_agent": {
+   "claude": 245,
+   "copilot": 25
+  },
+  "jours_actifs": 24,
+  "messages": 12047,
+  "tokens_sortie": 6650410,
+  "messages_par_session": {
+   "mediane": 23,
+   "p90": 95
+  },
+  "projets_actifs": 13,
+  "sessions_notees": 138,
+  "score_sante_moyen": 89,
+  "notes": {
+   "A": 84,
+   "B": 37,
+   "D": 3,
+   "C": 14
+  },
+  "issues": {
+   "errored": 1,
+   "completed": 129,
+   "abandoned": 5,
+   "unknown": 3
+  },
+  "sessions_avec_echec_outil_pct": 68.1,
+  "signaux_echec": 382,
+  "reprises_edition": 55,
+  "sessions_compactees": 19,
+  "boucles_outils_en_echec": 3,
+  "sessions_prompts_courts": 77,
+  "sessions_sans_critere_succes": 27,
+  "sessions_plus_de_2h": 69,
+  "appels_outils_claude": 5457,
+  "part_bash_claude_pct": 70.7,
+  "bash_lecture": {
+   "cat": 197,
+   "find": 15,
+   "grep": 253,
+   "head": 5,
+   "jq": 14,
+   "ls": 68,
+   "python3": 423,
+   "sed": 285,
+   "tail": 5
+  },
+  "appels_mcp_intellij": 83,
+  "appels_gh_gpr": 547,
+  "erreurs_outils": {
+   "MCP IntelliJ : projet inconnu": 11,
+   "autre Artifact": 2,
+   "autre Bash": 84,
+   "autre Edit": 4,
+   "autre EnterWorktree": 3,
+   "autre ExitPlanMode": 2,
+   "autre ExitWorktree": 2,
+   "autre ReportFindings": 2,
+   "autre Write": 1,
+   "autre mcp__claude_ai_Atlassian_Rovo__createJiraIssue": 1,
+   "autre mcp__claude_ai_Atlassian_Rovo__getJiraIssue": 4,
+   "autre mcp__claude_ai_Google_Drive__get_file_metadata": 1,
+   "autre mcp__claude_ai_Google_Drive__read_file_content": 3,
+   "autre mcp__plugin_intellij_intellij__create_new_file": 1,
+   "hook git-guard": 18,
+   "refus classifieur mode auto": 19,
+   "refus isolation worktree": 61,
+   "refus utilisateur AskUserQuestion": 20,
+   "refus utilisateur Bash": 9,
+   "refus utilisateur Edit": 2,
+   "refus utilisateur ExitPlanMode": 61,
+   "refus utilisateur Write": 5,
+   "échec gh/gpr": 13
+  },
+  "exit_plan_mode": {
+   "appels": 120,
+   "repris": 59
+  },
+  "ask_user_question": {
+   "appels": 172,
+   "sessions": 71
+  },
+  "skills": {
+   "appels": 80,
+   "distincts": 20,
+   "top": [
+    [
+     "code-review",
+     17
+    ],
+    [
+     "pr",
+     13
+    ],
+    [
+     "domain-strong-typing",
+     11
+    ],
+    [
+     "hexagonal-architecture-search",
+     5
+    ],
+    [
+     "plugin-authoring",
+     5
+    ]
+   ]
+  },
+  "plus_longue_session": {
+   "nom": "ajuster-nullable-use-cases",
+   "messages": 386,
+   "jours": 7.8
+  },
+  "modeles_pct": {
+   "claude-opus-5-5": 93.7,
+   "claude-fable-5-1": 6.0,
+   "<synthetic>": 0.2,
+   "claude-haiku-5-5": 0.1
+  }
+ },
+ "projets": {
+  "renoshield": {
+   "sessions": 179,
+   "sessions_par_agent": {
+    "copilot": 25,
+    "claude": 154
+   },
+   "jours_actifs": 23,
+   "messages": 8836,
+   "tokens_sortie": 4781296,
+   "messages_par_session": {
+    "mediane": 25,
+    "p90": 130
+   },
+   "projets_actifs": 1,
+   "sessions_notees": 89,
+   "score_sante_moyen": 88.8,
+   "notes": {
+    "A": 53,
+    "B": 25,
+    "C": 8,
+    "D": 3
+   },
+   "issues": {
+    "abandoned": 4,
+    "errored": 1,
+    "unknown": 1,
+    "completed": 83
+   },
+   "sessions_avec_echec_outil_pct": 67.4,
+   "signaux_echec": 239,
+   "reprises_edition": 45,
+   "sessions_compactees": 6,
+   "boucles_outils_en_echec": 2,
+   "sessions_prompts_courts": 51,
+   "sessions_sans_critere_succes": 12,
+   "sessions_plus_de_2h": 42,
+   "appels_outils_claude": 3237,
+   "part_bash_claude_pct": 70.3,
+   "bash_lecture": {
+    "cat": 103,
+    "find": 8,
+    "grep": 176,
+    "head": 4,
+    "jq": 2,
+    "ls": 31,
+    "python3": 219,
+    "sed": 163,
+    "tail": 3
+   },
+   "appels_mcp_intellij": 32,
+   "appels_gh_gpr": 413,
+   "erreurs_outils": {
+    "autre Artifact": 2,
+    "autre Bash": 53,
+    "autre Edit": 3,
+    "autre EnterWorktree": 3,
+    "autre ExitWorktree": 1,
+    "autre ReportFindings": 1,
+    "autre Write": 1,
+    "autre mcp__claude_ai_Atlassian_Rovo__createJiraIssue": 1,
+    "autre mcp__claude_ai_Atlassian_Rovo__getJiraIssue": 4,
+    "autre mcp__claude_ai_Google_Drive__get_file_metadata": 1,
+    "autre mcp__claude_ai_Google_Drive__read_file_content": 3,
+    "refus classifieur mode auto": 13,
+    "refus isolation worktree": 48,
+    "refus utilisateur AskUserQuestion": 12,
+    "refus utilisateur Bash": 5,
+    "refus utilisateur ExitPlanMode": 30,
+    "refus utilisateur Write": 1,
+    "échec gh/gpr": 9
+   },
+   "exit_plan_mode": {
+    "appels": 63,
+    "repris": 28
+   },
+   "ask_user_question": {
+    "appels": 114,
+    "sessions": 47
+   },
+   "skills": {
+    "appels": 27,
+    "distincts": 7,
+    "top": [
+     [
+      "code-review",
+      15
+     ],
+     [
+      "pr",
+      5
+     ],
+     [
+      "frontend-mock-first",
+      2
+     ],
+     [
+      "worktree",
+      2
+     ],
+     [
+      "anthropic-skills:google-workspace",
+      1
+     ]
+    ]
+   },
+   "plus_longue_session": {
+    "nom": "ajuster-nullable-use-cases",
+    "messages": 386,
+    "jours": 7.8
+   },
+   "modeles_pct": {
+    "claude-opus-5-5": 91.7,
+    "claude-fable-5-1": 8.2,
+    "<synthetic>": 0.1
+   }
+  },
+  "claude_tools": {
+   "sessions": 43,
+   "sessions_par_agent": {
+    "claude": 43
+   },
+   "jours_actifs": 10,
+   "messages": 1704,
+   "tokens_sortie": 1135544,
+   "messages_par_session": {
+    "mediane": 12,
+    "p90": 95
+   },
+   "projets_actifs": 1,
+   "sessions_notees": 27,
+   "score_sante_moyen": 91,
+   "notes": {
+    "A": 19,
+    "B": 5,
+    "C": 3
+   },
+   "issues": {
+    "completed": 26,
+    "unknown": 1
+   },
+   "sessions_avec_echec_outil_pct": 63,
+   "signaux_echec": 64,
+   "reprises_edition": 8,
+   "sessions_compactees": 9,
+   "boucles_outils_en_echec": 0,
+   "sessions_prompts_courts": 10,
+   "sessions_sans_critere_succes": 7,
+   "sessions_plus_de_2h": 14,
+   "appels_outils_claude": 1266,
+   "part_bash_claude_pct": 71.5,
+   "bash_lecture": {
+    "cat": 50,
+    "find": 5,
+    "grep": 42,
+    "head": 1,
+    "jq": 12,
+    "ls": 25,
+    "python3": 127,
+    "sed": 78,
+    "tail": 1
+   },
+   "appels_mcp_intellij": 5,
+   "appels_gh_gpr": 45,
+   "erreurs_outils": {
+    "MCP IntelliJ : projet inconnu": 5,
+    "autre Bash": 15,
+    "autre ExitPlanMode": 1,
+    "refus classifieur mode auto": 2,
+    "refus utilisateur AskUserQuestion": 3,
+    "refus utilisateur Bash": 2,
+    "refus utilisateur Edit": 1,
+    "refus utilisateur ExitPlanMode": 27,
+    "refus utilisateur Write": 2,
+    "échec gh/gpr": 2
+   },
+   "exit_plan_mode": {
+    "appels": 49,
+    "repris": 26
+   },
+   "ask_user_question": {
+    "appels": 27,
+    "sessions": 11
+   },
+   "skills": {
+    "appels": 19,
+    "distincts": 7,
+    "top": [
+     [
+      "pr",
+      7
+     ],
+     [
+      "plugin-authoring",
+      5
+     ],
+     [
+      "profile",
+      2
+     ],
+     [
+      "worktree",
+      2
+     ],
+     [
+      "br",
+      1
+     ]
+    ]
+   },
+   "plus_longue_session": {
+    "nom": "explain-setup-plugins-script",
+    "messages": 246,
+    "jours": 0.3
+   },
+   "modeles_pct": {
+    "claude-opus-5-5": 97.7,
+    "claude-fable-5-1": 1.6,
+    "<synthetic>": 0.4,
+    "claude-haiku-5-5": 0.2
+   }
+  },
+  "petsitter_harnessed": {
+   "sessions": 17,
+   "sessions_par_agent": {
+    "claude": 17
+   },
+   "jours_actifs": 5,
+   "messages": 797,
+   "tokens_sortie": 413258,
+   "messages_par_session": {
+    "mediane": 23,
+    "p90": 101
+   },
+   "projets_actifs": 1,
+   "sessions_notees": 10,
+   "score_sante_moyen": 87.8,
+   "notes": {
+    "A": 5,
+    "B": 5
+   },
+   "issues": {
+    "completed": 10
+   },
+   "sessions_avec_echec_outil_pct": 90,
+   "signaux_echec": 36,
+   "reprises_edition": 2,
+   "sessions_compactees": 3,
+   "boucles_outils_en_echec": 0,
+   "sessions_prompts_courts": 6,
+   "sessions_sans_critere_succes": 5,
+   "sessions_plus_de_2h": 8,
+   "appels_outils_claude": 529,
+   "part_bash_claude_pct": 64.3,
+   "bash_lecture": {
+    "cat": 26,
+    "find": 1,
+    "grep": 9,
+    "ls": 5,
+    "python3": 49,
+    "sed": 23
+   },
+   "appels_mcp_intellij": 35,
+   "appels_gh_gpr": 25,
+   "erreurs_outils": {
+    "MCP IntelliJ : projet inconnu": 2,
+    "autre Bash": 4,
+    "autre Edit": 1,
+    "autre ExitPlanMode": 1,
+    "autre mcp__plugin_intellij_intellij__create_new_file": 1,
+    "hook git-guard": 18,
+    "refus classifieur mode auto": 1,
+    "refus isolation worktree": 2,
+    "refus utilisateur AskUserQuestion": 1,
+    "refus utilisateur Bash": 1,
+    "refus utilisateur Edit": 1,
+    "refus utilisateur ExitPlanMode": 2,
+    "refus utilisateur Write": 1
+   },
+   "exit_plan_mode": {
+    "appels": 4,
+    "repris": 3
+   },
+   "ask_user_question": {
+    "appels": 18,
+    "sessions": 6
+   },
+   "skills": {
+    "appels": 33,
+    "distincts": 11,
+    "top": [
+     [
+      "domain-strong-typing",
+      10
+     ],
+     [
+      "hexagonal-architecture-search",
+      5
+     ],
+     [
+      "business-glossary",
+      4
+     ],
+     [
+      "deliver-story",
+      3
+     ],
+     [
+      "domain-stereotypes",
+      3
+     ]
+    ]
+   },
+   "plus_longue_session": {
+    "nom": "Branche refactor/domain-stereotypes",
+    "messages": 188,
+    "jours": 6.1
+   },
+   "modeles_pct": {
+    "claude-opus-5-5": 99.7,
+    "<synthetic>": 0.3
+   }
+  },
+  "renoshield_backend_nullaway": {
+   "sessions": 5,
+   "sessions_par_agent": {
+    "claude": 5
+   },
+   "jours_actifs": 2,
+   "messages": 331,
+   "tokens_sortie": 132187,
+   "messages_par_session": {
+    "mediane": 37,
+    "p90": 173
+   },
+   "projets_actifs": 1,
+   "sessions_notees": 2,
+   "score_sante_moyen": 67,
+   "notes": {
+    "C": 2
+   },
+   "issues": {
+    "completed": 2
+   },
+   "sessions_avec_echec_outil_pct": 100,
+   "signaux_echec": 23,
+   "reprises_edition": 0,
+   "sessions_compactees": 1,
+   "boucles_outils_en_echec": 0,
+   "sessions_prompts_courts": 2,
+   "sessions_sans_critere_succes": 1,
+   "sessions_plus_de_2h": 2,
+   "appels_outils_claude": 214,
+   "part_bash_claude_pct": 81.8,
+   "bash_lecture": {
+    "cat": 5,
+    "grep": 14,
+    "ls": 2,
+    "python3": 17,
+    "sed": 11,
+    "tail": 1
+   },
+   "appels_mcp_intellij": 7,
+   "appels_gh_gpr": 24,
+   "erreurs_outils": {
+    "autre Bash": 9,
+    "refus classifieur mode auto": 3,
+    "refus isolation worktree": 7,
+    "refus utilisateur ExitPlanMode": 1,
+    "refus utilisateur Write": 1,
+    "échec gh/gpr": 2
+   },
+   "exit_plan_mode": {
+    "appels": 2,
+    "repris": 1
+   },
+   "ask_user_question": {
+    "appels": 0,
+    "sessions": 0
+   },
+   "skills": {
+    "appels": 0,
+    "distincts": 0,
+    "top": []
+   },
+   "plus_longue_session": {
+    "nom": "Maintien du fonctionnement existant",
+    "messages": 173,
+    "jours": 2.0
+   },
+   "modeles_pct": {
+    "claude-opus-5-5": 100.0
+   }
+  }
+ }
+}

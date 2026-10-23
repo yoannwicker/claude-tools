@@ -31,6 +31,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Plugin `notify` (notifications desktop) | `./install.sh plugin notify` | `python3-gi`, `gdbus`, `xprop`, `jq`, gnome-terminal |
 | Plugin `herdr-session` (reprise des sessions par herdr) | `./install.sh plugin herdr-session` | herdr et son intégration Claude (`./setup/20-herdr.sh`) |
 | Plugin `build-brief` (consigne et garde-fou Gradle) | `./install.sh plugin build-brief` | `build-brief` dans le PATH, `python3` |
+| Plugin `session-analysis` (analyse des sessions avec AgentsView, qu'il installe) | `./install.sh plugin session-analysis` | `python3`, `curl` |
 
 Plusieurs plugins d'un coup : `./install.sh plugin <nom>…`, tous : `./install.sh plugin --all`
 (c'est ce que fait `./install.sh`). Relancer met à jour. `./install.sh plugin --remove <nom>…`
@@ -73,6 +74,9 @@ demander une déconnexion/reconnexion de session.
   la charger en contexte et se placer dessus (branche courante ou worktree) ;
   `/worktree clear` supprime les worktrees qu'aucune session n'utilise (plugin `git-nav` ;
   `gpr`, `gbr` dans le terminal).
+- `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des
+  agents (AgentsView), rangé dans `docs/analyses-sessions/` pour ce dépôt ;
+  `/session-analysis:session` : bilan de la session en cours (plugin `session-analysis`).
 - `dot` (lié dans `~/.local/bin`) : dérive git, état des liens et des plugins, `mise upgrade`,
   `herdr update`, `claude update`.
 - `./install.sh adopt <fichier>` : versionner un nouveau fichier de `$HOME` (déplacé dans
@@ -98,10 +102,11 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     d'aguiddir/claude-config), intellij/, profiles/ (bin/claude-profile, shell/claude-profile.sh),
                     git-nav/ (skills /pr, /br, /worktree, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
-                    build-brief/ (consigne et garde-fou Gradle)
+                    build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
+                    /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect})
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, basic, lean —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
-docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés),
+docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),
                     pistes-amelioration/ (pistes préfixées par leur priorité 1, 2, 3)
 CLAUDE-CODE.md      Claude Code : settings, profils, plugins
 TOOLS.md            outils hors Claude : cl, extension GNOME, herdr, mise

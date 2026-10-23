@@ -64,7 +64,8 @@ Un plugin peut être installé seul, sans le reste de la config : sa sous-sectio
 ## Analyses de sessions et pistes d'amélioration
 
 Rapports d'analyse et pistes retenues : voir [docs/README.md](docs/README.md) (nommage,
-priorités, statuts).
+priorités, statuts, et ce que `/session-analysis:report` doit faire dans ce dépôt :
+emplacement du rapport, comparaison avec le précédent).
 
 ## Ne jamais ajouter
 
