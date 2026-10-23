@@ -61,6 +61,11 @@ Un plugin peut être installé seul, sans le reste de la config : sa sous-sectio
   toucher au `settings.json` versionné) : `./install.sh plugin <plugin>`, `status`,
   `plugin --remove <plugin>`, `status`.
 
+## Analyses de sessions et pistes d'amélioration
+
+Rapports d'analyse et pistes retenues : voir [docs/README.md](docs/README.md) (nommage,
+priorités, statuts).
+
 ## Ne jamais ajouter
 
 Ne jamais versionner (ni `./install.sh adopt`) : `~/.claude/.credentials.json`, `~/.claude.json` (tokens OAuth, état, serveurs MCP
