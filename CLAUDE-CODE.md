@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br` et `/worktree` sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits` et `:pr-sync` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis). Un skill
+Les skills `/pr`, `/br` et `/worktree` sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync` et `:ready` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -569,10 +569,10 @@ ajoute des alias.
 
 **Rôle** : remettre une branche au propre avant relecture ou avant merge — réécrire ses commits
 (`/git-tidy:commits`), puis aligner la description de sa PR et le ticket lié sur ce qui a
-changé (`/git-tidy:pr-sync`). Les deux skills ne se lancent qu'à la demande
+changé (`/git-tidy:pr-sync`), ou les deux d'affilée (`/git-tidy:ready`). Les skills ne se lancent qu'à la demande
 (`disable-model-invocation`) et n'écrivent rien hors du dépôt local sans accord.
 
-**Fichiers** : `plugins/git-tidy/` (`skills/{commits,pr-sync}/SKILL.md`) ; rien hors du
+**Fichiers** : `plugins/git-tidy/` (`skills/{commits,pr-sync,ready}/SKILL.md`) ; rien hors du
 plugin. **Activé dans** : tous les profils.
 
 **Prérequis** : `git` ; `gh` authentifié (base de la PR, `/git-tidy:pr-sync`) ; pour JIRA, un
@@ -610,12 +610,14 @@ en cours.
 - **Push** : toujours demandé, par `--force-with-lease` sur le SHA distant connu ; pas
   proposé si quelqu'un a poussé sur la branche entre-temps.
 - Propose ensuite de vérifier que chaque commit compile (`git rebase --exec`), de supprimer
-  la sauvegarde, et `/git-tidy:pr-sync` si la branche a une PR.
+  la sauvegarde, et `/git-tidy:pr-sync` si la branche a une PR (sauf lancé par `ready`).
 
 #### `/git-tidy:pr-sync`
 
-`/git-tidy:pr-sync [numéro]` : PR passée en argument, sinon celle de la branche courante
-(sans PR : propose d'en créer une en brouillon).
+`/git-tidy:pr-sync [numéro]` : PR passée en argument, sinon la PR ou la branche en contexte
+dans la conversation (`/git-nav:pr`, `/git-nav:br`, worktree, PR dont on vient de parler),
+sinon celle de la branche courante — jamais la branche par défaut (`main`…) : demandée s'il
+n'y a rien d'autre ou plusieurs candidats (sans PR : propose d'en créer une en brouillon).
 
 - **Ticket** : cherché dans les issues que la PR ferme, puis le nom de branche, le titre, la
   description et les commits (clé JIRA `ABC-123`, issue `#123`) ; demandé s'il y en a
@@ -630,6 +632,24 @@ en cours.
 - Brouillons montrés, puis *PR et ticket*, *PR seulement*, *Ajuster* ou *Annuler* ; les
   écritures (`gh pr edit`, commentaire ou édition JIRA, `gh issue comment`/`edit`) ne sont
   pas pré-autorisées dans le skill.
+
+#### `/git-tidy:ready`
+
+`/git-tidy:ready [numéro]` : enchaîne obligatoirement `/git-tidy:commits` (base : celle de
+la PR) puis `/git-tidy:pr-sync`, en suivant leurs `SKILL.md` (les deux skills ne sont pas
+invocables par Claude). PR choisie comme pour `pr-sync` (argument, puis PR ou branche en
+contexte, puis branche courante, jamais la branche par défaut).
+
+- Refuse de partir sur une PR fermée ou mergée, ou si la branche n'est pas la branche
+  courante.
+- Sans PR : propose d'en créer une en brouillon (*Créer en brouillon* ou *Annuler*) ; elle
+  est créée après `commits` (branche poussée d'abord si besoin), puis `pr-sync` continue
+  sur elle.
+- Si `commits` s'arrête (modifications non commitées, opération git en cours, *Annuler*,
+  retour à la sauvegarde…), `ready` s'arrête aussi ; seul un historique déjà propre laisse
+  passer à `pr-sync`.
+- Mêmes accords que les deux skills (plan, push, publication) ; finit par un résumé :
+  commits réécrits, sauvegarde, push, liens publiés.
 
 ### `notify`
 

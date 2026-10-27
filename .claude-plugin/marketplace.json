@@ -28,7 +28,7 @@
     {
       "name": "git-tidy",
       "source": "./plugins/git-tidy",
-      "description": "Skills /git-tidy:commits et /git-tidy:pr-sync : remettre au propre les commits d'une branche (découpage, messages, ordre), puis aligner la description de la PR sur ce qui a changé et le ticket JIRA ou l'issue GitHub lié"
+      "description": "Skills /git-tidy:commits, /git-tidy:pr-sync et /git-tidy:ready : remettre au propre les commits d'une branche (découpage, messages, ordre), puis aligner la description de la PR sur ce qui a changé et le ticket JIRA ou l'issue GitHub lié, séparément ou d'affilée"
     },
     {
       "name": "notify",

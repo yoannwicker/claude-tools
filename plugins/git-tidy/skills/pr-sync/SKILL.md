@@ -14,7 +14,15 @@ par appel Bash.
 
 ## 1. La PR
 
-- Argument numérique → cette PR ; sinon la PR de la branche courante (`gh pr view`).
+- Choix de la PR, dans l'ordre :
+  1. argument numérique → cette PR ;
+  2. sinon la PR ou la branche en contexte dans la conversation (chargée par
+     `/git-nav:pr` ou `/git-nav:br`, worktree ouvert, PR ou branche dont on vient de
+     parler), sauf la branche par défaut du dépôt (`main`, `master`…) : sa PR
+     (`gh pr view <branche>`) ;
+  3. sinon la branche courante, si ce n'est pas la branche par défaut (`gh pr view`) ;
+  4. sinon (plusieurs candidats, ou rien hors de la branche par défaut) : demander
+     (`AskUserQuestion`, header « PR »).
 - `gh pr view <n> --json number,url,title,body,state,isDraft,baseRefName,headRefName,commits,files,closingIssuesReferences`.
 - Pas de PR : le dire, proposer d'en créer une en brouillon
   (`gh pr create --draft`, avec le titre et la description rédigés comme à l'étape 4) et
