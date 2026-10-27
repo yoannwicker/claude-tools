@@ -568,7 +568,8 @@ ajoute des alias.
 ### `notify`
 
 **Rôle** : notifications desktop GNOME aux événements de Claude Code (fin de tour, erreur,
-permission, question) ; un clic ramène l'onglet gnome-terminal de la session.
+permission, question) ; un clic ramène la session au premier plan (fenêtre Herdr UI ou onglet
+gnome-terminal).
 
 **Fichiers** : `plugins/notify/` (`hooks/hooks.json`,
 `scripts/{notify.sh,notify-click.sh,claude-notify.py}`, `setup.sh`) ; hors du plugin, le lien
@@ -577,7 +578,7 @@ permission, question) ; un clic ramène l'onglet gnome-terminal de la session.
 **Activé dans** : `vidal` et `basic`.
 
 **Prérequis** : GNOME Shell + gnome-terminal (X11 : `xprop`), `python3-gi` avec
-`Notify 0.7`, `gdbus`, `jq` ; herdr facultatif (voir [Sans et avec herdr](#sans-et-avec-herdr)). `setup/30-gnome.sh` signale ce qui manque.
+`Notify 0.7`, `gdbus`, `jq` ; herdr et Herdr UI facultatifs (voir [Sans et avec herdr](#sans-et-avec-herdr)). `setup/30-gnome.sh` signale ce qui manque.
 Pas de tests.
 
 #### Installation hors de ce dépôt
@@ -608,7 +609,7 @@ Chaîne : `notify.sh` (lit le JSON de l'événement, construit titre et corps �
 session, dossier ou workspace herdr, branche — et rend la main tout de suite) →
 `claude-notify.py` (libnotify via `gi`, affiche, mémorise la notification comme *en
 attente* dans `~/.local/state/claude-notify/`, suit le clic) → `notify-click.sh` (`--open`
-ramène l'onglet gnome-terminal de la session au premier plan via `gdbus`,
+ramène la fenêtre Herdr UI ou l'onglet gnome-terminal de la session au premier plan,
 `--clear-session` / `--clear-all` ferment les notifications en attente). Permission et
 question restent à l'écran (urgence critique) ; `idle_prompt` et `auth_success` sont
 ignorées.
@@ -634,12 +635,17 @@ bloque pas le hook (on retombe sur ce qu'il sait sans herdr).
 | Titre : nom de la session | `customTitle` ou `aiTitle` du transcript, sinon nom du dossier | idem, sinon agent et titre du pane (`herdr pane get`) |
 | Corps : lieu | nom du dossier (`cwd`) | « label (#n) » du workspace (`herdr workspace get`) ; dossier s'il n'a pas de label |
 | Corps : branche | `git rev-parse` dans `cwd` (repli : transcript) | idem |
-| Silence | jamais | pane focalisé dans herdr et fenêtre X active = un terminal (`xprop` ne dit pas lequel) |
+| Silence | jamais | pane focalisé dans herdr et fenêtre X active = un terminal ou Herdr UI (`xprop` ne dit pas lequel) |
 | Gardé pour le clic (`~/.local/state/claude-notify/<id>.json`) | `tty` de l'onglet (plus haut ancêtre qui en a un), `where` | `pane_id`, `herdr`, `ws_label`, `ws_id`, `session_id` |
 | Clic : 1. se placer dans la session | — | `herdr agent focus <pane_id>` : workspace, onglet et pane ; pane disparu : le pane où tourne la session (`agent_session` de `herdr pane list`, session reprise ailleurs), sinon `herdr workspace focus <ws_id>` |
-| Clic : 2. trouver l'onglet gnome-terminal | titre marqueur `Claude Code · <dossier> (pts/N)` écrit sur le tty (OSC 2), onglet cherché par ce titre | onglet titré `*: <label du workspace atteint>`, titre écrit par herdr (`ui.window_title`) avec ~100 ms de retard après le focus, attendu jusqu'à 1 s avant de parcourir les onglets ; workspace sans label : étape sautée |
-| Clic : 3. repli | première fenêtre gnome-terminal | idem |
+| Clic : 2. Herdr UI | — | s'il tourne : `herdr-gpui window focus` sur sa fenêtre qui montre le workspace (elle suit le focus de herdr), sinon sa première fenêtre ; s'arrête là |
+| Clic : 3. trouver l'onglet gnome-terminal | titre marqueur `Claude Code · <dossier> (pts/N)` écrit sur le tty (OSC 2), onglet cherché par ce titre | onglet titré `*: <label du workspace atteint>`, titre écrit par herdr (`ui.window_title`) avec ~100 ms de retard après le focus, attendu jusqu'à 1 s avant de parcourir les onglets ; workspace sans label : étape sautée |
+| Clic : 4. repli | première fenêtre gnome-terminal | idem |
 | Événements, urgence, effacement, extension GNOME | identiques | identiques |
+
+Herdr UI ([TOOLS.md](TOOLS.md#herdr-ui), client graphique tiers de herdr) est détecté au clic, sans réglage : `herdr-gpui window list` échoue s'il n'est pas lancé,
+et on passe à gnome-terminal. Ses notifications système (`ui.toast.delivery = "system"`) restent
+coupées, pour la même raison que les toasts de herdr.
 
 Le titre d'onglet que cherche le clic sous herdr vient de `ui.window_title`, fixé à
 `"{hostname}: {workspace}"` dans `home/.config/herdr/config.toml` (voir

@@ -130,8 +130,8 @@ pas par `dot`. Désinstallation : `sudo apt remove herdr-gpui` (ou l'équivalent
   [Herdr UI](https://github.com/apps/herdr-ui), qui ne lit que les dépôts des comptes où elle
   est installée (l'installer aussi sur le compte perso pour ses dépôts), ou par **Use GitHub CLI
   authentication** (token de `gh`).
-- Notifications : celles du plugin [`notify`](CLAUDE-CODE.md#sans-et-avec-herdr) ;
-  `ui.toast.delivery` reste `off` (sinon doublons).
+- Notifications : celles du plugin [`notify`](CLAUDE-CODE.md#sans-et-avec-herdr), dont le clic
+  amène la fenêtre Herdr UI au premier plan ; `ui.toast.delivery` reste `off` (sinon doublons).
 
 ## mise
 

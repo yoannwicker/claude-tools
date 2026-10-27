@@ -54,10 +54,10 @@ if [ -n "$HERDR_PANE_ID" ]; then
   where=${ws:-$where}
 
   # Stay quiet when I am already looking at this pane: shown in herdr and
-  # the active X11 window is a terminal (xprop cannot tell which one).
+  # the active X11 window is a terminal or Herdr UI (xprop cannot tell which one).
   if [ "$($jq -r '.result.pane.focused' <<<"$pane" 2>/dev/null)" = true ]; then
     win=$(xprop -root _NET_ACTIVE_WINDOW 2>/dev/null | awk '{print $NF}')
-    xprop -id "$win" WM_CLASS 2>/dev/null | grep -qi terminal && exit 0
+    xprop -id "$win" WM_CLASS 2>/dev/null | grep -qiE 'terminal|herdr-gpui' && exit 0
   fi
 fi
 
