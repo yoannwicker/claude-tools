@@ -25,7 +25,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 |---|---|---|
 | Claude Code (settings, status line) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
 | Plugin `profiles` (commande `/profile`, `claude-profile` et fonction shell `claude` pour le terminal) | `./install.sh plugin profiles` | `jq` ; le profil de référence de `./install.sh link` |
-| Plugin `git-nav` (skills `/pr`, `/br`, `/worktree` ; `gpr`, `gbr` pour le terminal) | `./install.sh plugin git-nav` | `git` ; `gh` authentifié |
+| Plugin `git-nav` (skills `/pr`, `/br`, `/worktree`, ménage après un merge ; `gpr`, `gbr` pour le terminal) | `./install.sh plugin git-nav` | `git` ; `gh` authentifié |
 | Plugin `git-tidy` (skills `/git-tidy:commits`, `/git-tidy:pr-sync`, `/git-tidy:ready` : commits remis au propre, PR et ticket JIRA en phase) | `./install.sh plugin git-tidy` | `git` ; `gh` authentifié ; MCP Atlassian pour JIRA |
 | Plugin `pr-comments` (fils de review non résolus) | `./install.sh plugin pr-comments` | `claude` ≥ 2.1.287, `gh` authentifié |
 | Plugin `intellij` (MCP IntelliJ + consigne) | `./install.sh plugin intellij` | IntelliJ avec le serveur MCP sur le port 64342 |
@@ -74,8 +74,10 @@ demander une déconnexion/reconnexion de session.
   résoudre (plugin `pr-comments`).
 - `/pr [numéro | mots-clés]`, `/br [nom | mots-clés]` : trouver une PR ou une branche,
   la charger en contexte et se placer dessus (branche courante ou worktree) ;
-  `/worktree clear` supprime les worktrees qu'aucune session n'utilise (plugin `git-nav` ;
-  `gpr`, `gbr` dans le terminal).
+  `/worktree clear` supprime les worktrees qu'aucune session n'utilise ;
+  après un merge (`gh pr merge`, `git merge`, ou « c'est mergé »), Claude propose de
+  supprimer la branche mergée, son worktree et sa branche distante (plugin `git-nav` ;
+  `gpr`, `gbr` dans le terminal, `gbr cleanup` pour ce ménage).
 - `/git-tidy:commits [base]` : redécouper et reformuler les commits d'une branche avant
   relecture ou avant merge (sauvegarde, push forcé seulement sur accord) ; `/git-tidy:pr-sync` : remettre
   la description de la PR en phase et la raccorder au ticket JIRA ou à l'issue ;
@@ -106,7 +108,7 @@ home/               miroir de $HOME, un lien par fichier
 plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quelque chose hors de lui
                     (liens, contrôles ; lu par install.sh plugin) : pr-comments/ (repris
                     d'aguiddir/claude-config), intellij/, profiles/ (bin/claude-profile, shell/claude-profile.sh),
-                    git-nav/ (skills /pr, /br, /worktree, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
+                    git-nav/ (skills /pr, /br, /worktree, branch-cleanup, hook merge-watch, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
                     git-tidy/ (skills /git-tidy:commits, :pr-sync et :ready),
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills

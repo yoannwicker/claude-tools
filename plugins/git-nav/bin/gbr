@@ -10,6 +10,12 @@
 #   gbr worktree <branche>  crée ou réutilise <racine>/.claude/worktrees/<branche, / → ->,
 #                           n'écrit que son chemin sur stdout
 #   gbr checkout <branche>  bascule le dossier courant sur la branche (git switch)
+#   gbr cleanup [--dry-run | --yes] [--local] [--pr <n>] [<branche>]
+#                           ménage d'une branche mergée : worktree, branche locale,
+#                           sauvegardes backup/<branche>-*, branche distante (sauf --local).
+#                           Vérifie d'abord que rien ne sera perdu ; --dry-run affiche le
+#                           plan (code 1 si bloqué), --yes l'exécute, sans les deux demande.
+#                           --pr : branche de cette PR ; sans branche : la branche courante
 # Un nom peut être donné avec ou sans « origin/ ». La fonction gbr de
 # ~/.config/shell/git-tools.sh enveloppe le mode interactif pour faire le cd final.
 set -uo pipefail
@@ -122,6 +128,131 @@ cmd_checkout() {
     git switch "$b" && git status -sb
 }
 
+# backups <branche> : sauvegardes de /git-tidy:commits, backup/<branche>-* (/ gardé ou en -).
+backups() {
+    git for-each-ref --format='%(refname:short)' "refs/heads/backup/$1-*" "refs/heads/backup/${1//\//-}-*" | sort -u
+}
+
+# cleanup_plan <branche> <local seulement 0|1> : vérifie que la branche peut être
+# supprimée sans perte et remplit PLAN (actions, dans l'ordre) et BLOCK (raison d'arrêt).
+cleanup_plan() {
+    local b=$1 local_only=$2 base pr state oid n wt verdict detail current
+    PLAN=() BLOCK="" WT="" BACKUPS=()
+    base=$(default_branch)
+    git fetch --quiet --prune origin 2>/dev/null || true
+
+    if ! has_local "$b" && ! has_remote "$b" && [[ -z "$(wt_of "$b")" ]]; then
+        mapfile -t BACKUPS < <(backups "$b")
+        (( ${#BACKUPS[@]} )) || { BLOCK="rien à supprimer : $b n'existe plus (ni locale, ni origin, ni worktree)."; return; }
+        PLAN+=("supprimer les sauvegardes ${BACKUPS[*]}")
+        return
+    fi
+    [[ "$b" == "$base" ]] && { BLOCK="$b est la branche par défaut."; return; }
+
+    # 1. Mergée ? PR mergée, ou sans PR, contenue dans la base (locale ou origin).
+    pr=""
+    command -v gh >/dev/null && pr=$(gh pr list --head "$b" --state all -L 1 \
+        --json number,state,headRefOid --jq '.[] | "\(.number) \(.state) \(.headRefOid)"' 2>/dev/null)
+    if [[ -n "$pr" ]]; then
+        read -r n state oid <<<"$pr"
+        [[ "$state" == MERGED ]] || { BLOCK="la PR #$n de $b est $state, pas mergée."; return; }
+        if has_local "$b"; then
+            git cat-file -e "$oid^{commit}" 2>/dev/null || git fetch --quiet origin "pull/$n/head" 2>/dev/null
+            if ! git cat-file -e "$oid^{commit}" 2>/dev/null; then
+                BLOCK="impossible de lire le dernier commit de la PR #$n ($oid) pour vérifier $b."; return
+            fi
+            if [[ -n "$(git rev-list "$oid..$b")" ]]; then
+                BLOCK="$b a des commits absents de la PR #$n mergée :"$'\n'"$(git log --oneline --no-decorate "$oid..$b")"
+                return
+            fi
+        fi
+        PLAN+=("vérifié : PR #$n mergée, rien sur $b hors de la PR")
+    else
+        local r; r=$(ref "$b")
+        if [[ -z "$(git rev-list "$base..$r" 2>/dev/null)" ]] \
+            || { has_remote "$base" && [[ -z "$(git rev-list "origin/$base..$r")" ]]; }; then
+            PLAN+=("vérifié : pas de PR, $b entièrement contenue dans $base")
+        else
+            BLOCK="pas de PR pour $b et elle n'est pas contenue dans $base."; return
+        fi
+    fi
+
+    # 2. Worktree : supprimé s'il est libre, sinon on s'arrête (la branche y est checkoutée).
+    WT=$(wt_of "$b")
+    if [[ -n "$WT" ]]; then
+        IFS=$'\t' read -r verdict _ _ detail < <("$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/worktree-scan" | awk -F'\t' -v p="$WT" '$2 == p')
+        case "$verdict" in
+            free)    PLAN+=("supprimer le worktree $WT") ;;
+            current) BLOCK="on est dans le worktree de $b ($WT) : en sortir d'abord."; return ;;
+            main)    ;;  # branche checkoutée dans le dépôt principal : traitée ci-dessous
+            *)       BLOCK="worktree $WT gardé ($verdict : $detail), $b ne peut pas être supprimée."; return ;;
+        esac
+    fi
+
+    # 3. Branche courante ici : passer sur la base à jour (jamais de stash).
+    current=$(git rev-parse --abbrev-ref HEAD)
+    if [[ "$current" == "$b" ]]; then
+        [[ -n "$(git status --porcelain)" ]] && { BLOCK="$b est la branche courante et a des modifications non commitées."; return; }
+        PLAN+=("passer sur $base (git switch, git pull --ff-only)")
+    fi
+
+    has_local "$b" && PLAN+=("supprimer la branche locale $b")
+    mapfile -t BACKUPS < <(backups "$b")
+    (( ${#BACKUPS[@]} )) && PLAN+=("supprimer les sauvegardes ${BACKUPS[*]}")
+    if has_remote "$b"; then
+        if (( local_only )); then PLAN+=("garder origin/$b (--local)")
+        else PLAN+=("supprimer origin/$b"); fi
+    fi
+}
+
+cmd_cleanup() {
+    local mode=ask local_only=0 pr="" b="" base root
+    while (( $# )); do
+        case "$1" in
+            --dry-run) mode=dry ;;
+            --yes)     mode=yes ;;
+            --local)   local_only=1 ;;
+            --pr)      pr=${2:-}; shift ;;
+            -*)        die "option inconnue : $1" ;;
+            *)         b=${1#origin/} ;;
+        esac
+        shift
+    done
+    if [[ -n "$pr" ]]; then
+        b=$(gh pr view "$pr" --json headRefName --jq .headRefName) || die "PR introuvable : $pr"
+    fi
+    [[ -n "$b" ]] || b=$(git rev-parse --abbrev-ref HEAD)
+
+    cleanup_plan "$b" "$local_only"
+    echo "ménage de $b :"
+    (( ${#PLAN[@]} )) && printf '  - %s\n' "${PLAN[@]}"
+    if [[ -n "$BLOCK" ]]; then echo "bloqué : $BLOCK"; exit 1; fi
+    case "$mode" in
+        dry) exit 0 ;;
+        ask)
+            case "$(pick "Ménage" "Tout supprimer" "Local seulement" "Annuler")" in
+                "Tout supprimer")  ;;
+                "Local seulement") local_only=1 ;;
+                *) echo "annulé."; exit 0 ;;
+            esac ;;
+    esac
+
+    base=$(default_branch)
+    root=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
+    if [[ -n "$WT" && "$WT" != "$root" ]]; then
+        git -C "$root" worktree remove "$WT" || exit 1
+        git -C "$root" worktree prune
+    fi
+    if [[ "$(git -C "$root" rev-parse --abbrev-ref HEAD)" == "$b" ]]; then
+        git -C "$root" switch "$base" || exit 1
+        git -C "$root" pull --ff-only || echo "(pull --ff-only impossible, $base laissée telle quelle)" >&2
+    fi
+    has_local "$b" && { git branch -D "$b" || exit 1; }
+    local k; for k in "${BACKUPS[@]}"; do git branch -D "$k" || exit 1; done
+    if has_remote "$b" && (( ! local_only )); then git push origin --delete "$b" || exit 1; fi
+    echo "→ $(git rev-parse --abbrev-ref HEAD) · $PWD"
+}
+
 cmd_interactive() {
     local query="$*" b=""
 
@@ -148,7 +279,7 @@ cmd_interactive() {
 }
 
 case "${1:-}" in
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
 esac
 in_repo
 
@@ -158,5 +289,6 @@ case "${1:-}" in
     where)    shift; cmd_where "$@" ;;
     worktree) shift; cmd_worktree "$@" ;;
     checkout) shift; cmd_checkout "$@" ;;
+    cleanup)  shift; cmd_cleanup "$@" ;;
     *)        cmd_interactive "$@" ;;
 esac

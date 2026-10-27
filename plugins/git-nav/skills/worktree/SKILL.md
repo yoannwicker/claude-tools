@@ -63,3 +63,5 @@ Supprimer le worktree sur lequel est la session, puis revenir sur le dépôt pri
    `git -C <dépôt principal> worktree prune`. Ne jamais supprimer la branche.
 5. Afficher `git worktree list` et une ligne indiquant où est la session (branche +
    dossier) et la branche conservée.
+   Si la PR de cette branche est mergée, enchaîner sur le skill `branch-cleanup` pour
+   proposer de la supprimer aussi.

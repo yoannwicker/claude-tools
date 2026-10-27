@@ -49,6 +49,9 @@ Présenter un résumé court : avance/retard, nombre de commits et ce qu'ils fon
 (fichiers, +/−), PR liée (si elle existe, signaler que `/pr <n>` charge sa revue et ses
 commentaires). Garder tout cela en contexte pour la suite.
 
+PR liée à l'état `MERGED` : le dire, enchaîner sur le skill `branch-cleanup` pour cette
+branche au lieu de l'étape 3, et s'arrêter là.
+
 ## 3. Se placer sur la branche — toujours demander
 
 Avant de poser la question : `gbr where <branche>`, qui renvoie en `clé=valeur` la

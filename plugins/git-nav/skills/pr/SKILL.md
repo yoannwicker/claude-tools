@@ -47,6 +47,9 @@ Présenter un résumé court : titre, état/draft, auteur, `head → base`, déc
 checks en échec éventuels, taille (+/−, fichiers), points clés de la description et des
 commentaires non résolus. Garder tout cela en contexte pour la suite.
 
+PR à l'état `MERGED` : le dire, enchaîner sur le skill `branch-cleanup` pour sa branche au
+lieu de l'étape 3, et s'arrêter là.
+
 ## 3. Se placer sur la PR — toujours demander
 
 Avant de poser la question : `gpr where <n>`, qui renvoie en `clé=valeur` la branche de

@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br` et `/worktree` sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync` et `:ready` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync` et `:ready` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -424,16 +424,21 @@ mod (brouillon de chaque vue en édition).
 
 **Rôle** : naviguer entre PR, branches et worktrees git — skills `/pr`, `/br`,
 `/worktree` et leurs scripts `gpr`, `gbr` (aussi pour le terminal, voir
-[`gpr`, `gbr` dans le terminal](#gpr-gbr-dans-le-terminal)).
+[`gpr`, `gbr` dans le terminal](#gpr-gbr-dans-le-terminal)) — et faire le ménage d'une
+branche après son merge ([ménage après un merge](#ménage-après-un-merge)).
 
-**Fichiers** : `plugins/git-nav/` (`skills/{pr,br,worktree}/SKILL.md`,
-`bin/{gpr,gbr,worktree-scan}`, `lib/git-tools.sh`, `shell/git-tools.sh`, `setup.sh`) ; hors
+**Fichiers** : `plugins/git-nav/` (`skills/{pr,br,worktree,branch-cleanup}/SKILL.md`,
+`bin/{gpr,gbr,worktree-scan}`, `lib/git-tools.sh`, `shell/git-tools.sh`,
+`hooks/{hooks.json,merge-watch.py}`, `tests/{merge-watch,gbr-cleanup}.test.sh`, `setup.sh`) ; hors
 du plugin, les liens `~/.local/bin/{gpr,gbr}` et `~/.config/shell/git-tools.sh` (fonctions
 shell `gpr`/`gbr`, alias) posés par `./install.sh plugin git-nav`. **Activé dans** : tous
 les profils.
 
-**Prérequis** : `git` ; `gh` authentifié (`/pr`, facultatif pour `/br`) ; Linux pour
-`/worktree` (`/proc`).
+**Prérequis** : `git` ; `gh` authentifié (`/pr`, ménage après un merge, facultatif pour
+`/br`) ; Linux pour `/worktree` et le ménage après un merge (`/proc`) ; `python3` (hook).
+Tests : `bash plugins/git-nav/tests/merge-watch.test.sh` et
+`bash plugins/git-nav/tests/gbr-cleanup.test.sh` (hook commande et script, pas un mod :
+`claude plugin test` ne s'applique pas).
 
 `bin/` du plugin est dans le PATH de l'outil Bash : les skills appellent `gpr`, `gbr`,
 `worktree-scan` par leur nom, et leurs `allowed-tools` (`Bash(gpr:*)`…) ne dépendent
@@ -496,8 +501,51 @@ par `git worktree remove` sans `--force`, branches conservées, puis `git worktr
 confirmation s'il a des commits non poussés ou pas d'upstream ; la session le quitte
 (`ExitWorktree` en mode `keep` — `remove` supprimerait aussi la branche — ou `cd` vers
 le dépôt principal si elle a été lancée dedans), puis `git worktree remove` depuis le
-dépôt principal. La branche est conservée.
+dépôt principal. La branche est conservée ; si sa PR est mergée, Claude enchaîne sur le
+[ménage après un merge](#ménage-après-un-merge).
 Prérequis : Linux (`/proc`).
+
+#### Ménage après un merge
+
+Pas de commande : le skill `branch-cleanup` (`user-invocable: false`, absent du menu `/`)
+est lancé par Claude dès qu'une branche ou une PR est mergée, pour proposer de supprimer
+son worktree, la branche locale, ses sauvegardes et la branche distante :
+
+- **après un merge fait par Claude** : le hook `PostToolUse` du plugin
+  (`hooks/merge-watch.py`, sur `Bash`) repère un `gh pr merge` ou un `git merge <branche>`
+  réussi, lance `gbr cleanup --dry-run` sur la branche mergée et donne le plan à Claude
+  (pas pour `gh pr merge --auto`, ni `git merge --abort`/`--continue`/`--quit` ; non
+  inspectés : `bash -c`, `eval`, scripts) ;
+- **après un merge fait ailleurs** (GitHub, terminal) : quand l'utilisateur dit qu'une
+  branche ou une PR est mergée, ou quand `/pr`, `/br` ou `/worktree release` tombent sur
+  une PR à l'état `MERGED` (`/pr` et `/br` enchaînent alors au lieu de proposer le checkout).
+
+Claude montre le plan et demande *Tout supprimer*, *Local seulement* ou *Annuler*, puis
+lance `gbr cleanup --yes` ; s'il est dans le worktree de la branche, il en sort d'abord
+(`ExitWorktree` en mode `keep`, comme `/worktree release`). Depuis la branche par défaut
+sans branche désignée, les branches locales dont la PR est mergée sont proposées.
+
+`gbr cleanup [--dry-run | --yes] [--local] [--pr <n>] [<branche>]` (aussi dans le
+terminal, où il demande lui-même confirmation) fait tout le travail ; branche par défaut :
+la branche courante, `--pr` prend celle de la PR.
+
+- **Vérification** : la PR doit être mergée (sans PR : branche entièrement contenue dans
+  la base, locale ou `origin`), et la branche locale ne doit pas avoir de commit absent du
+  dernier commit de la PR (récupéré par `pull/<n>/head` si besoin) ; sinon rien n'est
+  supprimé. C'est ce contrôle qui autorise `git branch -D` (`-d` échoue après un squash
+  ou un rebase merge).
+- **Worktree** : la branche ne peut pas être supprimée tant qu'elle y est checkoutée, donc
+  son worktree est supprimé d'abord (`git worktree remove` sans `--force`, puis `prune`),
+  s'il est libre pour `worktree-scan` ; `dirty`, `busy` (un processus y a son dossier
+  courant) ou `locked` → tout s'arrête et le worktree est gardé.
+- **Ensuite** : bascule sur la base à jour (`git switch`, `git pull --ff-only`) si c'était
+  la branche courante du dépôt principal (arrêt si elle a des modifications : jamais de
+  stash), branche locale, sauvegardes `backup/<branche>-*` de `/git-tidy:commits` (`/` du
+  nom gardé ou remplacé par `-`), puis branche distante si GitHub ne l'a pas déjà
+  supprimée et sans `--local`.
+- `--dry-run` affiche le plan, ou `bloqué : <raison>` avec le code 1.
+- Prérequis : `gh` authentifié (état de la PR ; sans `gh`, seule la règle « contenue dans
+  la base » s'applique), Linux (`/proc`, via `worktree-scan`).
 
 #### `gpr`, `gbr` dans le terminal
 
@@ -521,6 +569,7 @@ ajoute des alias.
   visible par `/worktree` et accepté par `EnterWorktree`.
 - **Sous-commandes** `list`, `view`, `where`, `worktree`, `checkout` : non interactives, à
   sortie stable, utilisées par les skills `/pr` et `/br` ; `--help` les liste.
+  `gbr cleanup` : voir [ménage après un merge](#ménage-après-un-merge).
 - **Le `cd` final** : un script ne peut pas changer le dossier de son appelant ; les
   fonctions `gpr`/`gbr` passent un fichier dans `GIT_TOOLS_CD_FILE`, le script y écrit le
   worktree choisi et la fonction y fait le `cd`. Appelé directement (sans la fonction),
@@ -563,6 +612,10 @@ ajoute des alias.
   (`feat/x` → `feat-x`) ; une branche seulement locale n'est pas fetchée.
 - `gbr checkout <branche>` : `git switch` (crée la branche locale suivie si elle n'existe
   que sur origin) puis `git status -sb`.
+- `gbr cleanup [--dry-run | --yes] [--local] [--pr <n>] [<branche>]` : supprime une
+  branche mergée, son worktree, ses sauvegardes et sa branche distante, après
+  vérification ; sans `--dry-run` ni `--yes`, demande (voir
+  [ménage après un merge](#ménage-après-un-merge)).
 - Alias : `gbrs` (= `gbr list`).
 
 ### `git-tidy`
