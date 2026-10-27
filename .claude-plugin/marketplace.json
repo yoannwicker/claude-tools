@@ -26,6 +26,11 @@
       "description": "Skills /pr, /br, /worktree : trouver une PR ou une branche et se placer dessus (branche courante ou worktree), lister et nettoyer les worktrees (commandes gpr, gbr, aussi pour le terminal)"
     },
     {
+      "name": "git-tidy",
+      "source": "./plugins/git-tidy",
+      "description": "Skills /git-tidy:commits et /git-tidy:pr-sync : remettre au propre les commits d'une branche (découpage, messages, ordre), puis aligner la description de la PR sur ce qui a changé et le ticket JIRA ou l'issue GitHub lié"
+    },
+    {
       "name": "notify",
       "source": "./plugins/notify",
       "description": "Notifications desktop GNOME aux événements de Claude Code (fin de tour, erreur, permission, question), clic pour revenir sur l'onglet de la session"

@@ -26,6 +26,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Claude Code (settings, status line) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
 | Plugin `profiles` (commande `/profile`, `claude-profile` et fonction shell `claude` pour le terminal) | `./install.sh plugin profiles` | `jq` ; le profil de référence de `./install.sh link` |
 | Plugin `git-nav` (skills `/pr`, `/br`, `/worktree` ; `gpr`, `gbr` pour le terminal) | `./install.sh plugin git-nav` | `git` ; `gh` authentifié |
+| Plugin `git-tidy` (skills `/git-tidy:commits`, `/git-tidy:pr-sync` : commits remis au propre, PR et ticket JIRA en phase) | `./install.sh plugin git-tidy` | `git` ; `gh` authentifié ; MCP Atlassian pour JIRA |
 | Plugin `pr-comments` (fils de review non résolus) | `./install.sh plugin pr-comments` | `claude` ≥ 2.1.287, `gh` authentifié |
 | Plugin `intellij` (MCP IntelliJ + consigne) | `./install.sh plugin intellij` | IntelliJ avec le serveur MCP sur le port 64342 |
 | Plugin `notify` (notifications desktop) | `./install.sh plugin notify` | `python3-gi`, `gdbus`, `xprop`, `jq`, gnome-terminal |
@@ -75,6 +76,10 @@ demander une déconnexion/reconnexion de session.
   la charger en contexte et se placer dessus (branche courante ou worktree) ;
   `/worktree clear` supprime les worktrees qu'aucune session n'utilise (plugin `git-nav` ;
   `gpr`, `gbr` dans le terminal).
+- `/git-tidy:commits [base]` : redécouper et reformuler les commits d'une branche avant
+  relecture ou avant merge (sauvegarde, push forcé seulement sur accord) ; `/git-tidy:pr-sync` : remettre
+  la description de la PR en phase et la raccorder au ticket JIRA ou à l'issue (plugin
+  `git-tidy`).
 - `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des
   agents (AgentsView), rangé dans `docs/analyses-sessions/` pour ce dépôt ;
   `/session-analysis:session` : bilan de la session en cours (plugin `session-analysis`).
@@ -102,6 +107,7 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     (liens, contrôles ; lu par install.sh plugin) : pr-comments/ (repris
                     d'aguiddir/claude-config), intellij/, profiles/ (bin/claude-profile, shell/claude-profile.sh),
                     git-nav/ (skills /pr, /br, /worktree, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
+                    git-tidy/ (skills /git-tidy:commits et :pr-sync),
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect})

@@ -8,11 +8,11 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 
 **Fichiers** : `home/.claude/settings.json` (le profil de référence), `profiles/*.json` (surcharges, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh` ;
 plugins : `.claude-plugin/marketplace.json`,
-`plugins/{pr-comments,intellij,profiles,git-nav,notify,herdr-session,build-brief,session-analysis}/` (avec
+`plugins/{pr-comments,intellij,profiles,git-nav,git-tidy,notify,herdr-session,build-brief,session-analysis}/` (avec
 leur `setup.sh`), `install.sh plugin` (voir [Installation des plugins](#installation-des-plugins)).
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line) ; `gh`
-authentifié (plugin [`git-nav`](#git-nav), badge PR de la status line) ; Linux + GNOME pour
+authentifié (plugins [`git-nav`](#git-nav) et [`git-tidy`](#git-tidy), badge PR de la status line) ; Linux + GNOME pour
 les notifications (plugin [`notify`](#notify)) ;
 IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [`intellij`](#intellij)) ;
 `build-brief` dans le PATH pour Gradle (plugin [`build-brief`](#build-brief)) ;
@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br` et `/worktree` sont dans le plugin [`git-nav`](#git-nav), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis). Un skill
+Les skills `/pr`, `/br` et `/worktree` sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits` et `:pr-sync` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -564,6 +564,72 @@ ajoute des alias.
 - `gbr checkout <branche>` : `git switch` (crée la branche locale suivie si elle n'existe
   que sur origin) puis `git status -sb`.
 - Alias : `gbrs` (= `gbr list`).
+
+### `git-tidy`
+
+**Rôle** : remettre une branche au propre avant relecture ou avant merge — réécrire ses commits
+(`/git-tidy:commits`), puis aligner la description de sa PR et le ticket lié sur ce qui a
+changé (`/git-tidy:pr-sync`). Les deux skills ne se lancent qu'à la demande
+(`disable-model-invocation`) et n'écrivent rien hors du dépôt local sans accord.
+
+**Fichiers** : `plugins/git-tidy/` (`skills/{commits,pr-sync}/SKILL.md`) ; rien hors du
+plugin. **Activé dans** : tous les profils.
+
+**Prérequis** : `git` ; `gh` authentifié (base de la PR, `/git-tidy:pr-sync`) ; pour JIRA, un
+MCP Atlassian connecté (`claude.ai Atlassian Rovo` ou `claude.ai Atlassian MCP`) ; sans lui,
+seules la PR et les issues GitHub sont traitées.
+
+#### Installation hors de ce dépôt
+
+Le plugin ne dépend pas du reste de la config :
+
+```bash
+claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
+claude plugin install git-tidy@claude-tools
+```
+
+#### `/git-tidy:commits`
+
+`/git-tidy:commits [base]` : réécrit les commits de la branche courante depuis sa base
+(l'argument, sinon la base de sa PR, sinon la branche par défaut d'`origin`) sans changer le
+code final. Refuse de partir s'il y a des modifications non commitées ou une opération git
+en cours.
+
+- **Plan** : un commit par changement logique (refactoring séparé et avant le changement de
+  comportement, correction d'un bug déjà présent sur la base et réglage technique —
+  configuration, dépendance, build, CI — chacun dans son commit, séparés de la
+  fonctionnalité, tests et doc avec leur code, commits de correction du code de la branche
+  fondus), messages à la
+  convention du dépôt (consignes, puis derniers commits de la base). Montré avant/après, puis
+  *Appliquer*, *Ajuster* ou *Annuler* ; rien n'est proposé si l'historique est déjà propre.
+- **Réécriture** : sauvegarde `backup/<branche>-<date>`, puis rebase non interactif (todo
+  écrite par Claude, `GIT_SEQUENCE_EDITOR`) ou, pour redécouper un fichier, `reset --soft`
+  et commits reconstruits par `git add`/`git apply --cached`. L'arbre final doit être
+  identique à celui d'avant (`git diff` vide), sinon retour à la sauvegarde. Les commits
+  de merge disparaissent (historique linéaire).
+- **Push** : toujours demandé, par `--force-with-lease` sur le SHA distant connu ; pas
+  proposé si quelqu'un a poussé sur la branche entre-temps.
+- Propose ensuite de vérifier que chaque commit compile (`git rebase --exec`), de supprimer
+  la sauvegarde, et `/git-tidy:pr-sync` si la branche a une PR.
+
+#### `/git-tidy:pr-sync`
+
+`/git-tidy:pr-sync [numéro]` : PR passée en argument, sinon celle de la branche courante
+(sans PR : propose d'en créer une en brouillon).
+
+- **Ticket** : cherché dans les issues que la PR ferme, puis le nom de branche, le titre, la
+  description et les commits (clé JIRA `ABC-123`, issue `#123`) ; demandé s'il y en a
+  plusieurs ou aucun. Lu par le MCP Atlassian (JIRA) ou `gh issue view`, puis comparé à la
+  PR : critères couverts ou non, ajouts, décisions qui s'en écartent.
+- **PR** : titre et description réécrits au format du dépôt (modèle de PR, consignes,
+  dernières PR mergées) — pourquoi, lien vers le ticket, changements par thème, points de
+  relecture, hors périmètre — en gardant ce qu'un humain y a mis et qui reste vrai.
+- **Ticket** : un commentaire par défaut (lien, ce qui est livré, ce qui ne l'est pas,
+  écarts) ; une modification de sa description seulement si une décision de la PR l'a
+  rendue fausse ; jamais de changement de statut, d'assigné ni de sprint sans demande.
+- Brouillons montrés, puis *PR et ticket*, *PR seulement*, *Ajuster* ou *Annuler* ; les
+  écritures (`gh pr edit`, commentaire ou édition JIRA, `gh issue comment`/`edit`) ne sont
+  pas pré-autorisées dans le skill.
 
 ### `notify`
 

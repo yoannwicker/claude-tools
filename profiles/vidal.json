@@ -4,6 +4,7 @@
     "intellij@claude-tools": true,
     "profiles@claude-tools": true,
     "git-nav@claude-tools": true,
+    "git-tidy@claude-tools": true,
     "notify@claude-tools": true,
     "herdr-session@claude-tools": true,
     "build-brief@claude-tools": true,
