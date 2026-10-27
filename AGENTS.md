@@ -73,4 +73,4 @@ Ne jamais versionner (ni `./install.sh adopt`) : `~/.claude/.credentials.json`, 
 utilisateur), `~/.claude-profiles/` (dossiers de profils générés),
 `~/.claude/projects/` (transcripts, mémoire), `~/.claude/plugins/`,
 `~/.claude/skills/synced/`, `history.jsonl`, et dans `~/.config/herdr/` les `*.log`,
-`*.sock`, `session.json`. Toujours `adopt` fichier par fichier, jamais un dossier.
+`*.sock`, `session.json`, `config-gpui.lock`. Toujours `adopt` fichier par fichier, jamais un dossier.

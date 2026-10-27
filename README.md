@@ -8,7 +8,7 @@ installation plugin par plugin pour les plugins Claude Code (chacun avec ce qu'i
 lui).
 Le détail (fonctionnalités, prérequis, installation, configuration spécifique) est dans
 [CLAUDE-CODE.md](CLAUDE-CODE.md) pour Claude Code et ses plugins, et dans
-[TOOLS.md](TOOLS.md) pour les outils hors Claude (`cl`, extension GNOME, herdr, mise).
+[TOOLS.md](TOOLS.md) pour les outils hors Claude (`cl`, extension GNOME, herdr, Herdr UI, mise).
 
 ## Installer
 
@@ -42,7 +42,7 @@ désinstalle, liens compris. Activer un plugin installé dans un profil reste à
 | Outil | Commande | Prérequis |
 |---|---|---|
 | mise (outils globaux) | `./setup/10-mise.sh` | `curl` |
-| herdr (+ intégrations Claude/Copilot) | `./setup/20-herdr.sh` | `curl` ; Linux ou macOS |
+| herdr (+ intégrations Claude/Copilot ; au choix, client graphique Herdr UI) | `./setup/20-herdr.sh [--ui]` | `curl` ; Linux ou macOS. Herdr UI : glibc ≥ 2.39 et `sudo` (APT, DNF ou pacman), ou Homebrew |
 | Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
 | Extension GNOME `claude-notify` (pastille des notifications du plugin `notify`) | `./install.sh link && ./install.sh plugin notify && ./setup/30-gnome.sh` | GNOME Shell 46 |
 
@@ -110,6 +110,6 @@ setup/              scripts idempotents des outils hors plugins : 10-mise, 20-he
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),
                     pistes-amelioration/ (pistes préfixées par leur priorité 1, 2, 3)
 CLAUDE-CODE.md      Claude Code : settings, profils, plugins
-TOOLS.md            outils hors Claude : cl, extension GNOME, herdr, mise
+TOOLS.md            outils hors Claude : cl, extension GNOME, herdr, Herdr UI, mise
 AGENTS.md           consignes pour les agents (CLAUDE.md l'importe)
 ```

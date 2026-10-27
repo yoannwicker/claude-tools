@@ -1,11 +1,56 @@
 #!/usr/bin/env bash
-# herdr : installe le binaire si absent, pose les intégrations agents, retire le hook Claude de
-# settings.json (il vient du plugin herdr-session, quand celui-ci est installé).
+# herdr : installe le binaire si absent, propose l'interface (terminal seul, ou avec Herdr UI),
+# pose les intégrations agents, retire le hook Claude de settings.json (il vient du plugin
+# herdr-session, quand celui-ci est installé).
+#   --ui  installe Herdr UI sans demander (et oublie un refus)
+# Le choix est demandé dans un terminal tant que Herdr UI n'est ni installé ni refusé ; un refus est
+# retenu (~/.config/claude-tools/herdr-ui-declined). Sans terminal, il est seulement signalé.
 set -eu
 if ! command -v herdr >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/herdr" ]; then
   curl -fsSL https://herdr.dev/install.sh | sh
 fi
 herdr=$(command -v herdr || echo "$HOME/.local/bin/herdr")
+
+# Herdr UI (penso/herdr-gpui) : client graphique tiers, branché sur le serveur herdr local. Il se met
+# à jour lui-même (panneau App Updates).
+herdr_ui() {
+  local declined=${XDG_CONFIG_HOME:-$HOME/.config}/claude-tools/herdr-ui-declined glibc answer
+  if command -v herdr-gpui >/dev/null 2>&1; then
+    echo "interface : terminal + Herdr UI (mis à jour par l'app)"
+    return 0
+  fi
+  case $(uname -s) in
+    Linux)
+      glibc=$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')
+      if [ -z "$glibc" ] || [ "$(printf '%s\n2.39\n' "$glibc" | sort -V | head -1)" != 2.39 ]; then
+        echo "interface : terminal (Herdr UI demande glibc ≥ 2.39, ici ${glibc:-inconnue})"
+        return 0
+      fi ;;
+    Darwin) ;;
+    *) echo "interface : terminal (Herdr UI non disponible sur $(uname -s))"; return 0 ;;
+  esac
+  if [ "${1:-}" != --ui ]; then
+    if [ -f "$declined" ] || [ ! -t 0 ]; then
+      echo "interface : terminal (./setup/20-herdr.sh --ui pour ajouter Herdr UI)"
+      return 0
+    fi
+    echo "Interface de herdr :"
+    echo "  1) terminal seul (herdr)"
+    echo "  2) terminal + graphique (Herdr UI, client tiers, demande sudo)"
+    read -r -p "Choix [1] : " answer || answer=""
+    if [ "$answer" != 2 ]; then
+      mkdir -p "$(dirname "$declined")" && touch "$declined"
+      echo "interface : terminal (./setup/20-herdr.sh --ui pour ajouter Herdr UI)"
+      return 0
+    fi
+  fi
+  rm -f "$declined"
+  case $(uname -s) in
+    Linux) curl -fsSL https://herdrui.dev/install.sh | sh ;;
+    Darwin) brew install penso/tap/herdr-gpui ;;
+  esac
+}
+herdr_ui "$@"
 
 integrations="claude"
 command -v copilot >/dev/null 2>&1 && integrations="$integrations copilot"

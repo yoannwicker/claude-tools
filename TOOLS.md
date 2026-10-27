@@ -82,7 +82,8 @@ locaux dans `~/.config/herdr/` : `*.log`, `*.sock`, `session.json`, `release-not
 
 **Installation** : `./setup/20-herdr.sh`, soit
 `curl -fsSL https://herdr.dev/install.sh | sh`, puis `herdr integration install claude`
-(et `copilot` si la CLI Copilot est présente). Mise à jour : `herdr update` (fait par `dot`).
+(et `copilot` si la CLI Copilot est présente). Le script propose aussi l'interface : terminal
+seul, ou terminal + [Herdr UI](#herdr-ui). Mise à jour : `herdr update` (fait par `dot`).
 
 **Configuration spécifique** :
 - `onboarding = false` ; `[update] channel = "stable"`. Toute section ajoutée ensuite
@@ -101,6 +102,36 @@ locaux dans `~/.config/herdr/` : `*.log`, `*.sock`, `session.json`, `release-not
   `settings.json` tout hook herdr (en écrivant à travers le lien), et `dot` rejoue ce script
   après `herdr update`.
 - Vérifier : `herdr integration status` → `claude: current`.
+
+## Herdr UI
+
+**Rôle** : client graphique natif de herdr ([penso/herdr-gpui](https://github.com/penso/herdr-gpui),
+projet tiers), branché sur le serveur herdr local : mêmes workspaces, panes et agents que la TUI.
+Facultatif.
+
+**Fichiers** : aucun versionné (choix et installation dans `setup/20-herdr.sh`). Restent locaux : le paquet système (`herdr-gpui`), la
+config de l'app (`config-gpui*.toml` dans `~/.config/herdr/`), la connexion GitHub (Secret
+Service), et le refus retenu `~/.config/claude-tools/herdr-ui-declined`.
+
+**Prérequis** : herdr ; Linux x86_64/aarch64 avec APT, DNF ou pacman, glibc ≥ 2.39, `sudo`,
+pilotes Vulkan ; ou macOS avec Homebrew.
+
+**Installation** : choix proposé par `./setup/20-herdr.sh` (lancé par `./install.sh` et `dot`) :
+dans un terminal, tant que Herdr UI n'est ni installé ni refusé, il demande l'interface
+(1 : terminal seul, par défaut ; 2 : terminal + Herdr UI) ; le refus est retenu. Sans terminal,
+ou après un refus, il le signale seulement. `./setup/20-herdr.sh --ui` l'installe sans demander
+(et oublie le refus). Installation : `curl -fsSL https://herdrui.dev/install.sh | sh` sur Linux (paquet de la dernière
+release GitHub, SHA-256 vérifié, installé par le gestionnaire de paquets via `sudo`),
+`brew install penso/tap/herdr-gpui` sur macOS. Mise à jour : par l'app (panneau *App Updates*),
+pas par `dot`. Désinstallation : `sudo apt remove herdr-gpui` (ou l'équivalent DNF/pacman/brew).
+
+**Configuration spécifique** :
+- Connexion GitHub (onglets PR et issues) : par la GitHub App
+  [Herdr UI](https://github.com/apps/herdr-ui), qui ne lit que les dépôts des comptes où elle
+  est installée (l'installer aussi sur le compte perso pour ses dépôts), ou par **Use GitHub CLI
+  authentication** (token de `gh`).
+- Notifications : celles du plugin [`notify`](CLAUDE-CODE.md#sans-et-avec-herdr) ;
+  `ui.toast.delivery` reste `off` (sinon doublons).
 
 ## mise
 
