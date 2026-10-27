@@ -52,8 +52,8 @@ réglage, la statusline) se fait donc une fois, dans le profil de référence.
 
 Profils versionnés : `vidal` (config complète : tous les plugins du dépôt sauf `pr-comments`,
 plus `superpowers`, à installer une fois dans Claude Code :
-`/plugin install superpowers@claude-plugins-official`), `basic` (le même sans
-`superpowers` ni `session-analysis`) et `lean` (comme `basic` avec `session-analysis`, mais seuls les MCP `claude.ai Atlassian MCP` et
+`/plugin install superpowers@claude-plugins-official`) et `lean` (le même sans
+`superpowers`, mais seuls les MCP `claude.ai Atlassian MCP` et
 `plugin:intellij:intellij` restent allumés, les autres connecteurs claude.ai étant coupés par
 url dans `deniedMcpServers`). Aucun profil par défaut à l'installation : `claude` part sur le
 profil de référence (tous les plugins du dépôt sauf `pr-comments`).
@@ -204,7 +204,7 @@ d'une PR seulement quand elle a changé, après une écriture, ou toutes les dix
 
 **Rôle** : serveur MCP IntelliJ et consigne d'usage de ses outils, ensemble.
 
-**Fichiers** : `plugins/intellij/`. **Activé dans** : `vidal` et `basic`.
+**Fichiers** : `plugins/intellij/`. **Activé dans** : tous les profils.
 
 **Prérequis** : IntelliJ ouvert avec le serveur MCP actif, sinon `claude mcp list` le montre
 déconnecté.
@@ -254,7 +254,7 @@ git clone https://github.com/yoannwicker/claude-tools.git ~/claude-tools
 claude-profile new perso "ma config"
 ```
 
-Les profils `vidal` et `basic` du dépôt sont ceux de l'auteur : à supprimer ou garder comme
+Les profils `vidal` et `lean` du dépôt sont ceux de l'auteur : à supprimer ou garder comme
 exemples. Ensuite, `/profile show <nom>` pour choisir ses plugins, et au besoin
 `claude-profile default <nom>`. Pour que `claude` tapé à la main permette
 `/profile <nom>` sans relance manuelle, charger
@@ -429,8 +429,8 @@ mod (brouillon de chaque vue en édition).
 **Fichiers** : `plugins/git-nav/` (`skills/{pr,br,worktree}/SKILL.md`,
 `bin/{gpr,gbr,worktree-scan}`, `lib/git-tools.sh`, `shell/git-tools.sh`, `setup.sh`) ; hors
 du plugin, les liens `~/.local/bin/{gpr,gbr}` et `~/.config/shell/git-tools.sh` (fonctions
-shell `gpr`/`gbr`, alias) posés par `./install.sh plugin git-nav`. **Activé dans** : `vidal` et
-`basic`.
+shell `gpr`/`gbr`, alias) posés par `./install.sh plugin git-nav`. **Activé dans** : tous
+les profils.
 
 **Prérequis** : `git` ; `gh` authentifié (`/pr`, facultatif pour `/br`) ; Linux pour
 `/worktree` (`/proc`).
@@ -575,7 +575,7 @@ gnome-terminal).
 `scripts/{notify.sh,notify-click.sh,claude-notify.py}`, `setup.sh`) ; hors du plugin, le lien
 `~/.local/bin/claude-notify-click` posé par `./install.sh plugin notify` pour l'extension GNOME
 `claude-notify@ywicker` ([TOOLS.md](TOOLS.md#extension-gnome-claude-notifyywicker)).
-**Activé dans** : `vidal` et `basic`.
+**Activé dans** : tous les profils.
 
 **Prérequis** : GNOME Shell + gnome-terminal (X11 : `xprop`), `python3-gi` avec
 `Notify 0.7`, `gdbus`, `jq` ; herdr et Herdr UI facultatifs (voir [Sans et avec herdr](#sans-et-avec-herdr)). `setup/30-gnome.sh` signale ce qui manque.
@@ -664,7 +664,7 @@ après un redémarrage.
 **Fichiers** : `plugins/herdr-session/` (`hooks/hooks.json`, `setup.sh` : `status` note
 l'absence du script herdr) ; hors du plugin, le script
 `~/.claude/hooks/herdr-agent-state.sh`, généré et réécrit par herdr (non versionné), et le
-ménage de `setup/20-herdr.sh`. **Activé dans** : `vidal` et `basic`.
+ménage de `setup/20-herdr.sh`. **Activé dans** : tous les profils.
 
 **Prérequis** : herdr avec son intégration Claude (`herdr integration install claude`,
 version ≥ 6 pour la reprise ; `herdr integration status` → `claude: current`). Sans le
@@ -718,7 +718,7 @@ réduite) — consigne d'usage et garde-fou qui refuse un Gradle brut.
 
 **Fichiers** : `plugins/build-brief/` (`instructions.md`, `hooks/hooks.json`,
 `hooks/gradle-guard.py`, `tests/gradle-guard.test.sh`, `setup.sh` : `status` note
-`build-brief` absent du PATH). **Activé dans** : `vidal` et `basic`.
+`build-brief` absent du PATH). **Activé dans** : tous les profils.
 
 **Prérequis** : `build-brief` dans le PATH (sans lui, le garde-fou laisse tout passer) ;
 `python3`. Tests : `bash plugins/build-brief/tests/gradle-guard.test.sh` (hook commande,
@@ -778,7 +778,7 @@ d'amélioration. Les deux skills ne se lancent qu'à la demande
 `bin/agentsview-up`, `bin/session-analysis-collect`, `setup.sh` : installe AgentsView,
 `status` note s'il manque ou ne tourne pas) ; hors du plugin, le binaire `agentsview`
 (`~/.local/bin`, ou `/usr/local/bin` s'il est inscriptible) et ses données
-(`~/.agentsview/`). **Activé dans** : `vidal` et `lean`.
+(`~/.agentsview/`). **Activé dans** : tous les profils.
 
 **Prérequis** : `python3`, `curl` (installation d'AgentsView) ; Linux ou macOS. Les
 transcripts lus sont ceux de Claude Code ; les autres agents (Copilot…) ne sont vus qu'à
