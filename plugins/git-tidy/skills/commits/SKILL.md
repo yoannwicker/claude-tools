@@ -1,27 +1,94 @@
 ---
 name: commits
 description: Remettre au propre les commits d'une branche par rapport à sa base (main ou autre) — un commit par changement logique, messages à la convention du dépôt, ordre lisible — sans changer le code, avec sauvegarde et push forcé seulement sur accord
-argument-hint: "[branche de base]"
+argument-hint: "[numéro de PR] [--base <branche de base>]"
 disable-model-invocation: true
 allowed-tools: Bash(git:*), Bash(gh pr view:*)
 ---
 
 Argument : `$ARGUMENTS`
 
-But : réécrire l'historique de la branche courante depuis sa base pour qu'il se relise
-commit par commit. **Le code final ne change pas** : seul le découpage, l'ordre et les
-messages changent. Une commande git par appel Bash, sans `cd … &&` ni enchaînement (sinon
-refus en session worktree).
+But : réécrire l'historique d'une branche (celle d'une PR, sinon celle en contexte, sinon
+la branche courante) depuis sa base pour qu'il se relise commit par commit. **Le code
+final ne change pas** : seul le découpage, l'ordre et les messages changent. Une commande
+git par appel Bash, sans `cd … &&` ni enchaînement (sinon refus en session worktree).
 
 ## 1. État de départ
 
+- **Arguments** : au plus un numéro de PR (`152` ou `#152`) et `--base <base>`. Tout autre
+  argument (mot seul, option inconnue, deux numéros) → s'arrêter en le disant :
+  « Argument non reconnu : `<arg>`. Usage : `/git-tidy:commits [n] [--base <base>]` »
+  (pour un mot seul, rappeler `--base <arg>` s'il voulait désigner la base).
+- **Branche**, dans l'ordre :
+  1. numéro en argument → la branche de cette PR ;
+  2. sinon la PR ou la branche en contexte dans la conversation (chargée par
+     `/git-nav:pr` ou `/git-nav:br`, worktree ouvert, PR ou branche dont on vient de
+     parler), sauf la branche par défaut du dépôt : sa PR (`gh pr view <branche>`), sinon
+     la branche seule ;
+  3. sinon la branche courante.
+
+  Avec une PR : `gh pr view <n|branche> --json number,state,baseRefName,headRefName,isCrossRepository` ;
+  PR introuvable → le dire et s'arrêter ; fermée ou mergée → le dire et s'arrêter.
+- **Dossier de travail** : là où la branche est extraite, sans changer le dossier de la
+  session.
+  - Branche courante → le dossier courant.
+  - Sinon, `git worktree list --porcelain` : si un worktree a la branche extraite
+    (`branch refs/heads/<branche>`) → ce worktree.
+  - Sinon, PR d'un fork (`isCrossRepository`) : le dire et s'arrêter (proposer
+    `/git-nav:pr <n>`). Sinon `git fetch origin <branche>`, puis selon le **worktree
+    principal** (première entrée de `git worktree list --porcelain`) :
+    - **sans travail en cours** (`git -C <principal> status --porcelain` vide, aucun
+      rebase, merge ou cherry-pick en cours) : y changer de branche,
+      `git -C <principal> switch <branche>` (crée la branche locale suivant
+      `origin/<branche>` si besoin), en notant ce qui était extrait avant (`<origine>` :
+      la branche, ou le SHA si `HEAD` était détaché) ;
+    - **avec travail en cours** : le worktree dédié de la branche,
+      `<principal>/.claude/worktrees/pr-<n>` (sans PR : `<branche>` avec `/` remplacés par
+      `-`), celui que `/git-nav:pr` et `/git-nav:br` réutiliseront. Chemin déjà enregistré
+      mais dossier absent (`prunable` dans `git worktree list --porcelain`) →
+      `git worktree prune` d'abord ; dossier présent mais pas enregistré → le dire et
+      s'arrêter (ne jamais le supprimer). Puis :
+      - plugin `git-nav` installé (`gpr` et `gbr` dans le `PATH`) : `gpr worktree <n>`
+        (sans PR : `gbr worktree <branche>`), qui fait le fetch, l'exclusion de
+        `.claude/worktrees/` et le `mise trust` ; sa sortie standard est le chemin ;
+      - sinon à la main : si `.claude/worktrees/` n'est pas ignoré
+        (`git -C <principal> check-ignore -q .claude/worktrees/x` échoue), l'ajouter à
+        `<git -C <principal> rev-parse --git-common-dir>/info/exclude` (une autorisation
+        sera demandée) ; puis `git worktree add <dossier> <branche>` si la branche existe
+        en local (`git rev-parse --verify refs/heads/<branche>`), sinon
+        `git worktree add --track -b <branche> <dossier> origin/<branche>`.
+  - **Dossier occupé** : avant de travailler dans un worktree existant ou de changer la
+    branche du worktree principal, chercher les processus de l'utilisateur dont le
+    répertoire courant est dans ce dossier (hors worktrees imbriqués
+    `.claude/worktrees/…` et hors cette session) : autre session Claude, shell, IDE.
+    Si le plugin `git-nav` est installé (`worktree-scan` dans le `PATH`), son verdict
+    `busy` le donne pour un worktree secondaire ; sinon, et toujours pour le worktree
+    principal, le faire à la main (`readlink /proc/<pid>/cwd` sur les processus de
+    l'utilisateur, `/proc/<pid>/comm` pour les nommer). Occupé → `AskUserQuestion`
+    (header « Occupé », processus en description) : **Continuer quand même** /
+    **Worktree dédié** (seulement pour le worktree principal : passer au cas « avec
+    travail en cours ») / **Annuler**.
+  - Hors du dossier courant, le dire en une ligne (branche + dossier) avant de continuer.
+    Toute commande git de la suite s'y lance par `git -C <dossier> …` (y compris
+    `git status`, le rebase et le push) ; « la branche » désigne alors celle de ce dossier.
 - `git status --porcelain` : s'il y a des modifications non commitées, le dire et
   s'arrêter (ne jamais stasher ni commiter à la place de l'utilisateur sans accord).
 - Rebase, merge ou cherry-pick en cours (`git status`) → le dire et s'arrêter.
-- **Base** : l'argument s'il y en a un ; sinon la base de la PR de la branche
-  (`gh pr view --json baseRefName`) ; sinon la branche par défaut d'`origin`
-  (`git symbolic-ref refs/remotes/origin/HEAD`). `git fetch origin <base>`, puis
-  `git merge-base HEAD origin/<base>` : c'est le point de départ de la réécriture.
+- **À jour avec `origin`** : si `origin/<branche>` existe (`git fetch origin <branche>`),
+  `git rebase origin/<branche>` — la branche rattrape ce qui a été poussé, ses commits
+  locaux non poussés se replacent dessus. Le dire s'il a fait quelque chose. Conflit →
+  `git rebase --abort`, le dire et s'arrêter.
+- **Base** : `--base <base>` s'il est donné ; sinon la base de la PR de la branche
+  (`baseRefName` ci-dessus, ou `gh pr view --json baseRefName`) ; sinon la branche par
+  défaut d'`origin` (`git symbolic-ref refs/remotes/origin/HEAD`).
+  - `--base` qui n'existe pas sur `origin` (`git ls-remote --heads origin <base>` vide) :
+    si la base de la PR contient le texte tapé (sans tenir compte de la casse, ex. `dev`
+    pour `develop`), la prendre sans rien demander ; sinon proposer les branches
+    d'`origin` qui le contiennent (`git ls-remote --heads origin`), `AskUserQuestion`
+    (header « Base », 4 au plus, la plus proche en premier) ; aucune → le dire et
+    s'arrêter.
+  - `git fetch origin <base>`, puis `git merge-base HEAD origin/<base>` : c'est le point
+    de départ de la réécriture.
 - Sur la base elle-même, ou aucun commit depuis la base → le dire et s'arrêter.
 
 ## 2. Comprendre la branche
@@ -110,5 +177,12 @@ dit quoi, on repropose) / **Annuler**.
 - Rappeler la sauvegarde `backup/…` et la commande pour revenir en arrière
   (`git reset --hard backup/…`), et proposer de la supprimer une fois le résultat validé
   (`git branch -D`, seulement sur accord).
+- Worktree principal passé sur la branche à l'étape 1 : le rappeler, et proposer d'y
+  revenir sur `<origine>` (`git -C <principal> switch <origine>`, ou
+  `switch --detach <sha>` si `HEAD` était détaché), y compris quand on s'arrête en route.
+- Worktree créé à l'étape 1 : il reste. Le dire, avec comment le rouvrir
+  (`/git-nav:pr <n>` ou `/git-nav:br <branche>` si le plugin `git-nav` est installé,
+  sinon `EnterWorktree` sur son chemin) et le retirer (`/git-nav:worktree clear`, sinon
+  `git worktree remove <dossier>`).
 - Si la branche a une PR : proposer `/git-tidy:pr-sync` pour remettre sa description et le
   ticket en phase.

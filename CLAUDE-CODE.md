@@ -643,10 +643,26 @@ claude plugin install git-tidy@claude-tools
 
 #### `/git-tidy:commits`
 
-`/git-tidy:commits [base]` : réécrit les commits de la branche courante depuis sa base
-(l'argument, sinon la base de sa PR, sinon la branche par défaut d'`origin`) sans changer le
-code final. Refuse de partir s'il y a des modifications non commitées ou une opération git
-en cours.
+`/git-tidy:commits [n] [--base <base>]` : réécrit les commits de la branche de la PR `n`,
+sinon de la PR ou branche en contexte (`/git-nav:pr`, `/git-nav:br`…), sinon de la branche
+courante, depuis sa base (`--base`, sinon la base de sa PR, sinon la branche par défaut
+d'`origin`) sans changer le code final. Tout autre argument est refusé avec l'usage.
+Refuse de partir s'il y a des modifications non commitées ou une opération git en cours.
+
+- **Autre branche que la courante** : travaille sans changer le dossier de la session
+  (`git -C`), dans le worktree déjà ouvert sur la branche s'il y en a un ; sinon passe le
+  worktree principal sur la branche (retour à l'ancienne, ou au commit détaché, proposé à
+  la fin), ou, s'il a du travail en cours, crée un worktree dédié
+  `.claude/worktrees/pr-<n>` (ou `<branche>` sans PR), gardé à la fin — par `gpr worktree`
+  ou `gbr worktree` si `git-nav` est installé, sinon à la main.
+  Pas pour une PR de fork : `/git-nav:pr` d'abord. Dossier occupé par un autre processus
+  (session Claude, shell, IDE ; `worktree-scan` de `git-nav` s'il est installé, sinon
+  `/proc`) : *Continuer quand même*, *Worktree dédié* ou *Annuler*.
+- **À jour avec `origin`** : `git rebase origin/<branche>` avant tout, pour partir de ce
+  qui a été poussé ; conflit → abandon et arrêt.
+- **Base introuvable** : si la base de la PR contient le texte de `--base` (`dev` →
+  `develop`), elle est prise sans question ; sinon les branches d'`origin` qui le
+  contiennent sont proposées.
 
 - **Plan** : un commit par changement logique (refactoring séparé et avant le changement de
   comportement, correction d'un bug déjà présent sur la base et réglage technique —
@@ -693,8 +709,9 @@ la PR) puis `/git-tidy:pr-sync`, en suivant leurs `SKILL.md` (les deux skills ne
 invocables par Claude). PR choisie comme pour `pr-sync` (argument, puis PR ou branche en
 contexte, puis branche courante, jamais la branche par défaut).
 
-- Refuse de partir sur une PR fermée ou mergée, ou si la branche n'est pas la branche
-  courante.
+- Refuse de partir sur une PR fermée ou mergée.
+- La branche de la PR peut ne pas être la branche courante : `commits` (lancé avec
+  `<n> --base <base de la PR>`) travaille dans son worktree.
 - Sans PR : propose d'en créer une en brouillon (*Créer en brouillon* ou *Annuler*) ; elle
   est créée après `commits` (branche poussée d'abord si besoin), puis `pr-sync` continue
   sur elle.

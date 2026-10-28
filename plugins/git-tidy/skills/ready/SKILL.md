@@ -24,10 +24,12 @@ sauter l'un des deux. Ces skills ne peuvent pas être lancés par l'outil Skill
   4. sinon (plusieurs candidats, ou rien hors de la branche par défaut) : demander
      (`AskUserQuestion`, header « PR »).
 - `gh pr view <n> --json number,url,state,baseRefName,headRefName`.
-- PR fermée ou mergée, ou branche (`headRefName`, ou branche en contexte sans PR) qui
-  n'est pas la branche courante : le dire et s'arrêter (proposer `/git-tidy:pr-sync` seul
-  pour une PR fermée, `gh pr checkout <n>`, `/git-nav:pr <n>` ou `/git-nav:br <branche>`
-  pour une autre branche).
+- PR fermée ou mergée : le dire et s'arrêter (proposer `/git-tidy:pr-sync` seul).
+- La branche de la PR n'a pas besoin d'être la branche courante : `commits` (étape 2)
+  travaille là où elle est extraite (worktree existant), sinon dans le worktree principal
+  ou, s'il a du travail en cours, dans un worktree dédié.
+- Branche en contexte sans PR qui n'est pas la branche courante : le dire et s'arrêter
+  (proposer `/git-nav:br <branche>`).
 - Pas de PR pour la branche courante : le dire et proposer d'en créer une en brouillon
   (`AskUserQuestion`, header « PR ») : **Créer en brouillon** / **Annuler**. Annuler →
   s'arrêter. Créer → continuer : la PR sera créée à l'étape 3, une fois les commits au
@@ -36,8 +38,8 @@ sauter l'un des deux. Ces skills ne peuvent pas être lancés par l'outil Skill
 ## 2. Les commits
 
 Lire `${CLAUDE_SKILL_DIR}/../commits/SKILL.md` et en suivre les étapes 1 à 6, avec
-`baseRefName` pour base (sans PR : la base que `commits` choisit seul), sans proposer
-`/git-tidy:pr-sync` à la fin.
+`<n> --base <baseRefName>` pour argument (sans PR : aucun argument, la base que `commits`
+choisit seul), sans proposer `/git-tidy:pr-sync` à la fin.
 
 - `commits` s'arrête (modifications non commitées, opération git en cours, aucun commit
   depuis la base, **Annuler**, retour à la sauvegarde…) : s'arrêter aussi, en le disant.

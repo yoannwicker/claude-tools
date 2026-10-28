@@ -78,7 +78,7 @@ demander une déconnexion/reconnexion de session.
   après un merge (`gh pr merge`, `git merge`, ou « c'est mergé »), Claude propose de
   supprimer la branche mergée, son worktree et sa branche distante (plugin `git-nav` ;
   `gpr`, `gbr` dans le terminal, `gbr cleanup` pour ce ménage).
-- `/git-tidy:commits [base]` : redécouper et reformuler les commits d'une branche avant
+- `/git-tidy:commits [n] [--base <base>]` : redécouper et reformuler les commits d'une branche avant
   relecture ou avant merge (sauvegarde, push forcé seulement sur accord) ; `/git-tidy:pr-sync` : remettre
   la description de la PR en phase et la raccorder au ticket JIRA ou à l'issue ;
   `/git-tidy:ready` : les deux d'affilée (plugin `git-tidy`).
