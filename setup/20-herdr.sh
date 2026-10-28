@@ -5,6 +5,7 @@
 #   --ui  installe Herdr UI sans demander (et oublie un refus)
 # Le choix est demandé dans un terminal tant que Herdr UI n'est ni installé ni refusé ; un refus est
 # retenu (~/.config/claude-tools/herdr-ui-declined). Sans terminal, il est seulement signalé.
+# Si le plugin review est installé, propose aussi son profil Herdr UI (plugins/review/herdr/profile.sh).
 set -eu
 if ! command -v herdr >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/herdr" ]; then
   curl -fsSL https://herdr.dev/install.sh | sh
@@ -51,6 +52,13 @@ herdr_ui() {
   esac
 }
 herdr_ui "$@"
+
+# Profil Herdr UI du plugin review (/review:pr depuis la boîte de revue) : proposé ici aussi, car
+# ./install.sh installe les plugins avant setup/, donc souvent avant Herdr UI.
+if command -v herdr-gpui >/dev/null 2>&1 \
+  && claude plugin list --json 2>/dev/null | jq -e 'any(.[]; .id == "review@claude-tools")' >/dev/null 2>&1; then
+  "$(cd "$(dirname "$0")/.." && pwd)/plugins/review/herdr/profile.sh" install
+fi
 
 integrations="claude"
 command -v copilot >/dev/null 2>&1 && integrations="$integrations copilot"

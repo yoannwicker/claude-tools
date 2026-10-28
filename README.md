@@ -119,7 +119,7 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
-                    review/ (agent reviewer, skills /review:diff, :pr et :feedback, bin/review-post)
+                    review/ (agent reviewer, skills /review:diff, :pr et :feedback, bin/review-post, profil Herdr UI)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, lean —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),

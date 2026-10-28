@@ -124,6 +124,9 @@ ou après un refus, il le signale seulement. `./setup/20-herdr.sh --ui` l'instal
 release GitHub, SHA-256 vérifié, installé par le gestionnaire de paquets via `sudo`),
 `brew install penso/tap/herdr-gpui` sur macOS. Mise à jour : par l'app (panneau *App Updates*),
 pas par `dot`. Désinstallation : `sudo apt remove herdr-gpui` (ou l'équivalent DNF/pacman/brew).
+Si le plugin `review` est installé, `20-herdr.sh` propose aussi son profil de revue
+`custom-reviewer` (`/review:pr` depuis la boîte de revue de PR) : voir
+[Profil Herdr UI](CLAUDE-CODE.md#profil-herdr-ui).
 
 **Configuration spécifique** :
 - Connexion GitHub (onglets PR et issues) : par la GitHub App

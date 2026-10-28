@@ -1019,7 +1019,10 @@ envoyé ou traité. Les skills ne se lancent qu'à la demande (`disable-model-in
 
 **Fichiers** : `plugins/review/` (`agents/reviewer.md`,
 `skills/{diff,pr,feedback}/SKILL.md`, `validation.md` commun aux skills,
-`bin/review-post`, `tests/review-post.test.sh`) ; rien hors du plugin. **Activé dans** :
+`bin/review-post`, `tests/review-post.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
+hors du plugin, seulement le profil Herdr UI facultatif
+`~/.config/agent-launcher/agents/custom-reviewer/prompt.md` (voir
+[Profil Herdr UI](#profil-herdr-ui)). **Activé dans** :
 le profil de référence et `vidal` (pas `lean`).
 
 **Prérequis** : `git`, `python3` ; `gh` authentifié (`/review:pr`, `/review:feedback`) ;
@@ -1137,6 +1140,32 @@ proposé : `/git-nav:pr <n>`), en un commit `--fixup` par commit visé (commit n
 un ajout), `git push` simple (à fondre plus tard avec `/git-tidy:commits`), puis réponses
 sur les fils (`addPullRequestReviewThreadReply`). Aucun fil n'est résolu : c'est au
 relecteur, ou à [`pr-comments`](#pr-comments).
+
+#### Profil Herdr UI
+
+[Herdr UI](TOOLS.md#herdr-ui) (pas la TUI herdr) lit des profils de revue dans
+`~/.config/agent-launcher/agents/<nom>/prompt.md` (champ *PROMPT* de sa boîte de revue de PR) :
+le texte du profil est ajouté **après** son prompt intégré, qui donne la PR vérifiée (numéro,
+refs, SHA, commandes `gh`/`git` pour le diff) et impose la lecture seule (rien de posté).
+
+Le profil **custom-reviewer** y fait la même chose que `/review:pr` : Claude lit et suit
+`skills/pr/SKILL.md` du plugin (le skill a `disable-model-invocation`, l'outil Skill ne peut
+pas le lancer), étapes 1 à 3 telles quelles (agent `review:reviewer`, vérification,
+validation dans le pane). Au lieu de poster directement, il montre la review prête et
+demande ; seul un « oui » explicite dans le pane la publie (`review-post`). Les `allowed-tools`
+du skill ne s'appliquent pas : les permissions sont celles de la session lancée par Herdr UI.
+
+Fichier écrit (pas un lien) depuis le gabarit `herdr/prompt.md`, avec le chemin absolu du
+plugin dans le dépôt, par `herdr/profile.sh install | remove | status` :
+- proposé (question `[O/n]` dans un terminal) par `./install.sh plugin review` si Herdr UI est
+  installé, et par `./setup/20-herdr.sh` si le plugin review est installé — `./install.sh`
+  installe les plugins avant `setup/`, donc souvent avant Herdr UI ;
+- refus retenu dans `~/.config/claude-tools/herdr-review-profile-declined` ; sans terminal ou
+  après un refus, seulement signalé. `REVIEW_HERDR_PROFILE=1 ./install.sh plugin review` le
+  pose sans demander et oublie le refus ;
+- profil déjà là mais différent (gabarit changé, retouché à la main) : sauvegardé en
+  `*.bak.<date>` puis réécrit ; `./install.sh status` le signale périmé ;
+- `./install.sh plugin --remove review` le retire s'il n'a pas été modifié (sinon gardé).
 
 ## Gabarit pour un nouveau plugin
 
