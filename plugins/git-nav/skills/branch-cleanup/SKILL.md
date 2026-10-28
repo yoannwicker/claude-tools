@@ -1,12 +1,13 @@
 ---
 name: branch-cleanup
-description: Supprimer une branche git une fois mergée — worktree, branche locale, sauvegardes backup/ et branche distante — après vérification du merge et confirmation. À utiliser dès qu'une branche ou une PR vient d'être mergée (gh pr merge, git merge, « c'est mergé », « PR acceptée », PR trouvée à l'état MERGED), ou pour faire le ménage des branches déjà mergées.
+description: Supprimer une branche git une fois mergée — worktree, branche locale, sauvegardes backup/ et branche distante — après vérification du merge et confirmation. À utiliser dès qu'une branche ou une PR vient d'être mergée (gh pr merge, git merge, git push <branche>:main, « c'est mergé », « PR acceptée », PR trouvée à l'état MERGED), ou pour faire le ménage des branches déjà mergées.
 user-invocable: false
 allowed-tools: Bash(gbr:*), Bash(gh pr list:*), Bash(git for-each-ref:*), ExitWorktree
 ---
 
 Pas de commande `/` : Claude lance ce skill de lui-même après un merge — le hook du plugin
-le lui rappelle après `gh pr merge` ou `git merge <branche>`, avec le plan déjà calculé —,
+le lui rappelle après `gh pr merge`, `git merge <branche>` ou
+`git push <remote> <branche>:<branche par défaut>`, avec le plan déjà calculé —,
 quand l'utilisateur dit qu'une branche ou une PR est mergée, ou quand `/pr`, `/br`,
 `/worktree release` tombent sur une PR mergée.
 

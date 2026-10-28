@@ -512,10 +512,14 @@ est lancé par Claude dès qu'une branche ou une PR est mergée, pour proposer d
 son worktree, la branche locale, ses sauvegardes et la branche distante :
 
 - **après un merge fait par Claude** : le hook `PostToolUse` du plugin
-  (`hooks/merge-watch.py`, sur `Bash`) repère un `gh pr merge` ou un `git merge <branche>`
-  réussi, lance `gbr cleanup --dry-run` sur la branche mergée et donne le plan à Claude
-  (pas pour `gh pr merge --auto`, ni `git merge --abort`/`--continue`/`--quit` ; non
-  inspectés : `bash -c`, `eval`, scripts) ;
+  (`hooks/merge-watch.py`, sur `Bash`) repère un `gh pr merge`, un `git merge <branche>`
+  ou un `git push <remote> <branche>:<branche par défaut>` (merge par avance rapide après
+  un rebase ; `HEAD:main` désigne la branche extraite, `git -C` compris) réussi, lance
+  `gbr cleanup --dry-run` sur la branche mergée et donne le plan à Claude (pas pour
+  `gh pr merge --auto`, ni `git merge --abort`/`--continue`/`--quit`, ni
+  `git push --delete`/`--dry-run`/`--all`/`--mirror`, un SHA ou la branche par défaut
+  poussée sur elle-même ; non inspectés : `bash -c`, `eval`, scripts, ni le dossier d'un
+  `cd` qui précède) ;
 - **après un merge fait ailleurs** (GitHub, terminal) : quand l'utilisateur dit qu'une
   branche ou une PR est mergée, ou quand `/pr`, `/br` ou `/worktree release` tombent sur
   une PR à l'état `MERGED` (`/pr` et `/br` enchaînent alors au lieu de proposer le checkout).

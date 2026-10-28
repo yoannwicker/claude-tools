@@ -75,7 +75,7 @@ demander une déconnexion/reconnexion de session.
 - `/pr [numéro | mots-clés]`, `/br [nom | mots-clés]` : trouver une PR ou une branche,
   la charger en contexte et se placer dessus (branche courante ou worktree) ;
   `/worktree clear` supprime les worktrees qu'aucune session n'utilise ;
-  après un merge (`gh pr merge`, `git merge`, ou « c'est mergé »), Claude propose de
+  après un merge (`gh pr merge`, `git merge`, `git push origin <branche>:main`, ou « c'est mergé »), Claude propose de
   supprimer la branche mergée, son worktree et sa branche distante (plugin `git-nav` ;
   `gpr`, `gbr` dans le terminal, `gbr cleanup` pour ce ménage).
 - `/git-tidy:commits [n] [--base <base>]` : redécouper et reformuler les commits d'une branche avant

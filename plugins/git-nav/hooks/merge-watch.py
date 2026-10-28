@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Hook PostToolUse (Bash) du plugin git-nav : après un merge réussi (gh pr merge,
-git merge <branche>), lance gbr cleanup --dry-run sur la branche mergée et demande à
-Claude d'enchaîner sur le skill git-nav:branch-cleanup avec ce plan.
+git merge <branche>, ou git push <remote> <branche>:<branche par défaut> qui y pousse une
+autre branche, comme après un rebase), lance gbr cleanup --dry-run sur la branche mergée et
+demande à Claude d'enchaîner sur le skill git-nav:branch-cleanup avec ce plan.
 
 Ignorés : gh pr merge --auto (le merge n'a pas encore eu lieu), git merge --abort,
---continue, --quit, entrée ou commande illisible. Non inspectés : bash -c '…', eval, scripts.
+--continue, --quit, git push --delete/--dry-run/--all/--mirror, push d'un SHA ou de la
+branche par défaut sur elle-même, entrée ou commande illisible. Non inspectés : bash -c '…',
+eval, scripts.
 """
 import json
 import os
@@ -23,6 +26,10 @@ GIT_MERGE_SKIP = {"--abort", "--continue", "--quit"}
 GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
 # Options de git merge qui prennent une valeur (git merge -m <message> <branche>).
 MERGE_OPTS_WITH_VALUE = {"-m", "-F", "-s", "-X", "--file", "--strategy", "--strategy-option"}
+# Options de git push qui prennent une valeur, et celles qui ne poussent pas une branche.
+PUSH_OPTS_WITH_VALUE = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
+PUSH_SKIP = {"-d", "--delete", "-n", "--dry-run", "--all", "--branches", "--mirror", "--prune"}
+SHA = re.compile(r"^[0-9a-f]{7,40}$")
 
 
 def segments(command):
@@ -41,7 +48,47 @@ def segments(command):
         yield current
 
 
-def merged(seg):
+def git_out(cwd, *args):
+    """Sortie de git dans cwd, None en cas d'échec."""
+    try:
+        out = subprocess.run(["git", *args], cwd=cwd or None, capture_output=True,
+                             text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() if out.returncode == 0 else None
+
+
+def pushed(args, cwd):
+    """git push <remote> <src>:<dst> qui pousse une autre branche sur la branche par défaut."""
+    if PUSH_SKIP & set(args):
+        return None
+    positional, i = [], 0
+    while i < len(args):
+        if args[i] in PUSH_OPTS_WITH_VALUE:
+            i += 1
+        elif not args[i].startswith("-"):
+            positional.append(args[i])
+        i += 1
+    if len(positional) < 2:
+        return None
+    remote = positional[0]
+    head = git_out(cwd, "symbolic-ref", "--quiet", "--short", f"refs/remotes/{remote}/HEAD")
+    defaults = {head.split("/", 1)[1]} if head and "/" in head else {"main", "master"}
+    for refspec in positional[1:]:
+        src, sep, dst = refspec.lstrip("+").partition(":")
+        dst = dst.removeprefix("refs/heads/")
+        if not sep or not src or dst not in defaults:
+            continue
+        if src in ("HEAD", "@"):
+            src = git_out(cwd, "symbolic-ref", "--quiet", "--short", "HEAD")
+        else:
+            src = src.removeprefix("refs/heads/")
+        if src and src != dst and not SHA.match(src):
+            return f"branche {src} poussée sur {dst}", [src]
+    return None
+
+
+def merged(seg, cwd=None):
     """(ce que le segment a mergé, arguments de gbr cleanup), None si ce n'est pas un merge."""
     i = 0
     while i < len(seg) and (ASSIGNMENT.match(seg[i]) or seg[i] in WRAPPERS):
@@ -58,7 +105,11 @@ def merged(seg):
     if seg[:1] == ["git"]:
         i = 1
         while i < len(seg) and seg[i].startswith("-"):
+            if seg[i] == "-C" and i + 1 < len(seg):
+                cwd = os.path.join(cwd or os.getcwd(), seg[i + 1])
             i += 2 if seg[i] in GIT_OPTS_WITH_VALUE else 1
+        if seg[i:i + 1] == ["push"]:
+            return pushed(seg[i + 1:], cwd)
         if seg[i:i + 1] != ["merge"]:
             return None
         args = seg[i + 1:]
@@ -89,7 +140,8 @@ def main():
     try:
         data = json.load(sys.stdin)
         command = data["tool_input"]["command"]
-        found = [m for m in map(merged, segments(command)) if m]
+        cwd = data.get("cwd")
+        found = [m for m in (merged(seg, cwd) for seg in segments(command)) if m]
     except (ValueError, KeyError, TypeError):
         return
     if not found:
@@ -102,7 +154,7 @@ def main():
         "dit de garder la branche."
     )
     if os.environ.get("MERGE_WATCH_NO_PLAN") != "1":
-        out = plan(args, data.get("cwd"))
+        out = plan(args, cwd)
         if out:
             context += f"\n\ngbr cleanup --dry-run {' '.join(args)} :\n{out}"
     json.dump({"hookSpecificOutput": {"hookEventName": "PostToolUse",
