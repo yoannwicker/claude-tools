@@ -49,6 +49,11 @@
       "name": "session-analysis",
       "source": "./plugins/session-analysis",
       "description": "Skills /session-analysis:report et /session-analysis:session : analyse des sessions d'agents avec AgentsView (30 derniers jours ou session en cours), ce qui s'est amélioré ou dégradé, pistes d'amélioration ; installe AgentsView"
+    },
+    {
+      "name": "review",
+      "source": "./plugins/review",
+      "description": "Agent reviewer (code ajouté seulement, refactoring exceptionnel, découpage) et skills /review:diff, /review:pr, /review:feedback : relire son diff, relire la PR d'un collègue et y poster les commentaires validés, traiter les retours reçus sur sa PR — chaque point priorisé, validé avant d'être envoyé ou traité"
     }
   ]
 }

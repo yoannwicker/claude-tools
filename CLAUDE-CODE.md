@@ -8,11 +8,11 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 
 **Fichiers** : `home/.claude/settings.json` (le profil de référence), `profiles/*.json` (surcharges, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh` ;
 plugins : `.claude-plugin/marketplace.json`,
-`plugins/{pr-comments,intellij,profiles,git-nav,git-tidy,notify,herdr-session,build-brief,session-analysis}/` (avec
+`plugins/{pr-comments,intellij,profiles,git-nav,git-tidy,notify,herdr-session,build-brief,session-analysis,review}/` (avec
 leur `setup.sh`), `install.sh plugin` (voir [Installation des plugins](#installation-des-plugins)).
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line) ; `gh`
-authentifié (plugins [`git-nav`](#git-nav) et [`git-tidy`](#git-tidy), badge PR de la status line) ; Linux + GNOME pour
+authentifié (plugins [`git-nav`](#git-nav), [`git-tidy`](#git-tidy) et [`review`](#review), badge PR de la status line) ; Linux + GNOME pour
 les notifications (plugin [`notify`](#notify)) ;
 IntelliJ ouvert avec son serveur MCP pour les outils IDE (voir [`intellij`](#intellij)) ;
 `build-brief` dans le PATH pour Gradle (plugin [`build-brief`](#build-brief)) ;
@@ -53,7 +53,7 @@ réglage, la statusline) se fait donc une fois, dans le profil de référence.
 Profils versionnés : `vidal` (config complète : tous les plugins du dépôt sauf `pr-comments`,
 plus `superpowers`, à installer une fois dans Claude Code :
 `/plugin install superpowers@claude-plugins-official`) et `lean` (le même sans
-`superpowers`, mais seuls les MCP `claude.ai Atlassian MCP` et
+`superpowers` ni [`review`](#review), mais seuls les MCP `claude.ai Atlassian MCP` et
 `plugin:intellij:intellij` restent allumés, les autres connecteurs claude.ai étant coupés par
 url dans `deniedMcpServers`). Aucun profil par défaut à l'installation : `claude` part sur le
 profil de référence (tous les plugins du dépôt sauf `pr-comments`).
@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync` et `:ready` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync` et `:ready` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr` et `:feedback` dans [`review`](#review). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -197,6 +197,8 @@ un panneau les flèches font défiler.
 PR précédente (`q`) et le groupe « à relire », absents de l'original (qui n'affiche que
 les PR ayant des fils non résolus).
 Réponses et résolutions passent par `gh` sans autre confirmation que la touche.
+Pour faire analyser tous les fils d'une de tes PR et proposer une suite à chacun :
+`/review:feedback` (plugin [`review`](#review)).
 GitHub est interrogé chaque minute pour la liste (1 point GraphQL sur 5000/h), les fils
 d'une PR seulement quand elle a changé, après une écriture, ou toutes les dix minutes.
 
@@ -1006,6 +1008,135 @@ skill par `${CLAUDE_SESSION_ID}`) ou de celle passée en argument — note et p�
 volume, échecs et refus avec leur cause, allers-retours, qualité des prompts, respect des
 consignes chargées —, puis 3 pistes au plus et un conseil pour la suite. Rendu dans la
 conversation, rien n'est écrit.
+
+### `review`
+
+**Rôle** : revue de code par un agent dédié (contexte isolé, regard non ancré sur la
+session) — relire son propre diff (`/review:diff`), relire la PR d'un collègue et y poster
+les commentaires retenus (`/review:pr`), traiter les retours reçus sur sa PR
+(`/review:feedback`). Chaque point est priorisé avec un conseil et validé avant d'être
+envoyé ou traité. Les skills ne se lancent qu'à la demande (`disable-model-invocation`).
+
+**Fichiers** : `plugins/review/` (`agents/reviewer.md`,
+`skills/{diff,pr,feedback}/SKILL.md`, `validation.md` commun aux skills,
+`bin/review-post`, `tests/review-post.test.sh`) ; rien hors du plugin. **Activé dans** :
+le profil de référence et `vidal` (pas `lean`).
+
+**Prérequis** : `git`, `python3` ; `gh` authentifié (`/review:pr`, `/review:feedback`) ;
+plugin [`git-nav`](#git-nav) pour chercher une PR par mots-clés dans `/review:pr` (`gpr`).
+Outils IntelliJ utilisés par l'agent s'ils répondent (plugin [`intellij`](#intellij)),
+sinon recherche classique. Tests : `bash plugins/review/tests/review-post.test.sh` (faux
+`gh`, rien n'est publié) ; pas de mod : `claude plugin test` ne s'applique pas.
+
+#### Installation hors de ce dépôt
+
+Le plugin ne dépend pas du reste de la config (`git-nav` seulement pour la recherche de
+PR par mots-clés) :
+
+```bash
+claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
+claude plugin install review@claude-tools
+```
+
+#### Agent `reviewer`
+
+Lancé par `/review:diff` et `/review:pr` (`review:reviewer`), en lecture seule (Bash
+limité par consigne à `git`/`gh` en lecture). Rend du JSON : résumé, proposition de
+découpage éventuelle, constats (`fichier:ligne` côté nouveau, conseil, gravité,
+catégorie `bug`/`securite`/`conformite`/`lisibilite`/`refactoring`, scénario d'échec,
+suggestion, à approfondir ou non), remarques non ancrées. Chaque constat est revérifié
+contre le code par le skill avant d'être montré.
+
+- **Périmètre** : seulement les lignes ajoutées ou modifiées ; le code autour sert à
+  comprendre, jamais de cible.
+- **Règles du dépôt cible** : `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING*` (racine et
+  dossiers touchés) ; une règle explicite enfreinte (doc à mettre à jour, fichier à ne
+  jamais versionner, convention) est un constat `conformite` indispensable.
+- **Refactoring, exceptionnel (3 au plus par revue)**, dans quatre cas seulement :
+  - **A.** piste soumise par le lanceur (`--refacto "<piste>"`) : évaluée (faisabilité,
+    périmètre, risques) ;
+  - **B.** le code ajouté tord trop l'existant (booléen ajouté pour un cas particulier,
+    branche greffée au milieu d'une fonction, contrat contourné) : extension propre la
+    plus petite ;
+  - **C.** doublon d'un flux métier existant : même opération sur les mêmes objets
+    métier, existant nommé (`fichier:ligne`) et atteignable sans nouvelle dépendance,
+    proposition « utiliser `X` au lieu de ce bloc », écart de comportement explicité ;
+  - **D.** renommage hors du diff pour un concept métier : clarifier un concept existant
+    que le nouveau rend ambigu, ou finir un remplacement que la PR ne fait qu'en partie
+    (occurrences restantes listées).
+
+  Toujours ancré sur la ligne ajoutée, conseil au plus « recommandé ». Jamais de
+  renommage hors cas D, de style ni d'« amélioration » de code non touché.
+- **Découpage** : diff qui mêle plusieurs sujets fonctionnels (hors corrections de bug)
+  dont l'un amène une notion très différente ou dépasse ~300 lignes ajoutées → découpage
+  proposé (sujets, fichiers, ordre, dépendances), avec une forme par partie :
+  - **commits ou PR** si elle est relativement proche du reste et en dépend, plus une
+    **tâche à ajouter sur l'US** si le projet suit ses US dans un outil de tickets (JIRA,
+    issues GitHub… : clé ou numéro dans la branche, le titre ou les commits) ;
+  - **US séparée** si elle est très séparée du reste, et/ou s'il reste des points
+    métier à trancher qui peuvent l'être plus tard (titre, description, points ouverts).
+
+#### Priorisation et validation
+
+Commune aux trois skills (`validation.md`). Conseil par point : **indispensable** (bug,
+faille, règle explicite enfreinte), **recommandé**, **optionnel**, **discutable** (gain
+incertain, se défend dans les deux sens), **très contestable** (goût, doute, coût
+supérieur au gain) ; tri par conseil puis gravité.
+
+- Par défaut, **en liste** : tableau numéroté puis une question — *Tout sauf « très
+  contestable »* (recommandé), *Indispensables seulement*, *Tout*, ou numéros et
+  reformulations en texte libre.
+- **Un par un** seulement pour les points `🔎` (arbitrage métier, plusieurs solutions,
+  refactoring, découpage, désaccord probable) : explication, extrait, options, question
+  dédiée.
+- Rien n'est envoyé ni modifié avant la fin de la validation.
+
+#### `/review:diff`
+
+`/review:diff [base] [--refacto "<piste>"]` : commits de la branche depuis sa base
+(l'argument, sinon la base de sa PR, sinon la branche par défaut d'`origin`) plus le
+working tree et les fichiers non suivis. Après validation, les corrections retenues sont
+appliquées dans le working tree, **sans commit ni `git add`** ; un découpage accepté donne
+un plan de commits à appliquer avec [`/git-tidy:commits`](#git-tidycommits), les branches
+des PR à créer, la partie à sortir pour une US séparée, et les brouillons de tâche ou
+d'US à reporter dans l'outil de tickets.
+
+#### `/review:pr`
+
+`/review:pr <numéro | recherche> [--refacto "<piste>"]` : PR d'un collègue (recherche par
+`gpr list`), relue sans s'y placer. Chaque point est montré **tel qu'il sera posté**
+(langue de la PR, préfixe `[bloquant]`, `[nit]` ou `[question]` selon le conseil, bloc
+`suggestion` pour un remplacement exact). Les commentaires validés sont **postés
+directement**, en une review `COMMENT` (jamais d'approbation ni de demande de
+changements), par `review-post`.
+
+`review-post <pr> <review.json> [--replace-pending] [--dry-run]` (`bin/`, dans le PATH de
+l'outil Bash) évite les deux échecs vus en publiant par `gh api` (constat 2 de
+[l'analyse du 23/10](docs/analyses-sessions/2026-10-23.md)) :
+
+- un commentaire dont la ligne n'est dans aucun hunk du diff (lignes ajoutées ou de
+  contexte, côté nouveau) passe dans le corps de la review (`chemin:ligne` — texte) au lieu
+  de faire échouer la publication (`Line could not be resolved`) ;
+- une review en attente à soi sur la PR (qui bloque toute nouvelle review) arrête le
+  script (code 3, avec son lien) ; le skill demande alors de la garder ou de la supprimer
+  (`--replace-pending`).
+
+#### `/review:feedback`
+
+`/review:feedback [numéro]` : une de mes PR, par défaut celle de la branche courante. Fils de
+review non résolus (GraphQL `reviewThreads`, même requête que `pr-comments`), chacun
+analysé avec son code (fils obsolètes revérifiés) et classé par conseil, avec une suite :
+**solution** (correctif précis), **options** (2-3, compromis, recommandation), **à
+discuter** (arbitrage métier, désaccord, impact large : ce qui fait hésiter et une
+réponse proposée) ou **déjà fait**, plus la réponse prévue sur le fil. Options et « à
+discuter » sont validés un par un.
+
+Puis, au choix : *Corriger, répondre et pousser* (recommandé), *Corriger et répondre, sans
+pousser*, *Corriger seulement*. Corrections seulement sur la branche de la PR (sinon
+proposé : `/git-nav:pr <n>`), en un commit `--fixup` par commit visé (commit normal pour
+un ajout), `git push` simple (à fondre plus tard avec `/git-tidy:commits`), puis réponses
+sur les fils (`addPullRequestReviewThreadReply`). Aucun fil n'est résolu : c'est au
+relecteur, ou à [`pr-comments`](#pr-comments).
 
 ## Gabarit pour un nouveau plugin
 

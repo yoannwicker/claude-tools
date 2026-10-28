@@ -33,6 +33,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Plugin `herdr-session` (reprise des sessions par herdr) | `./install.sh plugin herdr-session` | herdr et son intégration Claude (`./setup/20-herdr.sh`) |
 | Plugin `build-brief` (consigne et garde-fou Gradle) | `./install.sh plugin build-brief` | `build-brief` dans le PATH, `python3` |
 | Plugin `session-analysis` (analyse des sessions avec AgentsView, qu'il installe) | `./install.sh plugin session-analysis` | `python3`, `curl` |
+| Plugin `review` (agent reviewer, skills `/review:diff`, `/review:pr`, `/review:feedback` : relire son diff ou la PR d'un collègue, traiter les retours reçus) | `./install.sh plugin review` | `git`, `python3` ; `gh` authentifié ; `git-nav` pour chercher une PR par mots-clés |
 
 Plusieurs plugins d'un coup : `./install.sh plugin <nom>…`, tous : `./install.sh plugin --all`
 (c'est ce que fait `./install.sh`). Relancer met à jour. `./install.sh plugin --remove <nom>…`
@@ -82,6 +83,11 @@ demander une déconnexion/reconnexion de session.
   relecture ou avant merge (sauvegarde, push forcé seulement sur accord) ; `/git-tidy:pr-sync` : remettre
   la description de la PR en phase et la raccorder au ticket JIRA ou à l'issue ;
   `/git-tidy:ready` : les deux d'affilée (plugin `git-tidy`).
+- `/review:diff` : faire relire mon diff avant commit ou PR par l'agent `reviewer` (code
+  ajouté seulement) ; `/review:pr <n>` : relire la PR d'un collègue et y poster les
+  commentaires retenus ; `/review:feedback` : traiter les retours reçus sur ma PR
+  (solution, options ou à discuter pour chacun, puis fixups et réponses). Chaque point est
+  priorisé et validé avant d'être envoyé ou traité (plugin `review`).
 - `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des
   agents (AgentsView), rangé dans `docs/analyses-sessions/` pour ce dépôt ;
   `/session-analysis:session` : bilan de la session en cours (plugin `session-analysis`).
@@ -112,7 +118,8 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     git-tidy/ (skills /git-tidy:commits, :pr-sync et :ready),
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
-                    /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect})
+                    /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
+                    review/ (agent reviewer, skills /review:diff, :pr et :feedback, bin/review-post)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, lean —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),

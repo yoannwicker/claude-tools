@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""review-post — publie une review GitHub (event COMMENT) sans les échecs habituels de
+`gh api` : ligne hors du diff (« Line could not be resolved ») et review en attente déjà
+présente (« User can only have one pending review per pull request »).
+
+  review-post <pr> <review.json> [--replace-pending] [--dry-run]
+
+review.json : {"body": "texte général", "comments": [{"path": "…", "line": 42, "body": "…"}]}
+  - `line` : ligne du côté nouveau (RIGHT). Un commentaire dont la ligne n'est dans aucun
+    hunk du diff de la PR passe dans le corps de la review (`path:line` — texte).
+  - Une review en attente (PENDING) à soi sur la PR bloque toute nouvelle review : refus
+    (code 3) sans --replace-pending, suppression de celle-ci avec.
+  - --dry-run : écrit la requête qui serait envoyée, sans rien publier ni supprimer.
+
+Dépôt : celui du dossier courant (placeholders {owner}/{repo} de `gh api`).
+Écrit l'URL de la review publiée.
+"""
+import argparse, json, re, subprocess, sys
+
+HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+
+
+def die(msg, code=1):
+    print(f"review-post: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def gh(*args, data=None):
+    r = subprocess.run(["gh", "api", *args], input=None if data is None else json.dumps(data),
+                       capture_output=True, text=True)
+    if r.returncode:
+        die(f"gh api {' '.join(args)} : {r.stderr.strip() or r.stdout.strip()}")
+    return json.loads(r.stdout) if r.stdout.strip() else None
+
+
+def pages(path):
+    out, page = [], 1
+    while True:
+        batch = gh(f"{path}{'&' if '?' in path else '?'}per_page=100&page={page}")
+        out += batch
+        if len(batch) < 100:
+            return out
+        page += 1
+
+
+def commentable(patch):
+    """Lignes du côté nouveau présentes dans les hunks (ajoutées ou de contexte)."""
+    lines, cur = set(), None
+    for raw in (patch or "").splitlines():
+        m = HUNK.match(raw)
+        if m:
+            cur = int(m.group(1))
+        elif cur is None or raw.startswith("\\"):
+            continue
+        elif raw.startswith("-"):
+            pass
+        else:  # '+' ou ' '
+            lines.add(cur)
+            cur += 1
+    return lines
+
+
+def split(comments, files):
+    ok = {f["filename"]: commentable(f.get("patch")) for f in files}
+    inline, outside = [], []
+    for c in comments:
+        if c["line"] in ok.get(c["path"], ()):
+            inline.append({"path": c["path"], "line": c["line"], "side": "RIGHT", "body": c["body"]})
+        else:
+            outside.append(c)
+    return inline, outside
+
+
+def main():
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("pr", type=int)
+    p.add_argument("review")
+    p.add_argument("--replace-pending", action="store_true")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("-h", "--help", action="store_true")
+    if {"-h", "--help"} & set(sys.argv[1:]):
+        print(__doc__.strip())
+        return
+    a = p.parse_args()
+
+    with open(a.review) as f:
+        review = json.load(f)
+    body = (review.get("body") or "").strip()
+    comments = review.get("comments") or []
+    if not body and not comments:
+        die("rien à publier (ni body ni comments)")
+
+    base = f"repos/{{owner}}/{{repo}}/pulls/{a.pr}"
+    pr = gh(base)
+    if pr.get("state") != "open":
+        die(f"PR #{a.pr} n'est pas ouverte ({pr.get('state')})")
+    inline, outside = split(comments, pages(f"{base}/files"))
+    if outside:
+        body += ("\n\n" if body else "") + "\n".join(
+            f"- `{c['path']}:{c['line']}` — {c['body']}" for c in outside)
+    if not body:
+        body = f"{len(inline)} commentaire(s)."
+
+    me = gh("user")["login"]
+    pending = [r for r in pages(f"{base}/reviews")
+               if r.get("state") == "PENDING" and (r.get("user") or {}).get("login") == me]
+    if pending and not a.replace_pending:
+        die(f"une review en attente à toi existe déjà sur #{a.pr} ({pending[0]['html_url']}) : "
+            "la soumettre ou la supprimer sur GitHub, ou relancer avec --replace-pending "
+            "(elle sera supprimée)", 3)
+
+    payload = {"commit_id": pr["head"]["sha"], "event": "COMMENT", "body": body, "comments": inline}
+    if a.dry_run:
+        print(json.dumps({"delete_pending": [r["id"] for r in pending], "review": payload,
+                          "moved_to_body": len(outside)}, ensure_ascii=False, indent=2))
+        return
+    for r in pending:
+        gh("-X", "DELETE", f"{base}/reviews/{r['id']}")
+    res = gh("-X", "POST", f"{base}/reviews", "--input", "-", data=payload)
+    print(res["html_url"])
+    if outside:
+        print(f"{len(outside)} commentaire(s) hors du diff, mis dans le corps de la review",
+              file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
