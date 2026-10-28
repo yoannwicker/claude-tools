@@ -1139,6 +1139,18 @@ l'outil Bash) évite les deux échecs vus en publiant par `gh api` (constat 2 de
   script (code 3, avec son lien) ; le skill demande alors de la garder ou de la supprimer
   (`--replace-pending`).
 
+Dernière étape, seulement si un worktree ou une branche a été créé pour la revue (par
+Herdr UI, [`/git-nav:pr`](#git-nav), `gh pr checkout`, à la main…) : un worktree lié à la
+tête de la PR, ouvert dans la conversation ou à la branche au nom de revue
+(`agent/review-<n>-…`, `pr-<n>`…), sinon le skill demande ; et les branches de revue de
+cette PR restées sans worktree. Si le worktree est propre et que le commit de chaque
+branche est sur `origin`, le skill propose de supprimer le worktree et sa branche locale
+ensemble (`git worktree remove` sans `--force`, `git branch -D`), en sortant d'abord la
+session s'il y tourne. Un worktree ouvert dans Herdr est retiré par `herdr worktree remove`,
+qui ferme son workspace mais garde la branche, supprimée juste après : si la session y
+tourne, les deux sont lancés détachés en dernier (échecs dans
+`~/.cache/claude-tools/review-cleanup.log`).
+
 #### `/review:feedback`
 
 `/review:feedback [numéro]` : une de mes PR, par défaut celle de la branche courante. Fils de
@@ -1167,7 +1179,10 @@ Le profil **custom-reviewer** y fait la même chose que `/review:pr` : Claude li
 `skills/pr/SKILL.md` du plugin (le skill a `disable-model-invocation`, l'outil Skill ne peut
 pas le lancer), étapes 1 à 3 telles quelles (agent `review:reviewer`, vérification,
 validation dans le pane). Au lieu de poster directement, il montre la review prête et
-demande ; seul un « oui » explicite dans le pane la publie (`review-post`). Les `allowed-tools`
+demande ; seul un « oui » explicite dans le pane la publie (`review-post`). L'étape de ménage
+est faite telle quelle : la boîte de revue ouvre la PR dans un worktree
+`~/.herdr/worktrees/<dépôt>/agent-review-<n>-…` (branche `agent/review-<n>-…`), que le skill
+propose de supprimer à la fin avec sa branche, son workspace et ce pane. Les `allowed-tools`
 du skill ne s'appliquent pas : les permissions sont celles de la session lancée par Herdr UI.
 
 Fichier écrit (pas un lien) depuis le gabarit `herdr/prompt.md`, avec le chemin absolu du

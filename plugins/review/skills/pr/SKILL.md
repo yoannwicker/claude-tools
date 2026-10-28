@@ -1,9 +1,9 @@
 ---
 name: pr
-description: Relire la PR d'un collègue avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub (COMMENT)
+description: Relire la PR d'un collègue avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub (COMMENT), et enfin supprimer le worktree et la branche créés pour la revue s'il y en a
 argument-hint: "<numéro | recherche> [--refacto \"<piste>\"]"
 disable-model-invocation: true
-allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(git:*), Bash(review-post:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent
+allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree
 ---
 
 Arguments : `$ARGUMENTS`
@@ -66,3 +66,45 @@ Une fois la validation finie, **poster directement** (la validation vaut accord)
   (`AskUserQuestion`, header « En attente ») : **La garder, ne rien poster** / **La
   supprimer et poster** (`--replace-pending`).
 - Fin : l'URL de la review, le nombre de commentaires inline et passés dans le corps.
+
+## 5. Le ménage (seulement si un worktree ou une branche a été créé pour la revue)
+
+Toujours la dernière étape, même si rien n'a été posté. Quel que soit l'outil qui les a
+créés (Herdr UI, `/git-nav:pr`, `gh pr checkout`, à la main…), un worktree et sa branche
+ont pu être ouverts pour relire la PR et n'ont plus d'usage ensuite. La branche part avec
+le worktree, et seule si son worktree a déjà disparu (Herdr retire ses worktrees sans
+supprimer leur branche).
+
+1. **Les trouver** :
+   - worktrees : `git worktree list --porcelain`, en gardant les worktrees liés (pas le
+     dépôt principal) dont HEAD est `headRefOid` ou la branche `headRefName` — celui de
+     la session en premier (`git rev-parse --git-dir` ≠ `--git-common-dir`) ;
+   - branches locales de cette PR sans worktree : au nom de revue
+     (`git branch --list 'agent/review-<n>-*' 'review/*<n>*' 'pr-<n>'` : celles de
+     `%(worktreepath)` vide), ou `headRefName` créée au cours de cette conversation.
+
+   Créé pour la revue : ouvert au cours de cette conversation, ou branche au nom de revue
+   (`agent/review-<n>-…` de Herdr UI, `review/…`, `pr-<n>`…). Dans le doute, demander.
+   Aucun : rien à faire, ne rien dire.
+2. **Rien à perdre** : worktree propre (`git -C <chemin> status --porcelain` vide), et
+   commit de chaque branche sur `origin` (`git branch -r --contains <branche ou HEAD>` non
+   vide, ou = `headRefOid`). Sinon : dire ce qui bloque et ne pas y toucher.
+3. Demander (`AskUserQuestion`, header « Ménage ») : **Supprimer le worktree et sa branche
+   (Recommandé)** / **Les garder** — en listant ce qui sera supprimé.
+4. **Supprimer** (`<dépôt>` = dépôt principal, dossier parent de
+   `git rev-parse --git-common-dir`) ; une branche seulement si plus aucun worktree ne
+   l'utilise, jamais celle du dépôt principal :
+   - session dans le worktree : en sortir d'abord (`ExitWorktree` avec `action: "keep"`,
+     jamais `remove` ; si aucune session worktree n'est active, `cd <dépôt>`) ;
+   - `git -C <dépôt> worktree remove <chemin>` (jamais `--force`),
+     `git -C <dépôt> worktree prune`, puis `git -C <dépôt> branch -D <branche>` pour la
+     branche du worktree et celles trouvées sans worktree (sans risque, vérifié en 2) ;
+   - cas particulier, worktree ouvert dans Herdr (`herdr worktree list` : ce chemin a un
+     `open_workspace_id`) : le retirer par Herdr, qui ferme aussi son workspace mais garde
+     la branche. Branches sans worktree d'abord (`git branch -D`). Si la session tourne
+     dans ce worktree, elle se ferme avec : afficher d'abord le récapitulatif final, puis
+     lancer en dernier, détaché :
+     `setsid -f sh -c 'herdr worktree remove --workspace <id> && git -C <dépôt> branch -D <branche>' >>"$HOME/.cache/claude-tools/review-cleanup.log" 2>&1`
+     (créer le dossier du log avant ; un échec y est écrit).
+
+   Dire ce qui a été supprimé et où est la session.
