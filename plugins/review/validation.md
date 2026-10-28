@@ -18,8 +18,9 @@ conseil puis gravité :
 ## Validation en liste (par défaut)
 
 1. Tableau numéroté, une ligne par point : `n°`, conseil, `fichier:ligne`, constat en une
-   ligne, proposition en une ligne. Les points `à approfondir` sont marqués `🔎` et
-   restent dans la liste.
+   ligne, proposition en une ligne (`ticket` au lieu de `fichier:ligne` pour un écart au
+   ticket sans ligne). Les points `à approfondir` sont marqués `🔎` et restent dans la
+   liste.
 2. Une seule question (`AskUserQuestion`, header « Points ») :
    - **Tout sauf « très contestable » (Recommandé)** ;
    - **Indispensables seulement** ;
@@ -29,7 +30,8 @@ conseil puis gravité :
 ## Un par un (seulement pour les points `🔎` gardés)
 
 Un point mérite d'être approfondi quand il demande une explication ou un arbitrage :
-choix métier, plusieurs solutions valables, refactoring, découpage, désaccord probable.
+choix métier, plusieurs solutions valables, refactoring, découpage, écart au ticket non
+justifié, désaccord probable.
 Pour chacun, après la liste : explication détaillée, extrait de code, options avec leurs
 compromis et une recommandation, puis une question dédiée (header court, 2 à 4 options,
 la recommandée en premier). « Autre » → texte libre.

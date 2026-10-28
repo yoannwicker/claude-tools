@@ -1018,7 +1018,7 @@ les commentaires retenus (`/review:pr`), traiter les retours reçus sur sa PR
 envoyé ou traité. Les skills ne se lancent qu'à la demande (`disable-model-invocation`).
 
 **Fichiers** : `plugins/review/` (`agents/reviewer.md`,
-`skills/{diff,pr,feedback}/SKILL.md`, `validation.md` commun aux skills,
+`skills/{diff,pr,feedback}/SKILL.md`, `validation.md` et `ticket.md` communs aux skills,
 `bin/review-post`, `tests/review-post.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
 hors du plugin, seulement le profil Herdr UI facultatif
 `~/.config/agent-launcher/agents/custom-reviewer/prompt.md` (voir
@@ -1027,7 +1027,8 @@ le profil de référence et `vidal` (pas `lean`).
 
 **Prérequis** : `git`, `python3` ; `gh` authentifié (`/review:pr`, `/review:feedback`) ;
 plugin [`git-nav`](#git-nav) pour chercher une PR par mots-clés dans `/review:pr` (`gpr`).
-Outils IntelliJ utilisés par l'agent s'ils répondent (plugin [`intellij`](#intellij)),
+Lecture du ticket : MCP Atlassian (`getJiraIssue`) pour JIRA, `gh` pour une issue GitHub ;
+sans eux, la revue se fait sans le ticket. Outils IntelliJ utilisés par l'agent s'ils répondent (plugin [`intellij`](#intellij)),
 sinon recherche classique. Tests : `bash plugins/review/tests/review-post.test.sh` (faux
 `gh`, rien n'est publié) ; pas de mod : `claude plugin test` ne s'applique pas.
 
@@ -1045,7 +1046,7 @@ claude plugin install review@claude-tools
 
 Lancé par `/review:diff` et `/review:pr` (`review:reviewer`), en lecture seule (Bash
 limité par consigne à `git`/`gh` en lecture). Rend du JSON : résumé, proposition de
-découpage éventuelle, constats (`fichier:ligne` côté nouveau, conseil, gravité,
+découpage éventuelle, conformité au ticket, constats (`fichier:ligne` côté nouveau, conseil, gravité,
 catégorie `bug`/`securite`/`conformite`/`lisibilite`/`refactoring`, scénario d'échec,
 suggestion, à approfondir ou non), remarques non ancrées. Chaque constat est revérifié
 contre le code par le skill avant d'être montré.
@@ -1055,6 +1056,16 @@ contre le code par le skill avant d'être montré.
 - **Règles du dépôt cible** : `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING*` (racine et
   dossiers touchés) ; une règle explicite enfreinte (doc à mettre à jour, fichier à ne
   jamais versionner, convention) est un constat `conformite` indispensable.
+- **Conformité au ticket** : si `/review:diff` ou `/review:pr` a trouvé un ticket
+  (`ticket.md` : clé JIRA ou issue GitHub dans la branche, le titre, la description de la
+  PR ou les commits ; lu avec ses commentaires et l'US parente), le diff est comparé à la
+  demande — les décisions prises dans les commentaires primant sur la description. Chaque
+  écart (`ajout` hors périmètre, `retrait` d'une partie demandée, `changement` de
+  direction) doit être justifié (ce qui change et pourquoi) dans la description de la PR,
+  un commentaire du ticket ou un message de commit : justifié, il est montré pour
+  information avec sa source ; sinon c'est un point `🔎`, indispensable si un critère
+  d'acceptation n'est pas tenu ou est contredit, recommandé sinon. Pas de ticket trouvé
+  ou lisible : dit en une ligne, la revue continue sans.
 - **Refactoring, exceptionnel (3 au plus par revue)**, dans quatre cas seulement :
   - **A.** piste soumise par le lanceur (`--refacto "<piste>"`) : évaluée (faisabilité,
     périmètre, risques) ;
@@ -1090,8 +1101,8 @@ supérieur au gain) ; tri par conseil puis gravité.
   contestable »* (recommandé), *Indispensables seulement*, *Tout*, ou numéros et
   reformulations en texte libre.
 - **Un par un** seulement pour les points `🔎` (arbitrage métier, plusieurs solutions,
-  refactoring, découpage, désaccord probable) : explication, extrait, options, question
-  dédiée.
+  refactoring, découpage, écart au ticket non justifié, désaccord probable) : explication,
+  extrait, options, question dédiée.
 - Rien n'est envoyé ni modifié avant la fin de la validation.
 
 #### `/review:diff`
@@ -1102,14 +1113,18 @@ working tree et les fichiers non suivis. Après validation, les corrections rete
 appliquées dans le working tree, **sans commit ni `git add`** ; un découpage accepté donne
 un plan de commits à appliquer avec [`/git-tidy:commits`](#git-tidycommits), les branches
 des PR à créer, la partie à sortir pour une US séparée, et les brouillons de tâche ou
-d'US à reporter dans l'outil de tickets.
+d'US à reporter dans l'outil de tickets. Un écart au ticket non justifié est soit corrigé
+dans le code, soit justifié : le texte est rédigé, avec où le mettre (description de la
+PR, commentaire du ticket, message de commit), rien n'est posté.
 
 #### `/review:pr`
 
 `/review:pr <numéro | recherche> [--refacto "<piste>"]` : PR d'un collègue (recherche par
 `gpr list`), relue sans s'y placer. Chaque point est montré **tel qu'il sera posté**
 (langue de la PR, préfixe `[bloquant]`, `[nit]` ou `[question]` selon le conseil, bloc
-`suggestion` pour un remplacement exact). Les commentaires validés sont **postés
+`suggestion` pour un remplacement exact). Un écart au ticket non justifié devient une
+demande de justification à l'auteur (sur sa ligne, sinon dans le corps de la review). Les
+commentaires validés sont **postés
 directement**, en une review `COMMENT` (jamais d'approbation ni de demande de
 changements), par `review-post`.
 

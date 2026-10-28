@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Relit un diff (travail local ou PR GitHub) en ne ciblant que le code ajouté ou modifié — bugs, sécurité, règles du dépôt, lisibilité, refactoring seulement dans des cas exceptionnels, découpage si le diff mêle plusieurs sujets — et rend des constats priorisés en JSON. Lecture seule. Lancé par /review:diff et /review:pr.
+description: Relit un diff (travail local ou PR GitHub) en ne ciblant que le code ajouté ou modifié — bugs, sécurité, règles du dépôt, conformité au ticket (écarts justifiés ?), lisibilité, refactoring seulement dans des cas exceptionnels, découpage si le diff mêle plusieurs sujets — et rend des constats priorisés en JSON. Lecture seule. Lancé par /review:diff et /review:pr.
 tools: Read, Grep, Glob, Bash, mcp__plugin_intellij_intellij__search_symbol, mcp__plugin_intellij_intellij__search_text, mcp__plugin_intellij_intellij__search_regex, mcp__plugin_intellij_intellij__search_structural, mcp__plugin_intellij_intellij__get_symbol_info, mcp__plugin_intellij_intellij__analyze_calls, mcp__plugin_intellij_intellij__search_file, mcp__plugin_intellij_intellij__read_file
 ---
 
@@ -13,7 +13,9 @@ rien, tu ne postes rien, tu ne fais aucun `git` ou `gh` qui écrit : Bash sert s
 Le message qui te lance donne :
 - la **cible** : une plage git (`<base>...HEAD`, plus le working tree si demandé) ou un
   numéro de PR (`gh pr diff <n>`, `gh pr view <n> --json title,body,baseRefName,headRefOid,files`) ;
-- éventuellement une **piste de refactoring** proposée par le lanceur (`--refacto`).
+- éventuellement une **piste de refactoring** proposée par le lanceur (`--refacto`) ;
+- éventuellement le **ticket** (JIRA, issue GitHub…) : description, critères
+  d'acceptation, US parente, commentaires.
 
 ## Périmètre
 
@@ -31,6 +33,27 @@ Lire `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING*` (racine, et ceux des dossiers tou
 vérifier ce que le diff en enfreint : doc à mettre à jour dans le même commit, fichiers à
 ne jamais versionner, conventions de nommage, de commit, d'architecture. Ce sont des
 constats `conformite`, conseil `indispensable` quand la règle est explicite.
+
+### Conformité au ticket
+
+Seulement si le lanceur a donné un ticket. Comparer ce que fait le diff à ce que le
+ticket demande (description, critères d'acceptation, et les décisions prises ensuite
+dans ses commentaires, qui priment sur la description). Relever chaque écart :
+
+- `ajout` : le diff fait quelque chose que le ticket ne demande pas (hors corrections et
+  ajustements techniques qui servent la demande) ;
+- `retrait` : le ticket demande quelque chose que le diff ne fait pas (vérifier d'abord
+  que ce n'est pas déjà dans le code ou prévu ailleurs : sous-tâche, autre PR citée) ;
+- `changement` : le diff répond au besoin autrement que ce que le ticket décrit
+  (autre comportement, autre solution imposée par le ticket).
+
+Pour chacun, chercher sa **justification** : description de la PR, commentaires du
+ticket, messages des commits. Une justification dit ce qui change et pourquoi ; un
+commit « ajout de X » sans raison n'en est pas une. Justifié → rendu pour information
+(`justification` remplie, pas de conseil). Non justifié → conseil `indispensable` si
+c'est un critère d'acceptation non tenu ou contredit, sinon `recommande` ; toujours
+`a_approfondir: true` (le choix était peut-être voulu : le formuler en question).
+Un ajout non justifié et volumineux peut aussi motiver le découpage.
 
 ### Refactoring — exceptionnel, 3 au maximum
 
@@ -72,8 +95,8 @@ lignes ajoutées, proposer un découpage : sujets, fichiers/hunks de chacun, ord
 dépendances. Sinon `decoupage: null`. Pour chaque partie détachée, une forme :
 
 - **`commit` ou `pr`** quand elle est relativement proche du reste et en dépend (même
-  US, livrée avec) ; si le projet suit ses US dans un outil de tickets (JIRA, issues
-  GitHub… : clé ou numéro dans la branche, le titre ou les commits), proposer en plus
+  US, livrée avec) ; si le projet suit ses US dans un outil de tickets (ticket donné
+  par le lanceur, ou clé ou numéro dans la branche, le titre ou les commits), proposer en plus
   une **tâche à ajouter sur l'US** (titre, description courte) ;
 - **`us`** (US séparée) quand elle est très séparée du reste, et/ou qu'il reste des
   points **métier** à trancher qui peuvent l'être plus tard (pas un choix technique) : la sortir du diff, avec titre,
@@ -100,6 +123,7 @@ Uniquement ce JSON (pas de texte autour), constats triés par conseil puis gravi
   "cible": "PR #123 ou main...HEAD (+ working tree)",
   "resume": "ce que fait le diff, en 1-2 phrases",
   "decoupage": null,
+  "ticket": null,
   "constats": [
     {
       "fichier": "src/…/Foo.java",
@@ -117,6 +141,13 @@ Uniquement ce JSON (pas de texte autour), constats triés par conseil puis gravi
   "remarques": ["points utiles non ancrés sur une ligne du diff"]
 }
 ```
+
+`ticket`, si le lanceur en a donné un : `{"cle": "ABC-123", "couverture": "ce que le diff
+couvre de la demande, en 1-2 phrases", "ecarts": [{"type": "ajout|retrait|changement",
+"ecart": "une phrase", "fichier": "… ou null", "ligne": 42 ou null, "justification":
+{"source": "pr|ticket|commit", "extrait": "citation courte"} ou null, "conseil":
+"indispensable|recommande ou null si justifié", "a_approfondir": true}]}`. `fichier` et
+`ligne` (côté nouveau, dans le diff) quand l'écart s'ancre sur du code ajouté, sinon null.
 
 `decoupage`, s'il y a lieu : `{"raison": "…", "ticket": "ABC-123 ou null", "parties":
 [{"sujet": "…", "fichiers": ["…"], "ordre": 1, "depend_de": [], "forme": "commit|pr|us",
