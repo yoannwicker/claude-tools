@@ -1,38 +1,59 @@
 ---
 name: pr
-description: Relire la PR d'un collègue avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub (COMMENT), et enfin supprimer le worktree et la branche créés pour la revue s'il y en a
-argument-hint: "<numéro | recherche> [--refacto \"<piste>\"]"
+description: Relire la PR d'un collègue — ou plusieurs PR liées ensemble (pile de PR, même sujet), avec la cohérence entre elles — avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub (COMMENT) par PR, et enfin supprimer les worktrees et branches créés pour la revue s'il y en a
+argument-hint: "<numéro… | recherche> [--refacto \"<piste>\"]"
 disable-model-invocation: true
-allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree
+allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree
 ---
 
 Arguments : `$ARGUMENTS`
 
 But : relire la PR de quelqu'un d'autre et lui laisser les commentaires que j'ai validés.
+Plusieurs PR liées (pile de PR, PR sur un même sujet, peut-être contradictoires) se
+relisent ensemble : chacune pour elle-même, plus la cohérence entre elles.
 
-## 1. La PR
+## 1. Les PR
 
-- Argument numérique (`83`, `#83`) → cette PR ; sinon `gpr list <recherche>` (plugin
-  `git-nav`) : un seul résultat → celui-là, plusieurs → demander (`AskUserQuestion`,
-  header « PR »). Sans argument : la PR en contexte dans la conversation, sinon demander.
-- `gh pr view <n> --json number,title,body,url,state,author,baseRefName,headRefName,headRefOid,isDraft,commits`.
-  PR fermée ou mergée → le dire et s'arrêter. PR à moi (`author` = `gh api user`) → le
-  signaler et proposer `/review:diff` (sur sa branche) ou `/review:feedback`.
-- Ne pas se placer sur la PR : le diff et l'API suffisent.
-- `--refacto "<piste>"` : piste de refactoring à faire évaluer par l'agent.
-- Le ticket : lire `${CLAUDE_SKILL_DIR}/../../ticket.md` et le suivre (`headRefName`,
-  titre et description de la PR, messages de ses commits).
+- Arguments numériques (`83`, `#83`, `83 84 85`) → ces PR ; sinon `gpr list <recherche>`
+  (plugin `git-nav`) : un seul résultat → celui-là, plusieurs → demander lesquelles
+  (`AskUserQuestion`, `multiSelect`, header « PR »). Sans argument : la ou les PR en
+  contexte dans la conversation, sinon demander.
+- Pour chacune, `gh pr view <n> --json number,title,body,url,state,author,baseRefName,headRefName,headRefOid,isDraft,commits`.
+  PR fermée ou mergée → le dire et la retirer du lot. PR à moi (`author` = `gh api user`)
+  → le signaler et proposer `/review:diff` (sur sa branche) ou `/review:feedback` ; la
+  retirer du lot. Plus aucune PR → s'arrêter. Toutes dans le dépôt courant (sinon le dire
+  et s'arrêter).
+- **Pile** : `gh pr list --state open --json number,title,author,baseRefName,headRefName`
+  une fois ; une PR ouverte d'un autre que moi, hors du lot, dont la base est la tête d'une
+  PR du lot (au-dessus) ou dont la tête est la base d'une PR du lot (en dessous), de proche
+  en proche → proposer de l'ajouter (`AskUserQuestion`, `multiSelect`, header « Pile »,
+  la pile listée de bas en haut). Aucune → ne rien dire.
+- **Le lot** (2 PR ou plus) : chaque PR avec sa relation — `pile` (ordre de bas en haut :
+  `gh pr diff` de chacune ne donne que son incrément sur la précédente) ou `sujet`
+  (même sujet, bases indépendantes). L'annoncer en une ligne.
+- Ne pas se placer sur les PR : le diff et l'API suffisent.
+- `--refacto "<piste>"` : piste de refactoring à faire évaluer par l'agent ; dans un lot,
+  pour la PR qu'elle concerne (demander si ce n'est pas clair).
+- Le ticket : lire `${CLAUDE_SKILL_DIR}/../../ticket.md` et le suivre pour chaque PR
+  (`headRefName`, titre et description de la PR, messages de ses commits) ; un ticket
+  commun n'est lu qu'une fois.
 
 ## 2. La revue
 
 Lancer l'agent `review:reviewer` (outil Agent) avec : « PR #<n> », `headRefOid`, la piste
 `--refacto` s'il y en a une, le ticket s'il y en a un. Il rend du JSON.
 
-Puis **vérifier chaque constat** (lire la ligne et son contexte à `headRefOid`) : écarter
-les faux positifs, ceux qui ne portent pas sur une ligne du diff (hors renommage du cas
-D), et au-delà de 3 refactorings. Écart au ticket donné comme non justifié : vérifier
-qu'aucune justification n'existe vraiment (description, commentaires du ticket,
-commits). Dire combien ont été écartés et pourquoi, en une ligne.
+Lot : un agent par PR (« PR #<n> du lot », plus le lot : numéro, titre, `headRefOid`,
+base et relation de chaque PR) et un agent pour **le croisement** (« croisement du lot »,
+le lot et les tickets de toutes), tous lancés ensemble dans un même message.
+
+Puis **vérifier chaque constat** (lire la ligne et son contexte à `headRefOid` de sa PR) :
+écarter les faux positifs, ceux qui ne portent pas sur une ligne du diff de leur PR (hors
+renommage du cas D), et au-delà de 3 refactorings par PR. Constat de croisement : lire
+aussi l'autre côté (`autre`) et vérifier que le conflit ou la dépendance existe vraiment ;
+doublon d'un constat d'une PR → n'en garder qu'un. Écart au ticket donné comme non
+justifié : vérifier qu'aucune justification n'existe vraiment (description, commentaires
+du ticket, commits). Dire combien ont été écartés et pourquoi, en une ligne.
 
 ## 3. La validation
 
@@ -49,27 +70,35 @@ c'est un remplacement exact des lignes commentées) ; préfixe selon le conseil 
 `[bloquant]` (indispensable), rien (recommandé), `[nit]` (optionnel), `[question]`
 (discutable ou très contestable gardé, ou point formulé en question).
 
+Lot : un seul tableau, avec une colonne `PR`, trié par PR (ordre de la pile) puis
+conseil ; les constats de croisement à la fin (`#83 ↔ #84`). Leur commentaire est posté
+sur la PR de leur ligne et cite l'autre côté (`#84`, `chemin:ligne`) ; le corps de la
+review de l'autre PR y renvoie en une ligne.
+
 Rien de retenu : le dire et s'arrêter (rien n'est posté).
 
 ## 4. La publication
 
-Une fois la validation finie, **poster directement** (la validation vaut accord) :
+Une fois la validation finie, **poster directement** (la validation vaut accord), une
+review par PR qui a des points gardés (lot : de bas en haut de la pile) :
 
 - Écrire `review.json` dans le scratchpad : `{"body": "<synthèse : résumé, écarts au ticket
   gardés sans ligne, découpage proposé s'il est gardé (partie par partie : commit, PR, tâche sur l'US ou US
-  séparée), remarques générales gardées>", "comments": [{"path", "line",
-  "body"}…]}`.
+  séparée), remarques générales gardées ; lot : « Relue avec #84 (pile / même sujet) » et
+  les points de croisement sans ligne>", "comments": [{"path", "line", "body"}…]}`
+  (lot : `review-<n>.json`).
 - `review-post <n> <review.json>` (dans le `bin/` du plugin, dans le PATH) : publie une
   review `COMMENT` — jamais `APPROVE` ni `REQUEST_CHANGES`. Un commentaire dont la ligne
   n'est pas dans le diff passe dans le corps au lieu d'échouer.
 - Code 3 (une review en attente à moi existe déjà) : le dire avec son lien et demander
   (`AskUserQuestion`, header « En attente ») : **La garder, ne rien poster** / **La
   supprimer et poster** (`--replace-pending`).
-- Fin : l'URL de la review, le nombre de commentaires inline et passés dans le corps.
+- Fin : l'URL de chaque review, le nombre de commentaires inline et passés dans le corps.
 
 ## 5. Le ménage (seulement si un worktree ou une branche a été créé pour la revue)
 
-Toujours la dernière étape, même si rien n'a été posté. Quel que soit l'outil qui les a
+Toujours la dernière étape, même si rien n'a été posté. Lot : pour chaque PR (son `<n>`,
+`headRefOid`, `headRefName`), avec une seule question pour l'ensemble. Quel que soit l'outil qui les a
 créés (Herdr UI, `/git-nav:pr`, `gh pr checkout`, à la main…), un worktree et sa branche
 ont pu être ouverts pour relire la PR et n'ont plus d'usage ensuite. La branche part avec
 le worktree, et seule si son worktree a déjà disparu (Herdr retire ses worktrees sans

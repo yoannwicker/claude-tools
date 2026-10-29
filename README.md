@@ -84,8 +84,8 @@ demander une déconnexion/reconnexion de session.
   la description de la PR en phase et la raccorder au ticket JIRA ou à l'issue ;
   `/git-tidy:ready` : les deux d'affilée (plugin `git-tidy`).
 - `/review:diff` : faire relire mon diff avant commit ou PR par l'agent `reviewer` (code
-  ajouté seulement) ; `/review:pr <n>` : relire la PR d'un collègue et y poster les
-  commentaires retenus ; `/review:feedback` : traiter les retours reçus sur ma PR
+  ajouté seulement) ; `/review:pr <n…>` : relire la PR d'un collègue, ou plusieurs PR
+  liées (pile, même sujet) avec leur cohérence, et y poster les commentaires retenus ; `/review:feedback` : traiter les retours reçus sur ma PR
   (solution, options ou à discuter pour chacun, puis fixups et réponses). Chaque point est
   priorisé et validé avant d'être envoyé ou traité (plugin `review`).
 - `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des

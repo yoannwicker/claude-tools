@@ -1012,8 +1012,9 @@ conversation, rien n'est écrit.
 ### `review`
 
 **Rôle** : revue de code par un agent dédié (contexte isolé, regard non ancré sur la
-session) — relire son propre diff (`/review:diff`), relire la PR d'un collègue et y poster
-les commentaires retenus (`/review:pr`), traiter les retours reçus sur sa PR
+session) — relire son propre diff (`/review:diff`), relire la PR d'un collègue, ou plusieurs
+PR liées ensemble (pile de PR, même sujet), et y poster les commentaires retenus
+(`/review:pr`), traiter les retours reçus sur sa PR
 (`/review:feedback`). Chaque point est priorisé avec un conseil et validé avant d'être
 envoyé ou traité. Les skills ne se lancent qu'à la demande (`disable-model-invocation`).
 
@@ -1047,7 +1048,7 @@ claude plugin install review@claude-tools
 Lancé par `/review:diff` et `/review:pr` (`review:reviewer`), en lecture seule (Bash
 limité par consigne à `git`/`gh` en lecture). Rend du JSON : résumé, proposition de
 découpage éventuelle, conformité au ticket, constats (`fichier:ligne` côté nouveau, conseil, gravité,
-catégorie `bug`/`securite`/`conformite`/`lisibilite`/`refactoring`, scénario d'échec,
+catégorie `bug`/`securite`/`conformite`/`lisibilite`/`refactoring`/`coherence`, scénario d'échec,
 suggestion, à approfondir ou non), remarques non ancrées. Chaque constat est revérifié
 contre le code par le skill avant d'être montré.
 
@@ -1089,6 +1090,14 @@ contre le code par le skill avant d'être montré.
     issues GitHub… : clé ou numéro dans la branche, le titre ou les commits) ;
   - **US séparée** si elle est très séparée du reste, et/ou s'il reste des points
     métier à trancher qui peuvent l'être plus tard (titre, description, points ouverts).
+- **Lot de PR** (`/review:pr` sur plusieurs PR) : un agent relit chaque PR sur son seul
+  diff (dans une pile, son incrément sur la PR d'en dessous ; un défaut corrigé plus haut
+  dans la pile n'est qu'une remarque), les autres servant de contexte ; un agent de plus
+  relit **le croisement** : seulement les constats `coherence` entre PR — contradiction
+  (comportement, contrat ou règle métier changés de façon incompatible, toujours `🔎`),
+  doublon, conflit de merge, et pour une pile : PR qui s'appuie sur ce que celle d'en
+  dessous ne fait pas, PR qui ne marche pas mergée seule dans l'ordre, changement dans la
+  mauvaise PR. Ancré sur la ligne d'une PR, l'autre côté cité (`autre`).
 
 #### Priorisation et validation
 
@@ -1119,7 +1128,7 @@ PR, commentaire du ticket, message de commit), rien n'est posté.
 
 #### `/review:pr`
 
-`/review:pr <numéro | recherche> [--refacto "<piste>"]` : PR d'un collègue (recherche par
+`/review:pr <numéro… | recherche> [--refacto "<piste>"]` : PR d'un collègue (recherche par
 `gpr list`), relue sans s'y placer. Chaque point est montré **tel qu'il sera posté**
 (langue de la PR, préfixe `[bloquant]`, `[nit]` ou `[question]` selon le conseil, bloc
 `suggestion` pour un remplacement exact). Un écart au ticket non justifié devient une
@@ -1127,6 +1136,18 @@ demande de justification à l'auteur (sur sa ligne, sinon dans le corps de la re
 commentaires validés sont **postés
 directement**, en une review `COMMENT` (jamais d'approbation ni de demande de
 changements), par `review-post`.
+
+Plusieurs PR (`/review:pr 83 84 85`, ou plusieurs choisies parmi les résultats de la
+recherche) forment un **lot** relu ensemble : une **pile** (base de l'une = tête d'une
+autre, rangée de bas en haut) ou des PR sur un **même sujet**, peut-être contradictoires.
+Pour une seule PR comme pour un lot, les PR ouvertes de la même pile qui n'y sont pas
+(`gh pr list`, de proche en proche, hors les miennes) sont proposées en plus. PR fermées,
+mergées ou à moi retirées du lot ; toutes dans le dépôt courant. Un agent par PR plus un
+pour le croisement (voir [Agent `reviewer`](#agent-reviewer)), lancés en parallèle ; un
+seul tableau de validation (colonne `PR`, constats de croisement à la fin) ; puis une
+review par PR, de bas en haut de la pile, dont le corps cite les autres PR du lot. Un
+constat de croisement est posté sur la PR de sa ligne en citant l'autre côté, et la review
+de l'autre PR y renvoie. Le ménage final couvre les worktrees et branches de chaque PR.
 
 `review-post <pr> <review.json> [--replace-pending] [--dry-run]` (`bin/`, dans le PATH de
 l'outil Bash) évite les deux échecs vus en publiant par `gh api` (constat 2 de
@@ -1177,9 +1198,9 @@ refs, SHA, commandes `gh`/`git` pour le diff) et impose la lecture seule (rien d
 
 Le profil **custom-reviewer** y fait la même chose que `/review:pr` : Claude lit et suit
 `skills/pr/SKILL.md` du plugin (le skill a `disable-model-invocation`, l'outil Skill ne peut
-pas le lancer), étapes 1 à 3 telles quelles (agent `review:reviewer`, vérification,
-validation dans le pane). Au lieu de poster directement, il montre la review prête et
-demande ; seul un « oui » explicite dans le pane la publie (`review-post`). L'étape de ménage
+pas le lancer), étapes 1 à 3 telles quelles (PR de la même pile proposées en plus, agent
+`review:reviewer`, vérification, validation dans le pane). Au lieu de poster directement,
+il montre la ou les reviews prêtes et demande ; seul un « oui » explicite dans le pane la publie (`review-post`). L'étape de ménage
 est faite telle quelle : la boîte de revue ouvre la PR dans un worktree
 `~/.herdr/worktrees/<dépôt>/agent-review-<n>-…` (branche `agent/review-<n>-…`), que le skill
 propose de supprimer à la fin avec sa branche, son workspace et ce pane. Les `allowed-tools`

@@ -28,6 +28,8 @@ continuer sans.
 
 Dans le message qui lance `review:reviewer` : clé, titre, description, critères
 d'acceptation, US parente, et les commentaires (auteur, date, texte) — en entier, pas un
-résumé : c'est souvent dans un commentaire qu'un choix a été fait. Pour `/review:diff`,
+résumé : c'est souvent dans un commentaire qu'un choix a été fait. Lot de PR
+(`/review:pr`) : à chaque agent le ou les tickets de sa PR, à celui du croisement ceux de
+toutes. Pour `/review:diff`,
 ajouter la description de la PR de la branche s'il y en a une
 (`gh pr view --json body`).
