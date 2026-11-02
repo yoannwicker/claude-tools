@@ -677,6 +677,9 @@ Refuse de partir s'il y a des modifications non commitées ou une opération git
   fondus), messages à la
   convention du dépôt (consignes, puis derniers commits de la base). Montré avant/après, puis
   *Appliquer*, *Ajuster* ou *Annuler* ; rien n'est proposé si l'historique est déjà propre.
+  Les consignes du dépôt règlent la forme des commits, pas la décision de réécrire : un
+  `fixup!` ou commit de correction restant est toujours fondu, même si le dépôt les garde
+  jusqu'au merge ou déconseille le push forcé en revue (rappelé seulement avant le push).
 - **Réécriture** : sauvegarde `backup/<branche>-<date>`, puis rebase non interactif (todo
   écrite par Claude, `GIT_SEQUENCE_EDITOR`) ou, pour redécouper un fichier, `reset --soft`
   et commits reconstruits par `git add`/`git apply --cached`. L'arbre final doit être
@@ -713,7 +716,8 @@ n'y a rien d'autre ou plusieurs candidats (sans PR : propose d'en créer une en 
 `/git-tidy:ready [numéro]` : enchaîne obligatoirement `/git-tidy:commits` (base : celle de
 la PR) puis `/git-tidy:pr-sync`, en suivant leurs `SKILL.md` (les deux skills ne sont pas
 invocables par Claude). PR choisie comme pour `pr-sync` (argument, puis PR ou branche en
-contexte, puis branche courante, jamais la branche par défaut).
+contexte, puis branche courante, jamais la branche par défaut). Il prépare le **merge** :
+l'historique sort dans sa forme finale, sans `fixup!` restant.
 
 - Refuse de partir sur une PR fermée ou mergée.
 - La branche de la PR peut ne pas être la branche courante : `commits` (lancé avec

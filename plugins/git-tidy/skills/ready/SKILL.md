@@ -1,6 +1,6 @@
 ---
 name: ready
-description: Préparer une PR pour la relecture — remettre ses commits au propre (/git-tidy:commits), puis mettre sa description et son ticket en phase (/git-tidy:pr-sync), les deux obligatoirement et dans cet ordre, toujours après accord
+description: Préparer une PR pour le merge — remettre ses commits au propre (/git-tidy:commits), puis mettre sa description et son ticket en phase (/git-tidy:pr-sync), les deux obligatoirement et dans cet ordre, toujours après accord
 argument-hint: "[numéro de PR]"
 disable-model-invocation: true
 allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh issue view:*), Bash(gh repo view:*), mcp__claude_ai_Atlassian_Rovo__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_Rovo__getJiraIssue, mcp__claude_ai_Atlassian_Rovo__searchJiraIssuesUsingJql, mcp__claude_ai_Atlassian_MCP__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_MCP__getJiraIssue, mcp__claude_ai_Atlassian_MCP__searchJiraIssuesUsingJql
@@ -9,8 +9,11 @@ allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh issu
 Argument : `$ARGUMENTS`
 
 But : enchaîner `/git-tidy:commits` puis `/git-tidy:pr-sync` sur une PR, sans pouvoir
-sauter l'un des deux. Ces skills ne peuvent pas être lancés par l'outil Skill
-(`disable-model-invocation`) : lire leur `SKILL.md` et en suivre les étapes.
+sauter l'un des deux. On prépare le **merge** : l'historique doit sortir dans sa forme
+finale (aucun `fixup!` ni commit de correction restant), même si le dépôt déconseille
+le push forcé pendant la revue — c'est justement le moment de le faire. Ces skills ne
+peuvent pas être lancés par l'outil Skill (`disable-model-invocation`) : lire leur
+`SKILL.md` et en suivre les étapes.
 
 ## 1. La PR
 

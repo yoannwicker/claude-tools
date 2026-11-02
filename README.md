@@ -82,7 +82,7 @@ demander une déconnexion/reconnexion de session.
 - `/git-tidy:commits [n] [--base <base>]` : redécouper et reformuler les commits d'une branche avant
   relecture ou avant merge (sauvegarde, push forcé seulement sur accord) ; `/git-tidy:pr-sync` : remettre
   la description de la PR en phase et la raccorder au ticket JIRA ou à l'issue ;
-  `/git-tidy:ready` : les deux d'affilée (plugin `git-tidy`).
+  `/git-tidy:ready` : les deux d'affilée avant merge (plugin `git-tidy`).
 - `/review:diff` : faire relire mon diff avant commit ou PR par l'agent `reviewer` (code
   ajouté seulement) ; `/review:pr <n…>` : relire la PR d'un collègue, ou plusieurs PR
   liées (pile, même sujet) avec leur cohérence, et y poster les commentaires retenus ; `/review:feedback` : traiter les retours reçus sur ma PR

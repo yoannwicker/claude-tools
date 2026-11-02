@@ -102,7 +102,11 @@ git par appel Bash, sans `cd … &&` ni enchaînement (sinon refus en session wo
   `CONTRIBUTING.md`, hooks `commit-msg`, `commitlint`), puis les 20 derniers commits de la
   base (`git log -20 --format=%s origin/<base>`) : langue, préfixe (gitmoji, Conventional
   Commits, clé de ticket `ABC-123`), longueur, corps. Les consignes du dépôt priment sur ce
-  skill (ex. doc dans le même commit que le code).
+  skill pour la **forme** des commits (messages, découpage : ex. doc dans le même commit
+  que le code), jamais pour décider **s'il faut** réécrire : lancer ce skill, c'est vouloir
+  réécrire. Une consigne qui garde les `fixup!` jusqu'au merge ou déconseille le push
+  forcé pendant la revue ne dispense pas de les fondre ; elle se rappelle seulement au
+  moment de demander le push (étape 5).
 
 ## 3. Proposer un découpage
 
@@ -123,7 +127,9 @@ Principes :
 - ordre de lecture : préparatifs, puis cœur du changement, puis branchements et nettoyage.
 
 Si l'historique respecte déjà ces principes, le dire et s'arrêter (au plus proposer de
-reformuler un message).
+reformuler un message). Un historique qui contient encore un commit de correction
+(`fixup!`, `squash!`, `wip`, `review`…) ne les respecte jamais, quoi que disent les
+consignes du dépôt.
 
 Sinon présenter :
 - **avant** : la liste actuelle (`<sha> <sujet>`) ;
