@@ -90,7 +90,9 @@ demander une déconnexion/reconnexion de session.
   priorisé et validé avant d'être envoyé ou traité (plugin `review`).
 - `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des
   agents (AgentsView), rangé dans `docs/analyses-sessions/` pour ce dépôt ;
-  `/session-analysis:session` : bilan de la session en cours (plugin `session-analysis`).
+  `/session-analysis:session` : bilan de la session en cours ; `/session-analysis:feedback` :
+  noter un retour sur un skill, plugin, hook ou consigne, repris par le rapport (plugin
+  `session-analysis`).
 - `dot` (lié dans `~/.local/bin`) : dérive git, état des liens et des plugins, `mise upgrade`,
   `herdr update`, `claude update`.
 - `./install.sh adopt <fichier>` : versionner un nouveau fichier de `$HOME` (déplacé dans
@@ -118,7 +120,8 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     git-tidy/ (skills /git-tidy:commits, :pr-sync et :ready),
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
-                    /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
+                    /session-analysis:report, :session et :feedback,
+                    bin/{agentsview-up,session-analysis-collect,session-analysis-feedback}),
                     review/ (agent reviewer, skills /review:diff, :pr et :feedback, bin/review-post, profil Herdr UI)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, lean —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl

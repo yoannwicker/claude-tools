@@ -3,7 +3,7 @@ name: report
 description: Rapport d'analyse des sessions d'agents (Claude Code, Copilot…) sur les 30 derniers jours avec AgentsView, en global puis par projet — ce qui s'est amélioré ou dégradé, et des pistes d'amélioration
 argument-hint: "[projet…] [--days N]"
 disable-model-invocation: true
-allowed-tools: Bash(agentsview-up:*), Bash(session-analysis-collect:*), Bash(agentsview:*), Bash(curl -s http://127.0.0.1:*)
+allowed-tools: Bash(agentsview-up:*), Bash(session-analysis-collect:*), Bash(session-analysis-feedback:*), Bash(agentsview:*), Bash(curl -s http://127.0.0.1:*)
 ---
 
 Arguments : `$ARGUMENTS`
@@ -36,12 +36,14 @@ session-analysis-collect report --out <scratchpad>/session-analysis-<date> [--da
   qu'AgentsView l'affiche : `claude_tools`, pas `claude-tools`). Un nom inconnu fait
   échouer le script avec la liste des projets connus : la proposer.
 - Résultat : `indicators.json` (le tableau d'indicateurs, global et par projet, mêmes clés à
-  chaque rapport), les réponses brutes de l'API (`global/`, `projects/<p>/`) et les
+  chaque rapport, dont `feedback` : les retours notés par `/session-analysis:feedback` sur
+  la période), les réponses brutes de l'API (`global/`, `projects/<p>/`) et les
   compteurs des transcripts (`transcripts.json`).
 
 Pour creuser un point : `agentsview session list|get|tool-calls|messages --json`,
 `agentsview health <id> --json`, l'API `<url>/api/v1/analytics/<endpoint>?project=…`, ou le
-transcript (`file_path` de `agentsview session list --include-source --json`).
+transcript (`file_path` de `agentsview session list --include-source --json`). Le texte des
+retours : `session-analysis-feedback list --days N --json [--project P]`.
 
 ## 3. Règles d'analyse
 
@@ -80,10 +82,16 @@ En français, sections dans cet ordre :
 6. **Constats** : un sous-titre par problème, avec ses chiffres et un tableau par projet
    suivi dont la dernière colonne est **Concerné** (oui / non / en partie / trop peu pour
    conclure).
-7. **Synthèse par projet** : matrice constats × projets.
-8. **Pistes d'amélioration** : numérotées, concrètes (quoi changer, où : consigne, hook,
-   skill, plugin, façon de prompter), chacune avec les projets visés et l'indicateur qui
-   dira au prochain rapport si elle a marché.
+7. **Retours** : les retours notés sur la période (`feedback` dans `indicators.json`, texte
+   avec `session-analysis-feedback list`), regroupés par cible avec leurs avis, et
+   rapprochés des constats : un retour négatif qui recoupe un indicateur dégradé pèse
+   plus, un retour sans chiffre pour l'appuyer reste un ressenti à le dire. Aucun retour :
+   une ligne.
+8. **Synthèse par projet** : matrice constats × projets.
+9. **Pistes d'amélioration** : numérotées, concrètes (quoi changer, où : consigne, hook,
+   skill, plugin, façon de prompter), chacune avec les projets visés, les constats ou
+   retours d'où elle vient, et l'indicateur qui dira au prochain rapport si elle a
+   marché.
 
 Les pistes sont des propositions : n'en faire des tâches, des fichiers ou des
 modifications que si l'utilisateur ou les consignes du projet le demandent.

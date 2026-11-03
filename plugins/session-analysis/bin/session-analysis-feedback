@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""session-analysis-feedback — journal des retours sur l'usage de Claude (skills, plugins,
+hooks, consignes, MCP, sessions), noté à la main en fin de session.
+
+  session-analysis-feedback add --target-type T --target NOM --verdict V --text TEXTE
+                                [--session ID] [--project P]
+      Ajoute un retour au journal. Projet par défaut : celui de la session dans AgentsView,
+      sinon le nom du dépôt git courant (tirets remplacés par _ : claude_tools).
+  session-analysis-feedback list [--days N] [--project P] [--target NOM] [--session ID] [--json]
+      Relit le journal, du plus ancien au plus récent.
+
+Journal (une ligne JSON par retour) : la clé « feedback » du premier .session-analysis.json
+trouvé — à la racine du dépôt git courant (le principal, même depuis un worktree), puis
+dans ~ — chemin relatif au dossier de ce fichier ; sinon
+~/.local/share/session-analysis/feedback.jsonl.
+"""
+import argparse, datetime, json, os, subprocess, sys
+
+TARGET_TYPES = ["skill", "plugin", "hook", "consigne", "mcp", "session", "autre"]
+VERDICTS = ["positif", "négatif", "suggestion"]
+
+
+CONFIG = ".session-analysis.json"
+
+
+def repo_root():
+    """Dépôt principal, même depuis un worktree ; None hors d'un dépôt git."""
+    out = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                         capture_output=True, text=True)
+    return os.path.dirname(out.stdout.strip()) if out.returncode == 0 else None
+
+
+def journal():
+    for d in filter(None, [repo_root(), os.path.expanduser("~")]):
+        conf = os.path.join(d, CONFIG)
+        if not os.path.isfile(conf):
+            continue
+        try:
+            path = json.load(open(conf)).get("feedback")
+        except ValueError as e:
+            sys.exit(f"session-analysis-feedback: {conf} illisible : {e}")
+        if path:
+            return os.path.join(d, os.path.expanduser(path))
+    return os.path.expanduser("~/.local/share/session-analysis/feedback.jsonl")
+
+
+def read_all(path=None):
+    try:
+        with open(path or journal()) as f:
+            return [json.loads(line) for line in f if line.strip()]
+    except FileNotFoundError:
+        return []
+
+
+def select(entries, days=None, project=None, target=None, session=None, date_from=None):
+    if days is not None:
+        date_from = (datetime.date.today() - datetime.timedelta(days=days)).isoformat()
+    return [e for e in entries
+            if (not date_from or e["date"][:10] >= date_from)
+            and (not project or e.get("project") == project)
+            and (not target or e.get("target") == target)
+            and (not session or e.get("session") == session)]
+
+
+def summary(entries):
+    """Bloc « feedback » d'indicators.json : comptes par avis, par type de cible, cibles citées."""
+    count = lambda key: {k: sum(1 for e in entries if e.get(key) == k)
+                         for k in sorted({e.get(key) for e in entries})}
+    targets = {}
+    for e in entries:
+        t = targets.setdefault(f"{e['target_type']}:{e['target']}", dict.fromkeys(VERDICTS, 0))
+        t[e["verdict"]] += 1
+    top = sorted(targets.items(), key=lambda x: -sum(x[1].values()))[:10]
+    return {"retours": len(entries), "par_avis": count("verdict"),
+            "par_type": count("target_type"), "cibles": dict(top)}
+
+
+def project_of(session):
+    if session:
+        try:
+            out = subprocess.run(["agentsview", "session", "get", session, "--json"],
+                                 capture_output=True, text=True, timeout=30)
+            if out.returncode == 0 and json.loads(out.stdout).get("project"):
+                return json.loads(out.stdout)["project"]
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+    return os.path.basename(repo_root() or os.getcwd()).replace("-", "_")
+
+
+def cmd_add(a):
+    session = None if not a.session or a.session.startswith("${") else a.session
+    entry = {"date": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+             "session": session, "project": a.project or project_of(session),
+             "target_type": a.target_type, "target": a.target, "verdict": a.verdict,
+             "text": a.text.strip()}
+    path = journal()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    print(f"noté dans {path} : [{entry['verdict']}] {entry['target_type']}:{entry['target']} "
+          f"({entry['project']}) — {entry['text']}")
+
+
+def cmd_list(a):
+    entries = select(read_all(), a.days, a.project, a.target, a.session)
+    if a.json:
+        print(json.dumps(entries, ensure_ascii=False, indent=1))
+        return
+    if not entries:
+        print(f"aucun retour ({journal()})")
+    for e in entries:
+        print(f"{e['date'][:16].replace('T', ' ')}  {e.get('project') or '-'}  [{e['verdict']}] "
+              f"{e['target_type']}:{e['target']} — {e['text']}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    ad = sub.add_parser("add")
+    ad.add_argument("--target-type", required=True, choices=TARGET_TYPES)
+    ad.add_argument("--target", required=True)
+    ad.add_argument("--verdict", required=True, choices=VERDICTS)
+    ad.add_argument("--text", required=True)
+    ad.add_argument("--session")
+    ad.add_argument("--project")
+    ls = sub.add_parser("list")
+    ls.add_argument("--days", type=int)
+    ls.add_argument("--project")
+    ls.add_argument("--target")
+    ls.add_argument("--session")
+    ls.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    if a.cmd == "add" and not a.text.strip():
+        sys.exit("session-analysis-feedback: --text vide")
+    {"add": cmd_add, "list": cmd_list}[a.cmd](a)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,6 +1,6 @@
 {
   "name": "session-analysis",
-  "description": "Skills /session-analysis:report et /session-analysis:session : analyse des sessions d'agents avec AgentsView (30 derniers jours ou session en cours), ce qui s'est amélioré ou dégradé, pistes d'amélioration",
+  "description": "Skills /session-analysis:report, :session et :feedback : analyse des sessions d'agents avec AgentsView (30 derniers jours ou session en cours), ce qui s'est amélioré ou dégradé, pistes d'amélioration ; retours notés en fin de session sur les skills, plugins, hooks et consignes, repris par le rapport",
   "author": {
     "name": "ywicker"
   }

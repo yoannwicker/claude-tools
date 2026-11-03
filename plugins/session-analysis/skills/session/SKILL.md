@@ -3,7 +3,7 @@ name: session
 description: Bilan de la session Claude Code en cours avec AgentsView — note, échecs et refus, allers-retours, qualité des prompts — avec des pistes d'amélioration et des conseils
 argument-hint: "[identifiant de session]"
 disable-model-invocation: true
-allowed-tools: Bash(agentsview-up:*), Bash(session-analysis-collect:*), Bash(agentsview:*)
+allowed-tools: Bash(agentsview-up:*), Bash(session-analysis-collect:*), Bash(session-analysis-feedback:*), Bash(agentsview:*)
 ---
 
 Arguments : `$ARGUMENTS`
@@ -62,3 +62,6 @@ Court, en français :
    façon de travailler (prompt, découpage, vérification). 3 au plus, concrètes.
 5. **Conseil pour la suite de la session** s'il y en a un (ex. repartir d'une session
    neuve, préciser le critère de succès).
+6. **Retours** : ceux déjà notés pour cette session
+   (`session-analysis-feedback list --session <id>`), et s'il y a matière (échec, refus,
+   hook ou skill qui a gêné ou aidé) proposer en une ligne `/session-analysis:feedback`.

@@ -33,6 +33,9 @@ dépôt :
   lisant son `.json` (son tableau Markdown à défaut) : section *Évolution*, indicateur par
   indicateur (amélioré, dégradé, stable), et pour chaque piste de `pistes-amelioration/`
   en cours ou faite, dire si son indicateur a bougé ;
+- section *Retours* : les retours notés avec `/session-analysis:feedback` sur la période ;
+  le rapport du 2026-10-23 n'en avait pas (bloc `feedback` d'`indicators.json` absent) : le
+  premier rapport qui l'a le signale dans *Méthode* ;
 - reprendre la méthode et le tableau d'indicateurs du rapport précédent ; si la méthode
   change (nouvel indicateur, autre calcul), le dire dans la section *Méthode* ;
 - ne pas créer de piste : les proposer en fin de rapport, l'utilisateur choisit celles qui

@@ -6,7 +6,8 @@ transcripts), toujours avec la même méthode, pour que deux rapports restent co
       30 derniers jours : API AgentsView en global puis par projet suivi (les --top plus
       gros en messages, ou les --project donnés), transcripts des sessions de la période.
       Écrit DIR/global/*.json, DIR/projects/<p>/*.json, DIR/transcripts.json et
-      DIR/indicators.json (le tableau d'indicateurs, global et par projet).
+      DIR/indicators.json (le tableau d'indicateurs, global et par projet, avec les retours
+      notés par session-analysis-feedback sur la période : bloc « feedback »).
   session-analysis-collect session --out DIR [SESSION_ID]
       Une session (par défaut la plus récente du dossier courant) : DIR/session.json,
       DIR/health.json, DIR/transcript.json.
@@ -14,7 +15,7 @@ transcripts), toujours avec la même méthode, pour que deux rapports restent co
 Lance AgentsView s'il ne tourne pas (agentsview-up).
 """
 import argparse, collections, datetime, json, os, re, subprocess, sys
-import urllib.parse, urllib.request
+import importlib.machinery, importlib.util, urllib.parse, urllib.request
 
 ENDPOINTS = ["summary", "projects", "tools", "skills", "signals", "sessions",
              "top-sessions", "velocity", "activity", "hour-of-week"]
@@ -37,6 +38,14 @@ def server_url():
                               capture_output=True, text=True).stdout.strip()
     except subprocess.CalledProcessError as e:
         die(e.stderr.strip() or "agentsview-up a échoué")
+
+
+def feedback_module():
+    path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "session-analysis-feedback")
+    loader = importlib.machinery.SourceFileLoader("session_analysis_feedback", path)
+    mod = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(mod)
+    return mod
 
 
 def api(base, endpoint, **params):
@@ -229,6 +238,11 @@ def cmd_report(a):
            "selection_projets": "--project" if a.project else f"top {a.top} en messages",
            "global": indicators(data["global"], stats["global"]),
            "projets": {p: indicators(data[p], stats[p]) for p in followed}}
+    fb = feedback_module()
+    retours = fb.select(fb.read_all(), date_from=date_from)
+    ind["global"]["feedback"] = fb.summary(retours)
+    for p in followed:
+        ind["projets"][p]["feedback"] = fb.summary(fb.select(retours, project=p))
     save(f"{a.out}/indicators.json", ind)
     print(f"période {date_from} → {date_to}, projets suivis : {', '.join(followed)}")
     print(f"données dans {a.out} (indicators.json : le tableau d'indicateurs)")

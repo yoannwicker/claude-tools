@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync` et `:ready` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr` et `:feedback` dans [`review`](#review). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync` et `:ready` dans [`git-tidy`](#git-tidy), `/session-analysis:report`, `:session` et `:feedback` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr` et `:feedback` dans [`review`](#review). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -937,14 +937,16 @@ profil, devenus morts, disparaissent à la régénération qui suit.
 **Rôle** : analyser l'usage des agents avec [AgentsView](https://agentsview.io) — rapport
 sur les 30 derniers jours (`/session-analysis:report`) et bilan de la session en cours
 (`/session-analysis:session`), avec ce qui s'est amélioré ou dégradé et des pistes
-d'amélioration. Les deux skills ne se lancent qu'à la demande
+d'amélioration ; retours notés à la main en fin de session (`/session-analysis:feedback`),
+repris par le rapport. Les skills ne se lancent qu'à la demande
 (`disable-model-invocation`).
 
-**Fichiers** : `plugins/session-analysis/` (`skills/{report,session}/SKILL.md`,
-`bin/agentsview-up`, `bin/session-analysis-collect`, `setup.sh` : installe AgentsView,
-`status` note s'il manque ou ne tourne pas) ; hors du plugin, le binaire `agentsview`
-(`~/.local/bin`, ou `/usr/local/bin` s'il est inscriptible) et ses données
-(`~/.agentsview/`). **Activé dans** : tous les profils.
+**Fichiers** : `plugins/session-analysis/` (`skills/{report,session,feedback}/SKILL.md`,
+`bin/agentsview-up`, `bin/session-analysis-collect`, `bin/session-analysis-feedback`,
+`setup.sh` : installe AgentsView, `status` note s'il manque ou ne tourne pas) ; hors du
+plugin, le binaire `agentsview` (`~/.local/bin`, ou `/usr/local/bin` s'il est inscriptible),
+ses données (`~/.agentsview/`) et le journal des retours
+(`~/.local/share/session-analysis/feedback.jsonl`). **Activé dans** : tous les profils.
 
 **Prérequis** : `python3`, `curl` (installation d'AgentsView) ; Linux ou macOS. Les
 transcripts lus sont ceux de Claude Code ; les autres agents (Copilot…) ne sont vus qu'à
@@ -981,7 +983,9 @@ lui.
   AgentsView : `claude_tools`) — et transcripts des sessions de la période
   (`agentsview session list --include-source`, dédoublonnés par `uuid`). Écrit les réponses
   brutes, `transcripts.json` et `indicators.json`, le tableau d'indicateurs (mêmes clés à
-  chaque fois).
+  chaque fois), dont le bloc `feedback` : retours de la période par avis, par type de
+  cible et cibles les plus citées, en global et par projet (voir
+  [`/session-analysis:feedback`](#session-analysisfeedback)).
 - `session --out <dossier> [<id>]` : resynchronise une session (par défaut la plus récente
   du dossier courant) et écrit `session.json`, `health.json` (note, pénalités) et
   `transcript.json`.
@@ -996,8 +1000,8 @@ du mode auto, projet inconnu du MCP IntelliJ, échec `gh`/`gpr`), modèles.
 
 `/session-analysis:report [projet…] [--days N]` : collecte, puis rapport en français —
 méthode, vue d'ensemble, vue par projet, évolution (amélioré / dégradé / stable),
-constats avec un tableau par projet et une colonne *Concerné*, synthèse constats ×
-projets, pistes d'amélioration avec l'indicateur qui dira si elles ont marché. Le skill
+constats avec un tableau par projet et une colonne *Concerné*, retours notés sur la période
+rapprochés des constats, synthèse constats × projets, pistes d'amélioration avec l'indicateur qui dira si elles ont marché. Le skill
 porte les règles d'analyse (vérifier une cause dans les transcripts : l'extrait de
 `signal-sessions` est le premier message de la session, pas l'appel en échec ; « trop peu
 pour conclure » sous 5 sessions notées…). Ce qui est propre au dépôt — où ranger le
@@ -1010,8 +1014,42 @@ conversation. Pour ce dépôt : [docs/README.md](docs/README.md).
 `/session-analysis:session [id]` : bilan court de la session en cours (identifiant donné au
 skill par `${CLAUDE_SESSION_ID}`) ou de celle passée en argument — note et pénalités,
 volume, échecs et refus avec leur cause, allers-retours, qualité des prompts, respect des
-consignes chargées —, puis 3 pistes au plus et un conseil pour la suite. Rendu dans la
+consignes chargées —, puis 3 pistes au plus, un conseil pour la suite, les retours déjà
+notés pour la session et, s'il y a matière, la proposition d'en noter un. Rendu dans la
 conversation, rien n'est écrit.
+
+#### `/session-analysis:feedback`
+
+`/session-analysis:feedback [texte]` : noter en fin de session un retour qualitatif — ce
+que les chiffres d'AgentsView ne disent pas — sur un skill, un plugin, un hook, une
+consigne, un MCP ou la session elle-même. Avec un texte, Claude le rattache à sa cible et
+le reformule ; sans, il propose 1 à 3 retours tirés de la session (refus d'un hook, skill
+qui a aidé…). Chaque retour est validé (`AskUserQuestion`) avant d'être écrit ; rien n'est
+écrit dans le dépôt.
+
+`session-analysis-feedback` tient le journal, une ligne JSON par retour : `date`,
+`session`, `project` (de la session dans AgentsView, sinon le nom du dépôt git courant,
+tirets en `_`), `target_type` (`skill`, `plugin`, `hook`, `consigne`, `mcp`, `session`,
+`autre`), `target`, `verdict` (`positif`, `négatif`, `suggestion`), `text`.
+
+- `add --target-type T --target NOM --verdict V --text TEXTE [--session ID] [--project P]` ;
+- `list [--days N] [--project P] [--target NOM] [--session ID] [--json]`.
+
+Journal : par défaut `~/.local/share/session-analysis/feedback.jsonl` — personnel, hors du
+dépôt et de `~/.claude/` (commun à tous les profils). Pour le mettre ailleurs, un fichier
+`.session-analysis.json`, cherché à la racine du dépôt courant (le dépôt principal, même
+depuis un worktree), puis dans `~` ; le premier trouvé qui a la clé `feedback` donne le
+chemin, relatif au dossier de ce fichier :
+
+```json
+{ "feedback": "~/Documents/retours-claude.jsonl" }
+```
+
+Le fichier d'un dépôt peut être commité : il vaut alors pour les sessions de ce dépôt, chez
+tous ceux qui le clonent. Le journal qu'il désigne n'est pas forcément dans le dépôt :
+dans le dépôt (`docs/feedback.jsonl`, versionné ou ignoré), ou ailleurs
+(`~/retours/feedback.jsonl`, un journal commun à plusieurs projets). Celui de `~` vaut pour
+les dépôts qui n'en ont pas.
 
 ### `review`
 
