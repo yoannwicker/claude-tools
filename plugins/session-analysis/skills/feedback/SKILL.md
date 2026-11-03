@@ -22,11 +22,13 @@ note la session, ses prompts, son volume) : ici on juge les éléments de la con
 - La conversation : skills et commandes lancés, hooks déclenchés (refus, messages
   injectés), consignes chargées, plugins et serveurs MCP utilisés ou en échec de connexion,
   outils en erreur, corrections et allers-retours avec l'utilisateur.
-- Si AgentsView répond, les compteurs de la session :
+- Les compteurs de la session, toujours :
   `session-analysis-collect session --out <scratchpad>/session-feedback ${CLAUDE_SESSION_ID}`
-  (`transcript.json` : erreurs d'outils par type, dont les refus de hook `[nom]` ; appels
-  par outil). Identifiant non remplacé (`${…}` tel quel) : sans identifiant. AgentsView
-  absent : s'en passer, sans le dire plus d'une ligne.
+  — le script lance AgentsView s'il ne tourne pas (`agentsview-up`) et resynchronise la
+  session ; `transcript.json` donne les erreurs d'outils par type, dont les refus de hook
+  `[nom]`, et les appels par outil. Identifiant non remplacé (`${…}` tel quel) : sans
+  identifiant. AgentsView pas installé ou qui ne démarre pas : le dire en une ligne avec la
+  commande donnée par l'erreur, puis continuer avec la seule conversation.
 
 ## 2. Analyser, angle par angle
 

@@ -1026,8 +1026,9 @@ conversation, rien n'est écrit.
 consignes, MCP) telle qu'elle a servi dans la session en cours — là où
 `/session-analysis:session` note la session elle-même.
 
-1. **Analyse de Claude** : à partir de la conversation et, si AgentsView répond, des
-   compteurs de la session (`session-analysis-collect session`), Claude juge chaque élément
+1. **Analyse de Claude** : à partir de la conversation et des compteurs de la session
+   (`session-analysis-collect session`, qui lance AgentsView s'il ne tourne pas ; sans
+   AgentsView, la conversation seule), Claude juge chaque élément
    qui a servi, ou aurait dû, selon six angles : **déclenchement** (utilisé quand il
    fallait, hook qui refuse à tort), **résultat** (fait du premier coup ou corrigé),
    **friction** (refus, questions, permissions, tours perdus), **consignes** (suivies,
