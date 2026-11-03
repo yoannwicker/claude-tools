@@ -1,6 +1,6 @@
 {
   "name": "session-analysis",
-  "description": "Skills /session-analysis:report, :session et :feedback : analyse des sessions d'agents avec AgentsView (30 derniers jours ou session en cours), ce qui s'est amélioré ou dégradé, pistes d'amélioration ; retours notés en fin de session sur les skills, plugins, hooks et consignes, repris par le rapport",
+  "description": "Skills /session-analysis:report, :session et :feedback : analyse des sessions d'agents avec AgentsView (30 derniers jours ou session en cours), ce qui s'est amélioré ou dégradé, pistes d'amélioration ; retour en fin de session sur les skills, plugins, hooks, consignes et MCP (analyse de Claude selon des angles fixes, avis de l'utilisateur sur chaque constat), repris par le rapport",
   "author": {
     "name": "ywicker"
   }

@@ -91,8 +91,8 @@ demander une déconnexion/reconnexion de session.
 - `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des
   agents (AgentsView), rangé dans `docs/analyses-sessions/` pour ce dépôt ;
   `/session-analysis:session` : bilan de la session en cours ; `/session-analysis:feedback` :
-  noter un retour sur un skill, plugin, hook ou consigne, repris par le rapport (plugin
-  `session-analysis`).
+  Claude juge les skills, plugins, hooks et consignes qui ont servi, je donne mon avis sur
+  chaque constat et j'ajoute les miens, repris par le rapport (plugin `session-analysis`).
 - `dot` (lié dans `~/.local/bin`) : dérive git, état des liens et des plugins, `mise upgrade`,
   `herdr update`, `claude update`.
 - `./install.sh adopt <fichier>` : versionner un nouveau fichier de `$HOME` (déplacé dans

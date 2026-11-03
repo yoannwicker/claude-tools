@@ -83,10 +83,12 @@ En français, sections dans cet ordre :
    suivi dont la dernière colonne est **Concerné** (oui / non / en partie / trop peu pour
    conclure).
 7. **Retours** : les retours notés sur la période (`feedback` dans `indicators.json`, texte
-   avec `session-analysis-feedback list`), regroupés par cible avec leurs avis, et
-   rapprochés des constats : un retour négatif qui recoupe un indicateur dégradé pèse
-   plus, un retour sans chiffre pour l'appuyer reste un ressenti à le dire. Aucun retour :
-   une ligne.
+   avec `session-analysis-feedback list`), regroupés par cible avec leurs avis et leurs
+   angles. Distinguer les constats de Claude confirmés par l'utilisateur (`d'accord`,
+   `nuancé`), ceux qu'il conteste (`pas d'accord` : un retour sur l'analyse elle-même) et
+   les retours de l'utilisateur. Les rapprocher des constats chiffrés : un retour négatif
+   qui recoupe un indicateur dégradé pèse plus, un retour sans chiffre pour l'appuyer reste
+   un ressenti, à dire. Aucun retour : une ligne.
 8. **Synthèse par projet** : matrice constats × projets.
 9. **Pistes d'amélioration** : numérotées, concrètes (quoi changer, où : consigne, hook,
    skill, plugin, façon de prompter), chacune avec les projets visés, les constats ou

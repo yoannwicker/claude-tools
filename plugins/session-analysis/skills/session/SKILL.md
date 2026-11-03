@@ -64,4 +64,5 @@ Court, en français :
    neuve, préciser le critère de succès).
 6. **Retours** : ceux déjà notés pour cette session
    (`session-analysis-feedback list --session <id>`), et s'il y a matière (échec, refus,
-   hook ou skill qui a gêné ou aidé) proposer en une ligne `/session-analysis:feedback`.
+   hook ou skill qui a gêné ou aidé) proposer en une ligne `/session-analysis:feedback`,
+   qui juge les éléments de la config un par un.

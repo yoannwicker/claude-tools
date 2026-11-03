@@ -937,8 +937,9 @@ profil, devenus morts, disparaissent à la régénération qui suit.
 **Rôle** : analyser l'usage des agents avec [AgentsView](https://agentsview.io) — rapport
 sur les 30 derniers jours (`/session-analysis:report`) et bilan de la session en cours
 (`/session-analysis:session`), avec ce qui s'est amélioré ou dégradé et des pistes
-d'amélioration ; retours notés à la main en fin de session (`/session-analysis:feedback`),
-repris par le rapport. Les skills ne se lancent qu'à la demande
+d'amélioration ; retour en fin de session sur les éléments de la config qui ont servi —
+analyse de Claude, avis de l'utilisateur — (`/session-analysis:feedback`), repris par le
+rapport. Les skills ne se lancent qu'à la demande
 (`disable-model-invocation`).
 
 **Fichiers** : `plugins/session-analysis/` (`skills/{report,session,feedback}/SKILL.md`,
@@ -983,8 +984,9 @@ lui.
   AgentsView : `claude_tools`) — et transcripts des sessions de la période
   (`agentsview session list --include-source`, dédoublonnés par `uuid`). Écrit les réponses
   brutes, `transcripts.json` et `indicators.json`, le tableau d'indicateurs (mêmes clés à
-  chaque fois), dont le bloc `feedback` : retours de la période par avis, par type de
-  cible et cibles les plus citées, en global et par projet (voir
+  chaque fois), dont le bloc `feedback` : retours de la période par source, avis, angle et
+  type de cible, accord de l'utilisateur avec les constats de Claude, cibles les plus
+  citées, en global et par projet (voir
   [`/session-analysis:feedback`](#session-analysisfeedback)).
 - `session --out <dossier> [<id>]` : resynchronise une session (par défaut la plus récente
   du dossier courant) et écrit `session.json`, `health.json` (note, pénalités) et
@@ -1020,20 +1022,35 @@ conversation, rien n'est écrit.
 
 #### `/session-analysis:feedback`
 
-`/session-analysis:feedback [texte]` : noter en fin de session un retour qualitatif — ce
-que les chiffres d'AgentsView ne disent pas — sur un skill, un plugin, un hook, une
-consigne, un MCP ou la session elle-même. Avec un texte, Claude le rattache à sa cible et
-le reformule ; sans, il propose 1 à 3 retours tirés de la session (refus d'un hook, skill
-qui a aidé…). Chaque retour est validé (`AskUserQuestion`) avant d'être écrit ; rien n'est
-écrit dans le dépôt.
+`/session-analysis:feedback [texte]` : retour sur la config (skills, plugins, hooks,
+consignes, MCP) telle qu'elle a servi dans la session en cours — là où
+`/session-analysis:session` note la session elle-même.
 
-`session-analysis-feedback` tient le journal, une ligne JSON par retour : `date`,
-`session`, `project` (de la session dans AgentsView, sinon le nom du dépôt git courant,
-tirets en `_`), `target_type` (`skill`, `plugin`, `hook`, `consigne`, `mcp`, `session`,
-`autre`), `target`, `verdict` (`positif`, `négatif`, `suggestion`), `text`.
+1. **Analyse de Claude** : à partir de la conversation et, si AgentsView répond, des
+   compteurs de la session (`session-analysis-collect session`), Claude juge chaque élément
+   qui a servi, ou aurait dû, selon six angles : **déclenchement** (utilisé quand il
+   fallait, hook qui refuse à tort), **résultat** (fait du premier coup ou corrigé),
+   **friction** (refus, questions, permissions, tours perdus), **consignes** (suivies,
+   contournées, contradictoires, obsolètes), **outillage** (MCP ou outil en échec, repli
+   sur Bash), **manques** (ce qui mériterait un skill, un hook, une consigne). Au plus 6
+   constats, chacun appuyé sur un fait de la session, avec une cible et un avis
+   (`positif`, `négatif`, `suggestion`).
+2. **Avis de l'utilisateur** sur chaque constat (`AskUserQuestion`) : d'accord, nuancé,
+   pas d'accord (gardé : c'est un retour sur l'analyse), ou écarté (non noté).
+3. **Retours de l'utilisateur** en plus (ou le texte passé en argument), rattachés à une
+   cible et un avis.
 
-- `add --target-type T --target NOM --verdict V --text TEXTE [--session ID] [--project P]` ;
-- `list [--days N] [--project P] [--target NOM] [--session ID] [--json]`.
+Rien n'est écrit dans le dépôt. `session-analysis-feedback` tient le journal, une ligne
+JSON par retour : `date`, `session`, `project` (de la session dans AgentsView, sinon le nom
+du dépôt git courant, tirets en `_`), `source` (`claude`, `utilisateur`), `angle`,
+`target_type` (`skill`, `plugin`, `hook`, `consigne`, `mcp`, `session`, `autre`),
+`target`, `verdict`, `text`, `user_opinion` (constats de Claude : `d'accord`, `nuancé`,
+`pas d'accord`), `comment`.
+
+- `add --source claude|utilisateur [--angle A] --target-type T --target NOM --verdict V
+  --text TEXTE [--user-opinion O] [--comment TEXTE] [--session ID] [--project P]` (un
+  constat de Claude exige `--angle` et `--user-opinion`) ;
+- `list [--days N] [--project P] [--target NOM] [--session ID] [--source S] [--json]`.
 
 Journal : par défaut `~/.local/share/session-analysis/feedback.jsonl` — personnel, hors du
 dépôt et de `~/.claude/` (commun à tous les profils). Pour le mettre ailleurs, un fichier
