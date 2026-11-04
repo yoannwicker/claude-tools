@@ -1,6 +1,6 @@
 ---
 name: ready
-description: Préparer une PR pour le merge — remettre ses commits au propre (/git-tidy:commits), puis mettre sa description et son ticket en phase (/git-tidy:pr-sync), les deux obligatoirement et dans cet ordre, toujours après accord
+description: Préparer une PR pour le merge — remettre ses commits au propre (/git-tidy:commits), puis la rebaser sur sa base et mettre sa description et son ticket en phase (/git-tidy:pr-sync), les deux obligatoirement et dans cet ordre, toujours après accord
 argument-hint: "[numéro de PR]"
 disable-model-invocation: true
 allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh issue view:*), Bash(gh repo view:*), mcp__claude_ai_Atlassian_Rovo__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_Rovo__getJiraIssue, mcp__claude_ai_Atlassian_Rovo__searchJiraIssuesUsingJql, mcp__claude_ai_Atlassian_MCP__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_MCP__getJiraIssue, mcp__claude_ai_Atlassian_MCP__searchJiraIssuesUsingJql
@@ -50,19 +50,21 @@ choisit seul), sans proposer `/git-tidy:pr-sync` à la fin.
 - Réécriture faite mais pas poussée (**Plus tard**) : le signaler ; la description portera
   sur l'historique local.
 
-## 3. La PR et le ticket
+## 3. Rebase, PR et ticket
 
 Lire `${CLAUDE_SKILL_DIR}/../pr-sync/SKILL.md` et en suivre les étapes, avec le numéro de
 la PR de l'étape 1 pour argument (son étape 1 est déjà faite : reprendre le `gh pr view`
-complet qu'elle demande).
+complet qu'elle demande). Son étape 2 propose le rebase (sur la base, une autre branche,
+ou toute la pile), après la réécriture : réécriture poussée → le rebase peut l'être aussi ;
+réécriture gardée en local (**Plus tard**) → rebase local seulement.
 
 Sans PR (création acceptée à l'étape 1) : ne pas redemander. Si la branche n'est pas
 poussée, proposer `git push -u origin <branche>` (refus → s'arrêter : `gh pr create` en a
 besoin). Puis rédiger titre et description comme le demande `pr-sync`, les montrer, créer
 la PR (`gh pr create --draft --base <base> --title <titre> --body-file <fichier>`) et
-reprendre `pr-sync` sur cette PR à partir du ticket.
+reprendre `pr-sync` sur cette PR à partir de son étape 2 (rebase).
 
 ## 4. Fin
 
-Résumer : commits réécrits ou non (et la sauvegarde `backup/…`), push fait ou non, liens
-de ce qui a été publié (PR, ticket).
+Résumer : commits réécrits ou non, rebase fait ou non (et les sauvegardes `backup/…`), push
+fait ou non, liens de ce qui a été publié (PR, ticket).

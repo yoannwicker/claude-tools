@@ -627,8 +627,8 @@ ajoute des alias.
 ### `git-tidy`
 
 **Rôle** : remettre une branche au propre avant relecture ou avant merge — réécrire ses commits
-(`/git-tidy:commits`), puis aligner la description de sa PR et le ticket lié sur ce qui a
-changé (`/git-tidy:pr-sync`), ou les deux d'affilée (`/git-tidy:ready`). Les skills ne se lancent qu'à la demande
+(`/git-tidy:commits`), puis rebaser sa PR sur sa base et aligner sa description et le ticket
+lié sur ce qui a changé (`/git-tidy:pr-sync`), ou les deux d'affilée (`/git-tidy:ready`). Les skills ne se lancent qu'à la demande
 (`disable-model-invocation`) et n'écrivent rien hors du dépôt local sans accord.
 
 **Fichiers** : `plugins/git-tidy/` (`skills/{commits,pr-sync,ready}/SKILL.md`) ; rien hors du
@@ -697,6 +697,23 @@ dans la conversation (`/git-nav:pr`, `/git-nav:br`, worktree, PR dont on vient d
 sinon celle de la branche courante — jamais la branche par défaut (`main`…) : demandée s'il
 n'y a rien d'autre ou plusieurs candidats (sans PR : propose d'en créer une en brouillon).
 
+- **Rebase** (avant tout le reste) : détecte la pile de PR (de base en base jusqu'à la
+  base racine, puis les PR posées dessus ; pas une pile en arbre). Si la PR est en retard
+  sur `origin/<base>` ou qu'une PR de la pile est décalée (son parent a été réécrit ou
+  rebasé), le dit avec les conflits prévisibles (`git merge-tree`), puis *Rebaser sur
+  `origin/<base>`*, *Rebaser la pile* (recommandé dans une pile), *Rebaser sur une autre
+  branche* (la branche par défaut, les branches longues ou un nom libre ;
+  `rebase --onto` pour n'emporter que les commits de la PR, puis base de la PR changée
+  par `gh pr edit --base` une fois poussée) ou *Ne pas rebaser*. La pile se rebase de bas
+  en haut, chaque PR par `rebase --onto` sur son parent tout juste rebasé (ancien sommet du
+  parent : sa sauvegarde, sinon `--fork-point`, sinon demandé). Chaque branche dans son
+  dossier (même choix que `commits`), refus s'il y a des modifications non commitées ou une
+  opération git en cours. Sauvegarde `backup/<branche>-<date>` de chaque branche,
+  historique linéaire, conflits résolus avec l'utilisateur (*Appliquer*, *Ajuster*,
+  *Abandonner le rebase*), build/test proposé, puis *Pousser* ou *Plus tard* :
+  `--force-with-lease` par branche sur le SHA distant noté, pas pour une branche qui a
+  divergé d'`origin` (réécriture locale non poussée, ou push d'un autre). Pas pour une PR
+  de fork.
 - **Ticket** : cherché dans les issues que la PR ferme, puis le nom de branche, le titre, la
   description et les commits (clé JIRA `ABC-123`, issue `#123`) ; demandé s'il y en a
   plusieurs ou aucun. Lu par le MCP Atlassian (JIRA) ou `gh issue view`, puis comparé à la
@@ -709,13 +726,13 @@ n'y a rien d'autre ou plusieurs candidats (sans PR : propose d'en créer une en 
   rendue fausse ; jamais de changement de statut, d'assigné ni de sprint sans demande.
 - Brouillons montrés, puis *PR et ticket*, *PR seulement*, *Ajuster* ou *Annuler* ; les
   écritures (`gh pr edit`, commentaire ou édition JIRA, `gh issue comment`/`edit`) ne sont
-  pas pré-autorisées dans le skill.
+  pas pré-autorisées dans le skill. La description porte sur l'historique rebasé.
 
 #### `/git-tidy:ready`
 
 `/git-tidy:ready [numéro]` : enchaîne obligatoirement `/git-tidy:commits` (base : celle de
-la PR) puis `/git-tidy:pr-sync`, en suivant leurs `SKILL.md` (les deux skills ne sont pas
-invocables par Claude). PR choisie comme pour `pr-sync` (argument, puis PR ou branche en
+la PR) puis `/git-tidy:pr-sync` (dont le rebase sur la base, après la réécriture), en
+suivant leurs `SKILL.md` (les deux skills ne sont pas invocables par Claude). PR choisie comme pour `pr-sync` (argument, puis PR ou branche en
 contexte, puis branche courante, jamais la branche par défaut). Il prépare le **merge** :
 l'historique sort dans sa forme finale, sans `fixup!` restant.
 
@@ -728,8 +745,8 @@ l'historique sort dans sa forme finale, sans `fixup!` restant.
 - Si `commits` s'arrête (modifications non commitées, opération git en cours, *Annuler*,
   retour à la sauvegarde…), `ready` s'arrête aussi ; seul un historique déjà propre laisse
   passer à `pr-sync`.
-- Mêmes accords que les deux skills (plan, push, publication) ; finit par un résumé :
-  commits réécrits, sauvegarde, push, liens publiés.
+- Mêmes accords que les deux skills (plan, rebase, push, publication) ; finit par un
+  résumé : commits réécrits, rebase, sauvegardes, push, liens publiés.
 
 ### `notify`
 

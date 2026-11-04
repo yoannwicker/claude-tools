@@ -26,7 +26,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Claude Code (settings, status line) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
 | Plugin `profiles` (commande `/profile`, `claude-profile` et fonction shell `claude` pour le terminal) | `./install.sh plugin profiles` | `jq` ; le profil de référence de `./install.sh link` |
 | Plugin `git-nav` (skills `/pr`, `/br`, `/worktree`, ménage après un merge ; `gpr`, `gbr` pour le terminal) | `./install.sh plugin git-nav` | `git` ; `gh` authentifié |
-| Plugin `git-tidy` (skills `/git-tidy:commits`, `/git-tidy:pr-sync`, `/git-tidy:ready` : commits remis au propre, PR et ticket JIRA en phase) | `./install.sh plugin git-tidy` | `git` ; `gh` authentifié ; MCP Atlassian pour JIRA |
+| Plugin `git-tidy` (skills `/git-tidy:commits`, `/git-tidy:pr-sync`, `/git-tidy:ready` : commits remis au propre, rebase sur la base, PR et ticket JIRA en phase) | `./install.sh plugin git-tidy` | `git` ; `gh` authentifié ; MCP Atlassian pour JIRA |
 | Plugin `pr-comments` (fils de review non résolus) | `./install.sh plugin pr-comments` | `claude` ≥ 2.1.287, `gh` authentifié |
 | Plugin `intellij` (MCP IntelliJ + consigne) | `./install.sh plugin intellij` | IntelliJ avec le serveur MCP sur le port 64342 |
 | Plugin `notify` (notifications desktop) | `./install.sh plugin notify` | `python3-gi`, `gdbus`, `xprop`, `jq`, gnome-terminal |
@@ -80,9 +80,9 @@ demander une déconnexion/reconnexion de session.
   supprimer la branche mergée, son worktree et sa branche distante (plugin `git-nav` ;
   `gpr`, `gbr` dans le terminal, `gbr cleanup` pour ce ménage).
 - `/git-tidy:commits [n] [--base <base>]` : redécouper et reformuler les commits d'une branche avant
-  relecture ou avant merge (sauvegarde, push forcé seulement sur accord) ; `/git-tidy:pr-sync` : remettre
-  la description de la PR en phase et la raccorder au ticket JIRA ou à l'issue ;
-  `/git-tidy:ready` : les deux d'affilée avant merge (plugin `git-tidy`).
+  relecture ou avant merge (sauvegarde, push forcé seulement sur accord) ; `/git-tidy:pr-sync` : rebaser
+  la PR si elle est en retard (sur sa base, une autre branche, ou toute la pile de PR), remettre sa description en phase et la raccorder au
+  ticket JIRA ou à l'issue ; `/git-tidy:ready` : les deux d'affilée avant merge (plugin `git-tidy`).
 - `/review:diff` : faire relire mon diff avant commit ou PR par l'agent `reviewer` (code
   ajouté seulement) ; `/review:pr <n…>` : relire la PR d'un collègue, ou plusieurs PR
   liées (pile, même sujet) avec leur cohérence, et y poster les commentaires retenus ; `/review:feedback` : traiter les retours reçus sur ma PR

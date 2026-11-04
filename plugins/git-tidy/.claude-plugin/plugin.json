@@ -1,6 +1,6 @@
 {
   "name": "git-tidy",
-  "description": "Skills /git-tidy:commits, /git-tidy:pr-sync et /git-tidy:ready : remettre au propre les commits d'une branche (découpage, messages, ordre), puis aligner la description de la PR sur ce qui a changé et le ticket JIRA ou l'issue GitHub lié, séparément ou d'affilée",
+  "description": "Skills /git-tidy:commits, /git-tidy:pr-sync et /git-tidy:ready : remettre au propre les commits d'une branche (découpage, messages, ordre), puis rebaser la PR (sur sa base, une autre branche ou toute la pile de PR) et aligner sa description sur ce qui a changé et le ticket JIRA ou l'issue GitHub lié, séparément ou d'affilée",
   "author": {
     "name": "ywicker"
   }
