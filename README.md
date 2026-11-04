@@ -82,8 +82,9 @@ demander une déconnexion/reconnexion de session.
 - `/git-tidy:commits [n] [--base <base>]` : redécouper et reformuler les commits d'une branche avant
   relecture ou avant merge (sauvegarde, push forcé seulement sur accord) ; `/git-tidy:pr-sync` : rebaser
   la PR si elle est en retard (sur sa base, une autre branche, ou toute la pile de PR), remettre sa description en phase et la raccorder au
-  ticket JIRA ou à l'issue ; `/git-tidy:ready` : les deux d'affilée avant merge, puis, PR
-  approuvée, le ticket JIRA passé « En validation » et le message Slack pour le testeur ;
+  ticket JIRA ou à l'issue ; `/git-tidy:ready` : les deux d'affilée avant merge, puis la
+  demande de relecture si elle manque (relecteurs du dépôt classés par l'historique), ou,
+  PR approuvée, le ticket JIRA passé « En validation » et le message Slack pour le testeur ;
   `/git-tidy:approved-auto` : lancer `ready` d'office quand ma PR a ses approbations (2 par
   défaut, dépôt par dépôt, via `tidy-watch`) (plugin `git-tidy`).
 - `/review:diff` : faire relire mon diff avant commit ou PR par l'agent `reviewer` (code

@@ -639,8 +639,8 @@ du plugin [`review`](#review)), `systemd/tidy-watch.{service,timer}`,
 `tests/tidy-watch.test.sh`, `setup.sh`) ; hors du plugin, les liens `~/.local/bin/tidy-watch`
 et `~/.config/systemd/user/tidy-watch.{service,timer}` posés par `setup.sh`, le drop-in
 `tidy-watch.timer.d/interval.conf` écrit par `tidy-watch interval`, les réglages par dépôt
-`~/.config/claude-tools/git-tidy.json` (non versionnés : mode auto, approbations, statut
-JIRA de validation, environnement de test ; écrits par `tidy-watch`,
+`~/.config/claude-tools/git-tidy.json` (non versionnés : mode auto, approbations,
+relecteurs, statut JIRA de validation, environnement de test ; écrits par `tidy-watch`,
 `/git-tidy:approved-auto` et `/git-tidy:ready` sur accord) et l'état
 `~/.local/state/claude-tools/tidy-watch/`. **Activé dans** : tous les profils.
 
@@ -764,9 +764,18 @@ l'historique sort dans sa forme finale, sans `fixup!` restant.
 - Si `commits` s'arrête (modifications non commitées, opération git en cours, *Annuler*,
   retour à la sauvegarde…), `ready` s'arrête aussi ; seul un historique déjà propre laisse
   passer à `pr-sync`.
-- **Passage en validation** (après `pr-sync`, PR approuvée : ses `<N>` approbations
-  valides — `approvals` du dépôt dans `~/.config/claude-tools/git-tidy.json`, sinon 2 — et
-  celles de chaque PR de la pile) : tickets JIRA des PR passés au statut `validation_status` du
+- **Relecture** (après `pr-sync`) : rien si la PR a déjà ses `<N>` approbations valides
+  (`approvals` du dépôt dans `~/.config/claude-tools/git-tidy.json`, sinon 2). Sinon re-demande
+  d'abord à ceux dont l'approbation a sauté au push, puis complète jusqu'à `<N>`
+  relecteurs : membres de la liste du dépôt (`reviewers` de
+  `~/.config/claude-tools/git-tidy.json`), sinon tout l'historique, classés par
+  l'historique des 30 dernières PR mergées (connaissance des fichiers touchés, puis nombre
+  de relectures), jamais l'auteur ni un bot. Proposition avec la raison de chacun, puis
+  *Demander à …*, *Choisir* ou *Plus tard* ; brouillon passé en *Ready for review*
+  (`gh pr ready`), puis `gh pr edit --add-reviewer`. Sans liste pour le dépôt, propose de
+  retenir les relecteurs choisis.
+- **Passage en validation** (PR approuvée : ses `<N>` approbations valides, et celles de
+  chaque PR de la pile) : tickets JIRA des PR passés au statut `validation_status` du
   dépôt (`En validation` par défaut) par la transition qui y mène (rien si le ticket y est
   déjà, ni si une de ses PR n'est pas approuvée ; pas de transition possible → le dit, ne
   force rien). Message Slack rédigé pour le testeur, à copier : *Ticket(s)* (clé,
@@ -777,15 +786,16 @@ l'historique sort dans sa forme finale, sans `fixup!` restant.
   presse-papiers proposé si `wl-copy` ou `xclip` existe.
 - Réglages par dépôt, `~/.config/claude-tools/git-tidy.json` :
   `{"default": {"validation_status": "En validation"}, "repos": {"owner/repo":
-  {"approvals": 2, "validation_status": "…", "test_env": "https://recette/{branch}"}}}` (la clé du dépôt l'emporte sur `default` ;
+  {"approvals": 2, "reviewers": ["login", "org/équipe"], "validation_status": "…",
+  "test_env": "https://recette/{branch}"}}}` (la clé du dépôt l'emporte sur `default` ;
   même fichier que la config de `tidy-watch`).
-- Mêmes accords que les deux skills (plan, rebase, push, publication), plus le passage en
-  validation ; finit par un résumé : commits réécrits, rebase, sauvegardes, push, tickets
-  passés, liens publiés, message Slack.
+- Mêmes accords que les deux skills (plan, rebase, push, publication), plus la demande de
+  relecture et le passage en validation ; finit par un résumé : commits réécrits, rebase,
+  sauvegardes, push, relecteurs demandés, tickets passés, liens publiés, message Slack.
 - `--prepare` (analyse en fond lancée par `tidy-watch`, sans personne pour répondre) :
   aucune question ni écriture (ni réécriture, ni rebase, ni push, ni publication) ; plan de
   commits, retard sur la base, pile et conflits prévisibles, brouillons de PR et de ticket,
-  tickets à passer en validation et message Slack, puis
+  relecteurs proposés ou tickets à passer en validation et message Slack, puis
   « Prêt pour la validation ». À la reprise, la session repart de la question du plan.
 
 #### `/git-tidy:approved-auto`, `tidy-watch`
