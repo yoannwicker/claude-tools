@@ -163,4 +163,11 @@ rm -f "$tmp/notifs"
 HERDR_PROMPT_RC=1 "$bin" poll >/dev/null
 check "agent en attente d'une réponse → notification critique" "occupée, message non envoyé critical" "$(body)"
 
+# 10. Module commun : copie identique dans git-tidy (chaque plugin s'installe seul)
+other=$(dirname "$bin")/../../git-tidy/lib/watchlib.py
+if [ -f "$other" ]; then
+  check "lib/watchlib.py identique dans review et git-tidy" same \
+    "$(cmp -s "$(dirname "$bin")/../lib/watchlib.py" "$other" && echo same || echo différent)"
+fi
+
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

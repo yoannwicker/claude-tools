@@ -1,0 +1,11 @@
+# Activé par tidy-watch enable (plugin git-tidy de claude-tools).
+[Unit]
+Description=tidy-watch toutes les 5 minutes (tidy-watch interval pour changer)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

@@ -26,7 +26,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Claude Code (settings, status line) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
 | Plugin `profiles` (commande `/profile`, `claude-profile` et fonction shell `claude` pour le terminal) | `./install.sh plugin profiles` | `jq` ; le profil de référence de `./install.sh link` |
 | Plugin `git-nav` (skills `/pr`, `/br`, `/worktree`, ménage après un merge ; `gpr`, `gbr` pour le terminal) | `./install.sh plugin git-nav` | `git` ; `gh` authentifié |
-| Plugin `git-tidy` (skills `/git-tidy:commits`, `/git-tidy:pr-sync`, `/git-tidy:ready` : commits remis au propre, rebase sur la base, PR et ticket JIRA en phase) | `./install.sh plugin git-tidy` | `git` ; `gh` authentifié ; MCP Atlassian pour JIRA |
+| Plugin `git-tidy` (skills `/git-tidy:commits`, `/git-tidy:pr-sync`, `/git-tidy:ready` : commits remis au propre, rebase sur la base, PR et ticket JIRA en phase ; `/git-tidy:approved-auto` : lancer `ready` d'office quand la PR a ses approbations) | `./install.sh plugin git-tidy`, puis `tidy-watch enable` pour le mode auto | `git` ; `gh` authentifié ; MCP Atlassian pour JIRA ; `python3` et systemd utilisateur pour le mode auto |
 | Plugin `pr-comments` (fils de review non résolus) | `./install.sh plugin pr-comments` | `claude` ≥ 2.1.287, `gh` authentifié |
 | Plugin `intellij` (MCP IntelliJ + consigne) | `./install.sh plugin intellij` | IntelliJ avec le serveur MCP sur le port 64342 |
 | Plugin `notify` (notifications desktop) | `./install.sh plugin notify` | `python3-gi`, `gdbus`, `xprop`, `jq`, gnome-terminal |
@@ -82,7 +82,10 @@ demander une déconnexion/reconnexion de session.
 - `/git-tidy:commits [n] [--base <base>]` : redécouper et reformuler les commits d'une branche avant
   relecture ou avant merge (sauvegarde, push forcé seulement sur accord) ; `/git-tidy:pr-sync` : rebaser
   la PR si elle est en retard (sur sa base, une autre branche, ou toute la pile de PR), remettre sa description en phase et la raccorder au
-  ticket JIRA ou à l'issue ; `/git-tidy:ready` : les deux d'affilée avant merge (plugin `git-tidy`).
+  ticket JIRA ou à l'issue ; `/git-tidy:ready` : les deux d'affilée avant merge, puis, PR
+  approuvée, le ticket JIRA passé « En validation » et le message Slack pour le testeur ;
+  `/git-tidy:approved-auto` : lancer `ready` d'office quand ma PR a ses approbations (2 par
+  défaut, dépôt par dépôt, via `tidy-watch`) (plugin `git-tidy`).
 - `/review:diff` : faire relire mon diff avant commit ou PR par l'agent `reviewer` (code
   ajouté seulement) ; `/review:pr <n…>` : relire la PR d'un collègue, ou plusieurs PR
   liées (pile, même sujet) avec leur cohérence, et y poster les commentaires retenus ; `/review:feedback` : traiter les retours reçus sur ma PR
@@ -120,12 +123,14 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     (liens, contrôles ; lu par install.sh plugin) : pr-comments/ (repris
                     d'aguiddir/claude-config), intellij/, profiles/ (bin/claude-profile, shell/claude-profile.sh),
                     git-nav/ (skills /pr, /br, /worktree, branch-cleanup, hook merge-watch, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
-                    git-tidy/ (skills /git-tidy:commits, :pr-sync et :ready),
+                    git-tidy/ (skills /git-tidy:commits, :pr-sync, :ready et :approved-auto,
+                    bin/tidy-watch, lib/watchlib.py, timer systemd tidy-watch),
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
                     review/ (agent reviewer, skills /review:diff, :pr, :feedback, :pr-auto et :feedback-auto,
-                    bin/{review-post,review-watch}, timer systemd review-watch, profil Herdr UI)
+                    bin/{review-post,review-watch}, lib/watchlib.py, timer systemd review-watch,
+                    profil Herdr UI)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, lean —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),

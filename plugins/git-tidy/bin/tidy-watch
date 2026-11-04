@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""tidy-watch — lance /git-tidy:ready quand une de mes PR a ses approbations.
+
+Un événement, interrogé par `poll` (timer systemd utilisateur, toutes les 5 min par défaut :
+`interval` de la config) :
+  approved  une de mes PR ouvertes, hors brouillon, a au moins `approvals` approbations (2
+            par défaut ; dernier avis de chaque relecteur autre que moi), aucun changement
+            demandé, et aucun fil de review en attente de moi (non résolu, dernier message
+            d'un autre) → /git-tidy:ready <n>
+
+Mode par dépôt (config ~/.config/claude-tools/git-tidy.json, partagée avec les réglages de
+/git-tidy:ready) :
+  auto     la session est lancée : herdr (worktree + pane) s'il tourne, sinon analyse en
+           fond (claude -p … --prepare) puis notification, dont le clic reprend la session
+           dans un terminal pour la validation
+  notify   notification seulement ; son clic lance la session comme en auto
+  off      rien (défaut des dépôts non listés)
+Rien n'est réécrit, poussé ni publié sans validation dans la session.
+Mécanique commune avec review-watch (plugin review) : lib/watchlib.py, copie identique.
+
+  tidy-watch status                          surveillance, dépôts, sessions
+  tidy-watch repos [--json]                  dépôts configurés et clones GitHub trouvés
+  tidy-watch auto <owner/repo|.> on|off      (off : retour au mode des dépôts non listés)
+  tidy-watch add <owner/repo|.> [--approved M] [--path <clone>]
+  tidy-watch remove <owner/repo|.>
+  tidy-watch default [--approved M] [--approvals N]   dépôts non listés (off ; 2)
+  tidy-watch approvals <owner/repo|.> [<n> | default]  approbations attendues
+  tidy-watch set <owner/repo|.> validation_status|test_env [<valeur> | default]
+                                             réglages de /git-tidy:ready (sans valeur : affiche)
+  tidy-watch enable | disable                timer systemd (enable : état initial d'abord)
+  tidy-watch interval [<minutes>]            fréquence du scan (5 par défaut), appliquée au timer
+  tidy-watch poll [--dry-run]                un passage
+  tidy-watch launch <owner/repo#n | n>
+  tidy-watch resume [<owner/repo#n>]         session préparée en fond
+"""
+import os, sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+import watchlib as w  # noqa: E402
+
+APPROVALS = 2
+SETTINGS = {"validation_status": "En validation", "test_env": None}  # réglages de /git-tidy:ready
+
+MINE_QUERY = """query($q: String!) {
+  search(query: $q, type: ISSUE, first: 50) { nodes { ... on PullRequest {
+    number title url isDraft repository { nameWithOwner }
+    latestOpinionatedReviews(first: 30) { nodes { author { login } state submittedAt } }
+    reviewThreads(first: 100) { nodes { isResolved
+      comments(last: 1) { nodes { author { login } } } } } } } } }"""
+
+
+def approvals(cfg, repo):
+    return int(w.setting(cfg, repo, "approvals", APPROVALS))
+
+
+def approved_events(cfg, state, delay):
+    """Mes PR ouvertes, hors brouillon, avec au moins `approvals` approbations d'autres que
+    moi (dernier avis de chacun) et aucun changement demandé : ([(repo, n, titre, url, date
+    de la N-ième approbation)], [PR en attente de mes réponses]). Cette date ne bouge pas
+    avec une approbation de plus ni avec un push : seule une nouvelle série d'approbations
+    (après qu'elles ont été écartées) relance. Une approbation trop récente (< delay s)
+    attend le passage suivant ; un fil non résolu dont le dernier message n'est pas de moi
+    aussi (retours pas encore traités)."""
+    login = w.me(state)
+    nodes = w.graphql(MINE_QUERY, q=f"is:pr is:open author:{login} archived:false")["search"]["nodes"]
+    events, waiting = [], []
+    for pr in nodes:
+        if not pr or pr.get("isDraft"):
+            continue
+        repo, n = pr["repository"]["nameWithOwner"], pr["number"]
+        latest = [r for r in (pr.get("latestOpinionatedReviews") or {}).get("nodes", [])
+                  if r and r.get("author") and r["author"]["login"] != login]
+        if any(r["state"] == "CHANGES_REQUESTED" for r in latest):
+            continue
+        ok = sorted(r["submittedAt"] for r in latest if r["state"] == "APPROVED" and r.get("submittedAt"))
+        need = approvals(cfg, repo)
+        if len(ok) < need:
+            continue
+        at = ok[need - 1]
+        if (w.now() - w.parse(ok[-1])).total_seconds() < delay:
+            continue
+        if state["approved"].get(f"{repo}#{n}", "") >= at:
+            continue
+        pending = [t for t in (pr.get("reviewThreads") or {}).get("nodes", [])
+                   if t and not t["isResolved"] and any(
+                       (c.get("author") or {}).get("login") != login for c in t["comments"]["nodes"])]
+        if pending:
+            waiting.append((repo, n, len(pending)))
+            continue
+        events.append((repo, n, pr["title"], pr["url"], at))
+    return events, waiting
+
+
+def events(cfg, state, since, delay, dry_run=False, seed=False):
+    found, waiting = approved_events(cfg, state, delay)
+    out = [f"{repo}#{n} (approved) : {k} fil(s) de review en attente de réponse, attend le passage suivant"
+           for repo, n, k in waiting]
+    return [("approved", *e) for e in found], out
+
+
+def repo_extra(cfg, repo):
+    return f" (approvals={approvals(cfg, repo)})"
+
+
+def extra(cfg, repo):
+    return {"approvals": approvals(cfg, repo),
+            **{k: w.setting(cfg, repo, k, d) for k, d in SETTINGS.items()}}
+
+
+def extend(sub, default):
+    default.add_argument("--approvals", type=int)
+    ap = sub.add_parser("approvals")
+    ap.add_argument("repo")
+    ap.add_argument("n", nargs="?")
+    st = sub.add_parser("set")
+    st.add_argument("repo")
+    st.add_argument("key", choices=tuple(SETTINGS))
+    st.add_argument("value", nargs="?")
+
+
+def handle(cfg, args):
+    if args.cmd == "default":
+        if args.approvals is None:
+            return False
+        if args.approvals < 1:
+            w.die("nombre d'approbations attendu (1 au moins)")
+        cfg.setdefault("default", {})["approvals"] = args.approvals
+        return True
+    if args.cmd == "approvals":
+        repo = w.repo_arg(args.repo)
+        if args.n is not None:
+            r = cfg.setdefault("repos", {}).setdefault(repo, {})
+            if args.n == "default":
+                r.pop("approvals", None)
+                w.prune_repo(cfg, repo)
+            elif not args.n.isdigit() or int(args.n) < 1:
+                w.die("nombre d'approbations attendu (1 au moins), ou default")
+            else:
+                r["approvals"] = int(args.n)
+                w.remember_path(r, args.repo)
+            w.save_json(w.S.config, cfg)
+        print(f"{repo} : {approvals(cfg, repo)} approbation(s) avant /git-tidy:ready"
+              f" (approved={w.mode(cfg, repo, 'approved')})")
+        return True
+    if args.cmd == "set":
+        repo = w.repo_arg(args.repo)
+        if args.value is not None:
+            r = cfg.setdefault("repos", {}).setdefault(repo, {})
+            if args.value == "default":
+                r.pop(args.key, None)
+                w.prune_repo(cfg, repo)
+            else:
+                r[args.key] = args.value
+            w.save_json(w.S.config, cfg)
+        own = w.repo_cfg(cfg, repo).get(args.key)
+        dflt = cfg.get("default", {}).get(args.key)
+        value = own if own is not None else dflt if dflt is not None else SETTINGS[args.key]
+        source = "dépôt" if own is not None else "default" if dflt is not None else "défaut"
+        print(f"{repo} : {args.key} = {value if value is not None else '(non réglé)'} ({source})")
+        return True
+    return False
+
+
+w.configure(
+    name="tidy-watch", env="TIDY_WATCH", self_path=__file__, config="git-tidy.json",
+    worktrees="tidy-worktrees",
+    kinds=("approved",),
+    skill={"approved": "git-tidy:ready"},
+    label={"approved": "préparation au merge"},
+    tab={"approved": "merge"},
+    defaults={"approved": "off"},
+    announce={"approved": "PR approuvée, prête pour le merge"},
+    # Message à une session déjà ouverte sur la PR : elle ne voit pas seule ce qui arrive ensuite
+    tell={"approved": "tidy-watch : nouvelle activité sur la PR #{n}{when} (approbations). "
+                      "Revérifie l'état de la PR avant de continuer."},
+    guess_kind=lambda state, repo, n: "approved",
+    repo_extra=repo_extra, extra=extra,
+)
+
+if __name__ == "__main__":
+    w.main(__doc__, events, extend, handle)

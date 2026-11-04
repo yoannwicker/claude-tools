@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync` et `:ready` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -628,15 +628,30 @@ ajoute des alias.
 
 **Rôle** : remettre une branche au propre avant relecture ou avant merge — réécrire ses commits
 (`/git-tidy:commits`), puis rebaser sa PR sur sa base et aligner sa description et le ticket
-lié sur ce qui a changé (`/git-tidy:pr-sync`), ou les deux d'affilée (`/git-tidy:ready`). Les skills ne se lancent qu'à la demande
-(`disable-model-invocation`) et n'écrivent rien hors du dépôt local sans accord.
+lié sur ce qui a changé (`/git-tidy:pr-sync`), ou les deux d'affilée (`/git-tidy:ready`),
+lancé d'office quand la PR a ses approbations (`/git-tidy:approved-auto`). Les skills ne se
+lancent qu'à la demande (`disable-model-invocation`, ou par `tidy-watch` pour le mode
+auto) et n'écrivent rien hors du dépôt local sans accord.
 
-**Fichiers** : `plugins/git-tidy/` (`skills/{commits,pr-sync,ready}/SKILL.md`) ; rien hors du
-plugin. **Activé dans** : tous les profils.
+**Fichiers** : `plugins/git-tidy/` (`skills/{commits,pr-sync,ready,approved-auto}/SKILL.md`,
+`bin/tidy-watch`, `lib/watchlib.py` (mécanique commune des watchers, copie identique de celle
+du plugin [`review`](#review)), `systemd/tidy-watch.{service,timer}`,
+`tests/tidy-watch.test.sh`, `setup.sh`) ; hors du plugin, les liens `~/.local/bin/tidy-watch`
+et `~/.config/systemd/user/tidy-watch.{service,timer}` posés par `setup.sh`, le drop-in
+`tidy-watch.timer.d/interval.conf` écrit par `tidy-watch interval`, les réglages par dépôt
+`~/.config/claude-tools/git-tidy.json` (non versionnés : mode auto, approbations, statut
+JIRA de validation, environnement de test ; écrits par `tidy-watch`,
+`/git-tidy:approved-auto` et `/git-tidy:ready` sur accord) et l'état
+`~/.local/state/claude-tools/tidy-watch/`. **Activé dans** : tous les profils.
 
 **Prérequis** : `git` ; `gh` authentifié (base de la PR, `/git-tidy:pr-sync`) ; pour JIRA, un
 MCP Atlassian connecté (`claude.ai Atlassian Rovo` ou `claude.ai Atlassian MCP`) ; sans lui,
-seules la PR et les issues GitHub sont traitées.
+seules la PR et les issues GitHub sont traitées (et aucun ticket n'est passé en
+validation). Mode auto (`tidy-watch`) : `python3`, systemd utilisateur ; herdr facultatif
+(sinon analyse en fond, reprise dans `gnome-terminal`) ; `python3-gi` avec `Notify 0.7`
+pour le clic des notifications (sinon `notify-send`, sans clic). Tests :
+`bash plugins/git-tidy/tests/tidy-watch.test.sh` (faux `gh`, `claude`, `herdr` ; vérifie
+aussi que `lib/watchlib.py` est identique à celui de `review` quand les deux sont là).
 
 #### Installation hors de ce dépôt
 
@@ -646,6 +661,10 @@ Le plugin ne dépend pas du reste de la config :
 claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
 claude plugin install git-tidy@claude-tools
 ```
+
+Le mode auto (`tidy-watch`) demande en plus ses liens hors du plugin (commande dans
+`~/.local/bin`, unités systemd) : passer par un clone, `./install.sh plugin git-tidy`, puis
+`tidy-watch enable` (ou `/git-tidy:approved-auto`, qui le propose).
 
 #### `/git-tidy:commits`
 
@@ -730,9 +749,9 @@ n'y a rien d'autre ou plusieurs candidats (sans PR : propose d'en créer une en 
 
 #### `/git-tidy:ready`
 
-`/git-tidy:ready [numéro]` : enchaîne obligatoirement `/git-tidy:commits` (base : celle de
-la PR) puis `/git-tidy:pr-sync` (dont le rebase sur la base, après la réécriture), en
-suivant leurs `SKILL.md` (les deux skills ne sont pas invocables par Claude). PR choisie comme pour `pr-sync` (argument, puis PR ou branche en
+`/git-tidy:ready [numéro] [--prepare]` : enchaîne obligatoirement `/git-tidy:commits` (base :
+celle de la PR) puis `/git-tidy:pr-sync` (dont le rebase sur la base, après la réécriture),
+en suivant leurs `SKILL.md` (les deux skills ne sont pas invocables par Claude). PR choisie comme pour `pr-sync` (argument, puis PR ou branche en
 contexte, puis branche courante, jamais la branche par défaut). Il prépare le **merge** :
 l'historique sort dans sa forme finale, sans `fixup!` restant.
 
@@ -745,8 +764,85 @@ l'historique sort dans sa forme finale, sans `fixup!` restant.
 - Si `commits` s'arrête (modifications non commitées, opération git en cours, *Annuler*,
   retour à la sauvegarde…), `ready` s'arrête aussi ; seul un historique déjà propre laisse
   passer à `pr-sync`.
-- Mêmes accords que les deux skills (plan, rebase, push, publication) ; finit par un
-  résumé : commits réécrits, rebase, sauvegardes, push, liens publiés.
+- **Passage en validation** (après `pr-sync`, PR approuvée : ses `<N>` approbations
+  valides — `approvals` du dépôt dans `~/.config/claude-tools/git-tidy.json`, sinon 2 — et
+  celles de chaque PR de la pile) : tickets JIRA des PR passés au statut `validation_status` du
+  dépôt (`En validation` par défaut) par la transition qui y mène (rien si le ticket y est
+  déjà, ni si une de ses PR n'est pas approuvée ; pas de transition possible → le dit, ne
+  force rien). Message Slack rédigé pour le testeur, à copier : *Ticket(s)* (clé,
+  description d'une ligne, lien), *PRs* seulement pour une pile (liens rangés sous leur
+  ticket), *Env de test* (`test_env` du dépôt, `{pr}`/`{branch}`/`{ticket}` remplacés ;
+  sinon dernier déploiement GitHub de la branche ; sinon demandé, et retenu sur accord).
+  *Passer en « … » et garder le message*, *Message seulement*, *Ajuster* ou *Plus tard* ;
+  presse-papiers proposé si `wl-copy` ou `xclip` existe.
+- Réglages par dépôt, `~/.config/claude-tools/git-tidy.json` :
+  `{"default": {"validation_status": "En validation"}, "repos": {"owner/repo":
+  {"approvals": 2, "validation_status": "…", "test_env": "https://recette/{branch}"}}}` (la clé du dépôt l'emporte sur `default` ;
+  même fichier que la config de `tidy-watch`).
+- Mêmes accords que les deux skills (plan, rebase, push, publication), plus le passage en
+  validation ; finit par un résumé : commits réécrits, rebase, sauvegardes, push, tickets
+  passés, liens publiés, message Slack.
+- `--prepare` (analyse en fond lancée par `tidy-watch`, sans personne pour répondre) :
+  aucune question ni écriture (ni réécriture, ni rebase, ni push, ni publication) ; plan de
+  commits, retard sur la base, pile et conflits prévisibles, brouillons de PR et de ticket,
+  tickets à passer en validation et message Slack, puis
+  « Prêt pour la validation ». À la reprise, la session repart de la question du plan.
+
+#### `/git-tidy:approved-auto`, `tidy-watch`
+
+Lancer `/git-tidy:ready <n>` d'office quand une de mes PR a ses approbations, dépôt par
+dépôt : la PR étant approuvée, `ready` va jusqu'au passage du ticket en validation et au
+message Slack. Rien n'est réécrit, poussé ni publié sans validation dans la session lancée.
+
+**Événement** `approved`, cherché par `tidy-watch poll` (timer systemd utilisateur
+`tidy-watch.timer`, toutes les 5 min par défaut) : une de mes PR ouvertes (recherche
+GraphQL), hors brouillon, a au moins `approvals` approbations (2 par défaut, réglable par
+dépôt), d'après le dernier avis de chaque relecteur autre que moi
+(`latestOpinionatedReviews`), et aucun changement demandé. Prise `feedback_delay` (300 s)
+après la dernière approbation. Elle attend tant qu'un fil de review est en attente de ma
+réponse (non résolu, dernier message d'un autre), le temps que les retours soient traités.
+La date retenue est celle de la N-ième approbation : une approbation de plus ou un push ne
+relancent pas ; une nouvelle série d'approbations (après qu'elles ont été écartées)
+relance.
+
+**Modes**, par dépôt : `auto` (session lancée), `notify` (notification, dont le clic lance
+la session) ou `off` (rien ; défaut des dépôts non listés).
+
+- `/git-tidy:approved-auto [on|off|interval <min>|approvals <n|default>|status <statut|default>|env <texte|default>]` :
+  avec `on`/`off`, le dépôt courant (`tidy-watch auto . on|off` ; `off` le remet au mode
+  des dépôts non listés et garde ses autres réglages) ; sans argument, choix parmi les
+  dépôts connus (ceux de la config et les clones GitHub des espaces de travail de
+  [`cl`](TOOLS.md#lanceur-cl), actifs en premier), puis récapitulatif. `approvals` :
+  approbations attendues ; `status` : statut JIRA de validation (`validation_status`,
+  `En validation` par défaut) ; `env` : environnement de test du message Slack
+  (`test_env`) ; sans valeur, affiche le réglage et sa provenance. Surveillance arrêtée :
+  propose `tidy-watch enable`. Sans `tidy-watch` dans le `PATH` : dit d'installer le plugin
+  et s'arrête.
+- En terminal : `tidy-watch auto <owner/repo|.> on|off`, `add <repo> [--approved M]
+  [--path <clone>]`, `remove <repo>`, `default [--approved M] [--approvals N]`,
+  `approvals <repo|.> [<n>|default]`, `set <repo|.> validation_status|test_env
+  [<valeur>|default]`, `repos [--json]`, `status`, `enable` (enregistre d'abord ce qui est
+  déjà là, sans rien lancer) / `disable`, `poll [--dry-run]`, `interval [<minutes>]`
+  (drop-in `~/.config/systemd/user/tidy-watch.timer.d/interval.conf`), `launch`, `resume`.
+
+**Lancement**, comme `review-watch` pour un feedback (même mécanique, `lib/watchlib.py`) :
+herdr tourne → la branche de la PR (son dossier si elle est déjà extraite, sinon un
+worktree sous `~/.herdr/worktrees/`), onglet « merge #n », `claude '/git-tidy:ready <n>'` ;
+sinon analyse en fond `claude -p '/git-tidy:ready <n> --prepare'` (outils en lecture
+seule) dans un worktree sous `~/.cache/claude-tools/tidy-worktrees/`, puis notification
+« prête à valider » dont le clic lance `tidy-watch resume`. Session herdr déjà ouverte sur
+la PR : message dans son pane. Journal : `~/.local/state/claude-tools/tidy-watch/logs/`.
+Le profil lancé (réglage `claude`) doit activer le plugin `git-tidy`.
+
+Config `~/.config/claude-tools/git-tidy.json` (partagée avec les réglages de
+`/git-tidy:ready`) : `{"repos": {"owner/repo": {"approved": "auto", "approvals": 2, "path":
+"…", …}}, "default": {"approved": "off", "approvals": 2}, "interval": 5, "feedback_delay":
+300, "claude": "claude", "terminal": null}`.
+
+Installation : `./install.sh plugin git-tidy` relie `tidy-watch` dans `~/.local/bin` et les
+unités dans `~/.config/systemd/user/` ; le timer n'est activé que par `tidy-watch enable`.
+`--remove` l'arrête et retire le drop-in d'intervalle, et `status` signale un dépôt en auto
+avec un timer arrêté.
 
 ### `notify`
 
@@ -1044,7 +1140,8 @@ y compris par [`review-watch`](#review-watch-reviewpr-auto-reviewfeedback-auto),
 **Fichiers** : `plugins/review/` (`agents/reviewer.md`,
 `skills/{diff,pr,feedback,pr-auto,feedback-auto}/SKILL.md`, `validation.md` et `ticket.md`
 communs aux skills, `auto.md` commun à `pr-auto` et `feedback-auto`,
-`bin/{review-post,review-watch}`, `systemd/review-watch.{service,timer}`,
+`bin/{review-post,review-watch}`, `lib/watchlib.py` (mécanique commune des watchers, copie
+identique de celle du plugin [`git-tidy`](#git-tidy)), `systemd/review-watch.{service,timer}`,
 `tests/{review-post,review-watch}.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
 hors du plugin, les liens `~/.local/bin/review-watch` et
 `~/.config/systemd/user/review-watch.{service,timer}` posés par `setup.sh`, le drop-in
