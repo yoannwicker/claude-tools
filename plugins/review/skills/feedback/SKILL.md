@@ -79,6 +79,23 @@ les fils pris en compte, avec qui sera relancé, ou ce qui l'empêche.
 
 ## 5. L'exécution
 
+Des retours peuvent arriver pendant la session (une deuxième review après l'analyse) : rien
+ne les signale (`review-watch` prévient une session déjà ouverte, mais sans garantie). Les
+fils sont donc **relus** (requête de l'étape 2) au début de l'étape 5, puis juste avant la
+relance (5.4). Un fil non résolu absent de l'analyse, ou un fil analysé qui a reçu un
+nouveau commentaire d'un autre que moi, est **nouveau** :
+
+- au début de l'étape 5 : ne rien exécuter, lister les nouveaux fils (auteur, date,
+  fichier) et proposer (`AskUserQuestion`, header « Nouveaux ») : **Les analyser d'abord
+  (Recommandé)** — étape 3 sur ces fils, puis étape 4 pour eux seuls, et exécution de
+  l'ensemble — / **Exécuter ce qui est validé, puis les analyser** (pas de relance à 5.4) ;
+- avant la relance : pas de relance ; les lister et proposer de reprendre l'étape 3 sur
+  ces fils.
+
+Un message de `review-watch` reçu en cours de session (« Nouveaux retours sur #n… ») fait
+relire les fils tout de suite : avant l'étape 5, les nouveaux fils rejoignent l'analyse ;
+pendant ou après, comme ci-dessus.
+
 1. **Corrections** (seulement sur la branche de la PR) : appliquer les solutions et
    options retenues. Un commit `git commit --fixup=<sha>` par commit corrigé (le commit
    qui a introduit les lignes : `git log -L` ou `git blame` sur la base de la PR) ;
@@ -99,8 +116,8 @@ les fils pris en compte, avec qui sera relancé, ou ce qui l'empêche.
    Ne jamais résoudre un fil : c'est au relecteur (ou au plugin `pr-comments`).
 4. **Relance des relecteurs** (automatique, sans question) : seulement si l'envoi retenu
    est *Corriger, répondre et pousser*, que push et réponses ont réussi, et que **tous** les
-   fils non résolus sont pris en compte — corrigés ou répondus pendant cette exécution, ou
-   déjà `↩ répondu` ; un seul fil laissé de côté (« ne rien faire maintenant », « à
+   fils non résolus, **relus à cet instant** (aucun nouveau fil, voir plus haut), sont pris
+   en compte — corrigés ou répondus pendant cette exécution, ou déjà `↩ répondu` ; un seul fil laissé de côté (« ne rien faire maintenant », « à
    discuter » non tranché) ou un échec → pas de relance, le dire. Relecteurs à relancer :
    `gh pr view <n> --json latestReviews,reviewRequests` → auteurs des `latestReviews` dont
    l'état n'est pas `APPROVED` (`CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`), hors moi,
@@ -108,4 +125,5 @@ les fils pris en compte, avec qui sera relancé, ou ce qui l'empêche.
    Puis `gh pr edit <n> --add-reviewer <login1>,<login2>` (redemande la review, ce qui les
    notifie). Personne à relancer → le dire.
 5. Fin : tableau fil → suite → commit / lien de la réponse ; fils laissés de côté ;
-   relecteurs relancés (ou pourquoi aucune relance).
+   nouveaux fils arrivés en cours de session ; relecteurs relancés (ou pourquoi aucune
+   relance).

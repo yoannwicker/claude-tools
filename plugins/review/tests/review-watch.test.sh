@@ -28,7 +28,15 @@ case "$1 $2" in
   *) echo "faux gh : appel inattendu $*" >&2; exit 1 ;;
 esac
 EOF
-printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/fakebin/herdr"
+cat > "$tmp/fakebin/herdr" <<'EOF'
+#!/usr/bin/env bash
+# arrêté (status), mais les panes notés dans l'état existent : session herdr déjà ouverte
+case "$1 $2" in
+  "agent get") echo '{"result": {}}' ;;
+  "agent prompt") printf '%s\n' "$3 $4" >> "$FAKE/herdr-prompts"; exit "${HERDR_PROMPT_RC:-0}" ;;
+  *) exit 1 ;;
+esac
+EOF
 cat > "$tmp/fakebin/claude" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$PWD $*" >> "$FAKE/claude-calls"
@@ -138,5 +146,21 @@ check "status donne l'intervalle" 1 "$("$bin" status | grep -c 'toutes les 15 mi
 "$bin" interval 5 >/dev/null
 check "interval 5 → défaut, drop-in retiré" "null absent" \
   "$(jq -r .interval "$XDG_CONFIG_HOME/claude-tools/review-watch.json") $([ -e "$dropin" ] && echo présent || echo absent)"
+
+# 9. Session herdr déjà ouverte sur la PR : nouveaux retours envoyés dans le pane
+"$bin" add o/r --feedback auto >/dev/null
+st=$XDG_STATE_HOME/claude-tools/review-watch/state.json
+jq '.sessions["o/r#30:feedback"] = {mode: "herdr", pane: "p30", dir: "d"}' "$st" > "$st.new" && mv "$st.new" "$st"
+mine "30:10 minutes:COMMENTED:2" > "$tmp/mine.json"
+rm -f "$tmp/notifs" "$tmp/claude-calls" "$tmp/herdr-prompts"
+"$bin" poll >/dev/null
+check "session ouverte → message dans le pane, rien de lancé" "p30 review-watch : nouveaux retours sur la PR #30|" \
+  "$(sed 's/ (.*//' "$tmp/herdr-prompts")|$(cat "$tmp/claude-calls" 2>/dev/null)"
+body() { jq -r '"\(.body | sub(".*: "; "")) \(.urgency)"' "$tmp/notifs"; }
+check "notification : message envoyé" "message envoyé normal" "$(body)"
+mine "30:6 minutes:COMMENTED:1" > "$tmp/mine.json"
+rm -f "$tmp/notifs"
+HERDR_PROMPT_RC=1 "$bin" poll >/dev/null
+check "agent en attente d'une réponse → notification critique" "occupée, message non envoyé critical" "$(body)"
 
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

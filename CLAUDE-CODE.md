@@ -1225,6 +1225,12 @@ un ajout), `git push` simple (à fondre plus tard avec `/git-tidy:commits`), pui
 sur les fils (`addPullRequestReviewThreadReply`). Aucun fil n'est résolu : c'est au
 relecteur, ou à [`pr-comments`](#pr-comments).
 
+Retours arrivés en cours de session (une deuxième review après l'analyse) : les fils sont
+relus au début de l'exécution puis juste avant la relance. Un fil absent de l'analyse (ou
+un fil analysé qui a reçu un nouveau commentaire d'un relecteur) arrête l'exécution, qui
+propose de l'analyser d'abord ; juste avant la relance, il l'empêche. Un message de
+`review-watch` dans le pane fait relire les fils tout de suite.
+
 Relance automatique : avec *Corriger, répondre et pousser*, une fois **tous** les fils non
 résolus pris en compte (corrigés ou répondus, aucun laissé de côté, aucun échec), la review
 est redemandée (`gh pr edit --add-reviewer`) aux relecteurs dont la dernière review n'est
@@ -1299,7 +1305,12 @@ sinon cherché dans les espaces de travail de `cl` et retenu.
   session s'arrête sur « Prêt pour la validation ». À la reprise, elle continue à la
   validation.
 - Une session herdr encore ouverte (Claude présent dans le pane) ou une analyse en cours
-  pour la même PR n'est pas doublée : nouvelle activité notifiée seulement.
+  pour la même PR n'est pas doublée. Une session herdr ouverte reçoit un message dans son
+  pane (`herdr agent prompt` : « nouveaux retours sur la PR #n (HH:MM) », ou review
+  redemandée), mis en file si Claude travaille. herdr refuse si
+  Claude attend une réponse (question, permission) : rien n'est alors tapé dans la question,
+  et la notification « Nouvelle activité » le dit (critique). L'événement est marqué traité
+  dans les deux cas : `/review:feedback` relit de toute façon les fils avant d'agir.
 - `claude` (réglage `claude` de la config, ex. `"claude-profile switch vidal"`) : le profil
   utilisé doit activer le plugin `review` (profil de référence, `vidal` ; pas `lean`).
 
