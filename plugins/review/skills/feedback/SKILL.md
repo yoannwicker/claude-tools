@@ -1,9 +1,9 @@
 ---
 name: feedback
-description: Traiter les retours reçus sur sa PR — chaque fil de review non résolu analysé, priorisé avec un conseil, avec une solution, des options ou « à discuter » — puis, après validation, corrections en commits fixup, réponses sur les fils et push sur accord
+description: Traiter les retours reçus sur sa PR — chaque fil de review non résolu analysé, priorisé avec un conseil, avec une solution, des options ou « à discuter » — puis, après validation, corrections en commits fixup, réponses sur les fils et push sur accord, et relance des relecteurs qui n'ont pas validé une fois tout pris en compte
 argument-hint: "[numéro de PR] [--prepare]"
 disable-model-invocation: true
-allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(gh api user:*), Bash(gh api graphql:*)
+allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh api user:*), Bash(gh api graphql:*)
 ---
 
 Argument : `$ARGUMENTS`
@@ -73,7 +73,9 @@ Suivre `${CLAUDE_SKILL_DIR}/../../validation.md`. Pour chaque fil, ce qui sera f
 corriger (solution ou option choisie) et répondre, répondre seulement (contester,
 expliquer, déjà fait), ou ne rien faire maintenant. Ensuite une question
 (`AskUserQuestion`, header « Envoi ») : **Corriger, répondre et pousser (Recommandé)** /
-**Corriger et répondre, sans pousser** / **Corriger seulement, rien sur GitHub**.
+**Corriger et répondre, sans pousser** / **Corriger seulement, rien sur GitHub**. La
+description de la première dit si les relecteurs seront relancés ensuite (étape 5.4) : tous
+les fils pris en compte, avec qui sera relancé, ou ce qui l'empêche.
 
 ## 5. L'exécution
 
@@ -95,4 +97,15 @@ expliquer, déjà fait), ou ne rien faire maintenant. Ensuite une question
    ```
 
    Ne jamais résoudre un fil : c'est au relecteur (ou au plugin `pr-comments`).
-4. Fin : tableau fil → suite → commit / lien de la réponse ; fils laissés de côté.
+4. **Relance des relecteurs** (automatique, sans question) : seulement si l'envoi retenu
+   est *Corriger, répondre et pousser*, que push et réponses ont réussi, et que **tous** les
+   fils non résolus sont pris en compte — corrigés ou répondus pendant cette exécution, ou
+   déjà `↩ répondu` ; un seul fil laissé de côté (« ne rien faire maintenant », « à
+   discuter » non tranché) ou un échec → pas de relance, le dire. Relecteurs à relancer :
+   `gh pr view <n> --json latestReviews,reviewRequests` → auteurs des `latestReviews` dont
+   l'état n'est pas `APPROVED` (`CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`), hors moi,
+   hors bots (`[bot]`) et hors ceux déjà dans `reviewRequests` (relance déjà en attente).
+   Puis `gh pr edit <n> --add-reviewer <login1>,<login2>` (redemande la review, ce qui les
+   notifie). Personne à relancer → le dire.
+5. Fin : tableau fil → suite → commit / lien de la réponse ; fils laissés de côté ;
+   relecteurs relancés (ou pourquoi aucune relance).

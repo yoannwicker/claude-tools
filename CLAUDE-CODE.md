@@ -1208,6 +1208,12 @@ un ajout), `git push` simple (à fondre plus tard avec `/git-tidy:commits`), pui
 sur les fils (`addPullRequestReviewThreadReply`). Aucun fil n'est résolu : c'est au
 relecteur, ou à [`pr-comments`](#pr-comments).
 
+Relance automatique : avec *Corriger, répondre et pousser*, une fois **tous** les fils non
+résolus pris en compte (corrigés ou répondus, aucun laissé de côté, aucun échec), la review
+est redemandée (`gh pr edit --add-reviewer`) aux relecteurs dont la dernière review n'est
+pas une approbation (changements demandés, commentaires, review écartée), hors bots et hors
+demandes déjà en attente. Sinon, aucune relance, et le compte rendu dit pourquoi.
+
 #### `review-watch`, `/review:pr-auto`, `/review:feedback-auto`
 
 Lancer les skills d'office depuis GitHub, dépôt par dépôt : `/review:pr` à la demande de
