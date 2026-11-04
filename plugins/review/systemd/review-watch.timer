@@ -1,0 +1,11 @@
+# Activé par review-watch enable (plugin review de claude-tools).
+[Unit]
+Description=review-watch toutes les 5 minutes (review-watch interval pour changer)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

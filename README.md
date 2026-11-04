@@ -33,7 +33,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Plugin `herdr-session` (reprise des sessions par herdr) | `./install.sh plugin herdr-session` | herdr et son intégration Claude (`./setup/20-herdr.sh`) |
 | Plugin `build-brief` (consigne et garde-fou Gradle) | `./install.sh plugin build-brief` | `build-brief` dans le PATH, `python3` |
 | Plugin `session-analysis` (analyse des sessions avec AgentsView, qu'il installe) | `./install.sh plugin session-analysis` | `python3`, `curl` |
-| Plugin `review` (agent reviewer, skills `/review:diff`, `/review:pr`, `/review:feedback` : relire son diff ou la PR d'un collègue, traiter les retours reçus) | `./install.sh plugin review` | `git`, `python3` ; `gh` authentifié ; `git-nav` pour chercher une PR par mots-clés |
+| Plugin `review` (agent reviewer, skills `/review:diff`, `/review:pr`, `/review:feedback` : relire son diff ou la PR d'un collègue, traiter les retours reçus ; `/review:pr-auto`, `/review:feedback-auto` : les lancer d'office depuis les notifications GitHub) | `./install.sh plugin review`, puis `review-watch enable` pour le mode auto | `git`, `python3` ; `gh` authentifié ; `git-nav` pour chercher une PR par mots-clés ; systemd utilisateur pour le mode auto |
 
 Plusieurs plugins d'un coup : `./install.sh plugin <nom>…`, tous : `./install.sh plugin --all`
 (c'est ce que fait `./install.sh`). Relancer met à jour. `./install.sh plugin --remove <nom>…`
@@ -88,6 +88,11 @@ demander une déconnexion/reconnexion de session.
   liées (pile, même sujet) avec leur cohérence, et y poster les commentaires retenus ; `/review:feedback` : traiter les retours reçus sur ma PR
   (solution, options ou à discuter pour chacun, puis fixups et réponses). Chaque point est
   priorisé et validé avant d'être envoyé ou traité (plugin `review`).
+- `/review:pr-auto` : lancer ces revues d'office à la demande de review ;
+  `/review:feedback-auto` : lancer le plan de traitement au retour de revue reçu sur mes PR.
+  Dépôt par dépôt (`on`/`off`, ou choix dans la liste) ; sinon une notification, dont le
+  clic lance la session. La session (herdr, ou analyse en fond reprise au clic) attend ma
+  validation avant de poster ou de répondre (`review-watch`, plugin `review`).
 - `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des
   agents (AgentsView), rangé dans `docs/analyses-sessions/` pour ce dépôt ;
   `/session-analysis:session` : bilan de la session en cours (plugin `session-analysis`).
@@ -119,7 +124,8 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
-                    review/ (agent reviewer, skills /review:diff, :pr et :feedback, bin/review-post, profil Herdr UI)
+                    review/ (agent reviewer, skills /review:diff, :pr, :feedback, :pr-auto et :feedback-auto,
+                    bin/{review-post,review-watch}, timer systemd review-watch, profil Herdr UI)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, lean —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),

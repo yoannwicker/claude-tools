@@ -1,7 +1,7 @@
 ---
 name: pr
 description: Relire la PR d'un collègue — ou plusieurs PR liées ensemble (pile de PR, même sujet), avec la cohérence entre elles — avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub (COMMENT) par PR, et enfin supprimer les worktrees et branches créés pour la revue s'il y en a
-argument-hint: "<numéro… | recherche> [--refacto \"<piste>\"]"
+argument-hint: "<numéro… | recherche> [--refacto \"<piste>\"] [--prepare]"
 disable-model-invocation: true
 allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree
 ---
@@ -11,6 +11,13 @@ Arguments : `$ARGUMENTS`
 But : relire la PR de quelqu'un d'autre et lui laisser les commentaires que j'ai validés.
 Plusieurs PR liées (pile de PR, PR sur un même sujet, peut-être contradictoires) se
 relisent ensemble : chacune pour elle-même, plus la cohérence entre elles.
+
+**`--prepare`** (analyse en fond lancée par `review-watch`, `claude -p` : personne pour
+répondre) : aucune question (`AskUserQuestion`) ni rien de posté. Étape 1 sans proposer la
+pile (la citer en une ligne si elle existe), étape 2, puis le tableau de l'étape 3
+(commentaires tels qu'ils seront postés, points `🔎` listés sans les trancher) ; finir par
+« Prêt pour la validation » et s'arrêter. À la reprise de la session (« Reprends à la
+validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalement.
 
 ## 1. Les PR
 

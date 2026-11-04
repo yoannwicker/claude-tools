@@ -1,7 +1,7 @@
 ---
 name: feedback
 description: Traiter les retours reçus sur sa PR — chaque fil de review non résolu analysé, priorisé avec un conseil, avec une solution, des options ou « à discuter » — puis, après validation, corrections en commits fixup, réponses sur les fils et push sur accord
-argument-hint: "[numéro de PR]"
+argument-hint: "[numéro de PR] [--prepare]"
 disable-model-invocation: true
 allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(gh api user:*), Bash(gh api graphql:*)
 ---
@@ -11,6 +11,13 @@ Argument : `$ARGUMENTS`
 But : ne laisser aucun retour sans suite, en décidant vite de ce qui est simple et en
 prenant le temps sur ce qui le mérite. Complément du plugin `pr-comments` (panneau fil par
 fil) : ici chaque fil est analysé et une suite est proposée.
+
+**`--prepare`** (analyse en fond lancée par `review-watch`, `claude -p` : personne pour
+répondre) : aucune question (`AskUserQuestion`), aucune correction, aucun commit ni réponse.
+Étapes 1 à 3, puis le tableau de l'étape 4 (suite et réponse prévue de chaque fil, options et
+« à discuter » listés sans les trancher) ; finir par « Prêt pour la validation » et
+s'arrêter. À la reprise de la session (« Reprends à la validation »), reprendre à l'étape 4
+avec ses questions, puis 5 normalement.
 
 ## 1. La PR
 

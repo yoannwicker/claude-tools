@@ -1,0 +1,10 @@
+# Un passage de review-watch (plugin review de claude-tools), lancé par review-watch.timer.
+[Unit]
+Description=review-watch : demandes de review et retours GitHub
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/.local/bin/review-watch poll
+# Les analyses en fond et les notifications en attente de clic survivent au passage
+KillMode=process

@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync` et `:ready` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr` et `:feedback` dans [`review`](#review). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync` et `:ready` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -1020,12 +1020,20 @@ session) — relire son propre diff (`/review:diff`), relire la PR d'un collègu
 PR liées ensemble (pile de PR, même sujet), et y poster les commentaires retenus
 (`/review:pr`), traiter les retours reçus sur sa PR
 (`/review:feedback`). Chaque point est priorisé avec un conseil et validé avant d'être
-envoyé ou traité. Les skills ne se lancent qu'à la demande (`disable-model-invocation`).
+envoyé ou traité. Les skills ne se lancent qu'à la demande (`disable-model-invocation`),
+y compris par [`review-watch`](#review-watch-reviewpr-auto-reviewfeedback-auto), qui les lance d'office à la demande de review
+(`/review:pr-auto`) ou au retour de revue reçu sur mes PR (`/review:feedback-auto`).
 
 **Fichiers** : `plugins/review/` (`agents/reviewer.md`,
-`skills/{diff,pr,feedback}/SKILL.md`, `validation.md` et `ticket.md` communs aux skills,
-`bin/review-post`, `tests/review-post.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
-hors du plugin, seulement le profil Herdr UI facultatif
+`skills/{diff,pr,feedback,pr-auto,feedback-auto}/SKILL.md`, `validation.md` et `ticket.md`
+communs aux skills, `auto.md` commun à `pr-auto` et `feedback-auto`,
+`bin/{review-post,review-watch}`, `systemd/review-watch.{service,timer}`,
+`tests/{review-post,review-watch}.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
+hors du plugin, les liens `~/.local/bin/review-watch` et
+`~/.config/systemd/user/review-watch.{service,timer}` posés par `setup.sh`, le drop-in
+`review-watch.timer.d/interval.conf` écrit par `review-watch interval`, la config
+`~/.config/claude-tools/review-watch.json` et l'état `~/.local/state/claude-tools/review-watch/`
+(non versionnés), et le profil Herdr UI facultatif
 `~/.config/agent-launcher/agents/custom-reviewer/prompt.md` (voir
 [Profil Herdr UI](#profil-herdr-ui)). **Activé dans** :
 le profil de référence et `vidal` (pas `lean`).
@@ -1034,8 +1042,11 @@ le profil de référence et `vidal` (pas `lean`).
 plugin [`git-nav`](#git-nav) pour chercher une PR par mots-clés dans `/review:pr` (`gpr`).
 Lecture du ticket : MCP Atlassian (`getJiraIssue`) pour JIRA, `gh` pour une issue GitHub ;
 sans eux, la revue se fait sans le ticket. Outils IntelliJ utilisés par l'agent s'ils répondent (plugin [`intellij`](#intellij)),
-sinon recherche classique. Tests : `bash plugins/review/tests/review-post.test.sh` (faux
-`gh`, rien n'est publié) ; pas de mod : `claude plugin test` ne s'applique pas.
+sinon recherche classique. Mode auto (`review-watch`) : systemd utilisateur ; herdr
+facultatif (sinon analyse en fond, reprise dans `gnome-terminal`) ; `python3-gi` avec
+`Notify 0.7` pour le clic des notifications (sinon `notify-send`, sans clic). Tests :
+`bash plugins/review/tests/review-post.test.sh` et `bash plugins/review/tests/review-watch.test.sh`
+(faux `gh`, `claude`, `herdr`, rien n'est publié ni lancé) ; pas de mod : `claude plugin test` ne s'applique pas.
 
 #### Installation hors de ce dépôt
 
@@ -1046,6 +1057,10 @@ PR par mots-clés) :
 claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
 claude plugin install review@claude-tools
 ```
+
+Le mode auto (`review-watch`) demande en plus ses liens hors du plugin (commande dans
+`~/.local/bin`, unités systemd) : passer par un clone, `./install.sh plugin review`, puis
+`review-watch enable` (ou `/review:pr-auto`, qui le propose).
 
 #### Agent `reviewer`
 
@@ -1192,6 +1207,91 @@ proposé : `/git-nav:pr <n>`), en un commit `--fixup` par commit visé (commit n
 un ajout), `git push` simple (à fondre plus tard avec `/git-tidy:commits`), puis réponses
 sur les fils (`addPullRequestReviewThreadReply`). Aucun fil n'est résolu : c'est au
 relecteur, ou à [`pr-comments`](#pr-comments).
+
+#### `review-watch`, `/review:pr-auto`, `/review:feedback-auto`
+
+Lancer les skills d'office depuis GitHub, dépôt par dépôt : `/review:pr` à la demande de
+review, `/review:feedback` (le plan de traitement) au retour de revue reçu sur mes PR.
+Rien n'est posté ni répondu sans validation dans la session lancée.
+
+**Événements**, cherchés par `review-watch poll` (timer systemd utilisateur
+`review-watch.timer`, toutes les 5 min par défaut) :
+
+- **review** : notification GitHub `review_requested` sur la PR ouverte d'un autre (API
+  `notifications`, lues comprises, depuis le passage précédent). La date de la demande vient
+  de la timeline de la PR (dernier `ReviewRequestedEvent` pour moi ou une équipe) : une
+  nouvelle demande (re-request) relance, une revue de ma part postée depuis la demande
+  l'écarte ;
+- **feedback** : review d'un autre que moi sur une de mes PR ouvertes (recherche GraphQL),
+  plus récente que la dernière traitée. Elle n'est prise que 5 min après la dernière review
+  reçue (`feedback_delay` en secondes dans la config), le temps que le relecteur finisse. Une
+  approbation sans commentaire donne une simple notification.
+
+**Modes**, par dépôt et par événement : `auto` (session lancée), `notify` (notification,
+dont le clic lance la session ; défaut des dépôts non listés) ou `off` (rien).
+
+- `/review:pr-auto [on|off|interval <min>]` règle `review`, `/review:feedback-auto [on|off|interval <min>]` règle
+  `feedback` (procédure commune : `auto.md`). Avec `on`/`off` : le dépôt courant
+  (`off` le remet en `notify`). Sans argument : choix parmi les dépôts connus, c'est-à-dire
+  ceux de la config et les clones GitHub des espaces de travail de [`cl`](TOOLS.md#lanceur-cl).
+  Si la surveillance est arrêtée, le skill propose `review-watch enable`.
+- En terminal : `review-watch auto <owner/repo|.> on|off [review|feedback]`,
+  `add <repo> [--review M] [--feedback M] [--path <clone>]`, `remove <repo>`,
+  `default [--review M] [--feedback M]`, `repos`, `status`.
+- `review-watch enable` : enregistre d'abord ce qui est déjà en attente, sans rien lancer
+  (listé, avec la commande `launch` pour le faire), puis active le timer ; `disable`
+  l'arrête. `poll --dry-run` montre ce qu'un passage ferait.
+- `review-watch interval [<minutes>]` (ou `/review:pr-auto interval <minutes>`, idem avec
+  `feedback-auto`) : fréquence du scan (5 par défaut, commune aux deux événements), gardée
+  dans la config (`interval`, éditable à la main : `review-watch interval` sans argument
+  l'affiche et l'applique) et appliquée au timer par un drop-in
+  `~/.config/systemd/user/review-watch.timer.d/interval.conf` (retiré si on revient à 5 ;
+  timer relancé s'il tourne).
+
+**Lancement** (`review-watch launch <owner/repo#n | n> [review|feedback]`, appelé aussi par
+le mode auto et par le clic d'une notification). Clone du dépôt : `path` de la config,
+sinon cherché dans les espaces de travail de `cl` et retenu.
+
+- **herdr tourne** (`herdr status server`) : worktree de la PR sous
+  `~/.herdr/worktrees/<dépôt>/`. Pour une revue, branche `agent/review-<n>-<titre>` sur la
+  tête de la PR (`pull/<n>/head`), le même nom que Herdr UI, ce qui permet à l'étape de
+  ménage de `/review:pr` de la retrouver. Pour un feedback, la branche de la PR (son
+  dossier si elle est déjà extraite quelque part, sinon un worktree qui suit `origin`).
+  Ouvert dans un workspace herdr (ou un nouvel onglet de celui qui l'a déjà) ; le pane lance
+  `claude '/review:pr <n>'` (ou `/review:feedback`) en interactif. Une notification
+  l'annonce (clic : `herdr agent focus`), puis le plugin [`notify`](#notify) signale la
+  question de validation.
+- **Sinon, analyse en fond** : `claude -p '/review:… <n> --prepare' --session-id <uuid>`,
+  détaché. Une revue tourne dans le clone (`/review:pr` ne s'y place pas) ; un feedback
+  tourne là où la branche est extraite, sinon dans un worktree sous
+  `~/.cache/claude-tools/review-worktrees/`. Outils limités à la lecture (`--allowedTools` :
+  `git`/`gh` en lecture, `gh api graphql` compris, Agent, Read/Grep/Glob, outils de lecture
+  IntelliJ et JIRA). Une fois l'analyse finie, la notification « prête à valider » (critique)
+  lance au clic `review-watch resume`, qui ouvre `gnome-terminal` (réglage `terminal`
+  sinon) sur `claude --resume <uuid> "Reprends à la validation…"`. `review-watch resume`
+  sans argument liste les sessions prêtes ; dans un terminal, il reprend sur place.
+  Journal : `~/.local/state/claude-tools/review-watch/logs/`.
+- `--prepare` (argument de `/review:pr` et `/review:feedback`, pour cette analyse en fond) :
+  aucune question, rien de posté ni corrigé ; le tableau de validation est préparé et la
+  session s'arrête sur « Prêt pour la validation ». À la reprise, elle continue à la
+  validation.
+- Une session herdr encore ouverte (Claude présent dans le pane) ou une analyse en cours
+  pour la même PR n'est pas doublée : nouvelle activité notifiée seulement.
+- `claude` (réglage `claude` de la config, ex. `"claude-profile switch vidal"`) : le profil
+  utilisé doit activer le plugin `review` (profil de référence, `vidal` ; pas `lean`).
+
+Config `~/.config/claude-tools/review-watch.json` :
+`{"repos": {"owner/repo": {"review": "auto", "feedback": "notify", "path": "…"}},
+"default": {"review": "notify", "feedback": "notify"}, "interval": 5, "feedback_delay": 300,
+"claude": "claude", "terminal": null}`. Les noms de dépôt ne tiennent pas compte de la casse.
+
+Installation : `./install.sh plugin review` relie `review-watch` dans `~/.local/bin`
+(chemin fixe pour systemd et les clics) et les unités dans `~/.config/systemd/user/`. Le
+timer n'est activé que par `review-watch enable`. `--remove` l'arrête et retire le drop-in d'intervalle (`on_remove`), et
+`status` signale une config présente avec un timer arrêté. Le service tourne avec
+`KillMode=process`, pour que les analyses en fond et les notifications en attente de clic
+lui survivent. Il lui faut l'environnement de la session graphique (D-Bus), que GNOME donne
+au gestionnaire systemd utilisateur.
 
 #### Profil Herdr UI
 

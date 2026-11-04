@@ -1,0 +1,828 @@
+#!/usr/bin/env python3
+"""review-watch — lance /review:pr ou /review:feedback quand GitHub le demande.
+
+Deux événements, interrogés par `poll` (timer systemd utilisateur, toutes les 5 min par
+défaut : `interval` de la config) :
+  review    une revue m'est demandée sur la PR d'un autre (notification `review_requested`,
+            date de la demande lue dans la timeline de la PR) → /review:pr <n>
+  feedback  quelqu'un d'autre a fait une review sur une de mes PR ouvertes (avec des
+            commentaires, ou des changements demandés) → /review:feedback <n>
+
+Mode par dépôt et par événement (config ~/.config/claude-tools/review-watch.json) :
+  auto     la session est lancée : herdr (worktree + pane) s'il tourne, sinon analyse en
+           fond (claude -p … --prepare) puis notification, dont le clic reprend la session
+           dans un terminal pour la validation
+  notify   notification seulement ; son clic lance la session comme en auto
+  off      rien
+Dans tous les cas, rien n'est posté sur GitHub sans validation dans la session.
+
+  review-watch status                          surveillance, dépôts, sessions
+  review-watch repos [--json]                  dépôts configurés et clones GitHub trouvés
+  review-watch auto <owner/repo|.> on|off [review|feedback]
+                                               (off : retour au mode des dépôts non listés)
+  review-watch add <owner/repo|.> [--review M] [--feedback M] [--path <clone>]
+                                               (sans --review/--feedback : auto pour les deux)
+  review-watch remove <owner/repo|.>
+  review-watch default [--review M] [--feedback M]   mode des dépôts non listés (notify)
+  review-watch enable | disable                timer systemd (enable : état initial d'abord)
+  review-watch interval [<minutes>]            fréquence du scan (5 par défaut), appliquée au timer
+                                               (sans argument : affiche et applique la config)
+  review-watch poll [--dry-run]                un passage
+  review-watch launch <owner/repo#n | n> [review|feedback]
+  review-watch resume [<owner/repo#n> [review|feedback]]   session préparée en fond
+"""
+import argparse, datetime as dt, fcntl, json, os, re, shlex, shutil, subprocess, sys, uuid
+
+HOME = os.path.expanduser("~")
+CONFIG = os.environ.get("REVIEW_WATCH_CONFIG") or os.path.join(
+    os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config"), "claude-tools", "review-watch.json")
+STATE_DIR = os.environ.get("REVIEW_WATCH_STATE") or os.path.join(
+    os.environ.get("XDG_STATE_HOME", f"{HOME}/.local/state"), "claude-tools", "review-watch")
+STATE = os.path.join(STATE_DIR, "state.json")
+WORKTREES = os.path.join(os.environ.get("XDG_CACHE_HOME", f"{HOME}/.cache"), "claude-tools", "review-worktrees")
+SELF = os.path.realpath(__file__)
+KINDS = ("review", "feedback")
+SKILL = {"review": "pr", "feedback": "feedback"}
+LABEL = {"review": "revue", "feedback": "retours"}
+MODES = ("auto", "notify", "off")
+DEFAULTS = {"review": "notify", "feedback": "notify"}
+FEEDBACK_DELAY = 300  # s sans nouvelle review avant de lancer : une revue en plusieurs envois
+TIMER = "review-watch.timer"
+INTERVAL = 5  # min entre deux passages ; surchargé par `interval` (drop-in du timer)
+DROPIN = os.path.join(os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config"), "systemd", "user",
+                      f"{TIMER}.d", "interval.conf")
+# Analyse en fond (claude -p, personne pour accepter) : lecture seule
+BACKGROUND_TOOLS = [
+    "Read", "Grep", "Glob", "Agent",
+    "Bash(git log:*)", "Bash(git show:*)", "Bash(git diff:*)", "Bash(git blame:*)",
+    "Bash(git rev-parse:*)", "Bash(git branch:*)", "Bash(git status:*)", "Bash(git fetch:*)",
+    "Bash(git worktree list:*)", "Bash(git merge-base:*)", "Bash(git cat-file:*)",
+    "Bash(gh pr view:*)", "Bash(gh pr diff:*)", "Bash(gh pr list:*)", "Bash(gh issue view:*)",
+    "Bash(gh repo view:*)", "Bash(gh api user:*)", "Bash(gh api graphql:*)",
+    "Bash(gh api repos:*)", "Bash(gpr list:*)", "Bash(gpr view:*)",
+    "mcp__claude_ai_Atlassian_Rovo__getJiraIssue",
+    "mcp__plugin_intellij_intellij__search_symbol", "mcp__plugin_intellij_intellij__search_text",
+    "mcp__plugin_intellij_intellij__search_regex", "mcp__plugin_intellij_intellij__search_structural",
+    "mcp__plugin_intellij_intellij__get_symbol_info", "mcp__plugin_intellij_intellij__analyze_calls",
+    "mcp__plugin_intellij_intellij__search_file", "mcp__plugin_intellij_intellij__read_file",
+]
+
+
+def die(msg, code=1):
+    print(f"review-watch: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def now():
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def iso(t):
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse(s):
+    return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def run(cmd, cwd=None, check=True):
+    r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if check and r.returncode:
+        raise RuntimeError(f"{' '.join(cmd[:4])}… : {(r.stderr or r.stdout).strip()}")
+    return r.stdout
+
+
+# --- config et état -----------------------------------------------------------------------
+
+def load_json(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+
+def save_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+class State:
+    """state.json sous verrou : un seul poll/launch à la fois."""
+
+    def __enter__(self):
+        os.makedirs(STATE_DIR, exist_ok=True)
+        self.lock = open(f"{STATE}.lock", "w")
+        fcntl.flock(self.lock, fcntl.LOCK_EX)
+        self.data = load_json(STATE)
+        for k in ("review", "feedback", "sessions", "clones"):
+            self.data.setdefault(k, {})
+        return self.data
+
+    def __exit__(self, *exc):
+        save_json(STATE, self.data)
+        self.lock.close()
+
+
+def repo_cfg(cfg, repo):
+    """Réglages du dépôt (noms GitHub insensibles à la casse)."""
+    return next((r for k, r in cfg.get("repos", {}).items() if k.lower() == repo.lower()), {})
+
+
+def mode(cfg, repo, kind):
+    m = repo_cfg(cfg, repo).get(kind)
+    return m or cfg.get("default", {}).get(kind) or DEFAULTS[kind]
+
+
+def claude_cmd(cfg):
+    return shlex.split(cfg.get("claude") or "claude")
+
+
+# --- GitHub ---------------------------------------------------------------------------------
+
+def gh_json(*args):
+    out = run(["gh", "api", *args])
+    return json.loads(out) if out.strip() else None
+
+
+def graphql(query, **variables):
+    args = ["graphql", "-f", f"query={query}"]
+    for k, v in variables.items():
+        args += ["-F" if isinstance(v, int) else "-f", f"{k}={v}"]
+    data = gh_json(*args)
+    if data.get("errors"):
+        raise RuntimeError(data["errors"][0].get("message"))
+    return data["data"]
+
+
+def me(state):
+    if not state.get("me"):
+        state["me"] = gh_json("user")["login"]
+    return state["me"]
+
+
+PR_QUERY = """query($o: String!, $r: String!, $n: Int!, $me: String!) {
+  repository(owner: $o, name: $r) { pullRequest(number: $n) {
+    number title url state isDraft author { login } headRefName headRefOid
+    timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 20) { nodes {
+      ... on ReviewRequestedEvent { createdAt requestedReviewer {
+        __typename ... on User { login } ... on Team { slug } } } } }
+    reviews(last: 20, author: $me) { nodes { state submittedAt } } } } }"""
+
+MINE_QUERY = """query($q: String!) {
+  search(query: $q, type: ISSUE, first: 50) { nodes { ... on PullRequest {
+    number title url headRefName repository { nameWithOwner }
+    reviews(last: 30) { nodes { author { login } state submittedAt body
+      comments { totalCount } } } } } } }"""
+
+
+def pr_info(repo, n, login):
+    o, r = repo.split("/")
+    return graphql(PR_QUERY, o=o, r=r, n=int(n), me=login)["repository"]["pullRequest"]
+
+
+def review_events(state, since):
+    """PR des autres où une revue m'a été demandée (et pas encore faite) depuis le dernier
+    passage traité : [(repo, n, titre, url, date de la demande)]."""
+    login = me(state)
+    notifs = gh_json(f"notifications?all=true&participating=true&per_page=50&since={iso(since)}") or []
+    seen, events = set(), []
+    for nt in notifs:
+        if nt.get("reason") != "review_requested" or nt["subject"].get("type") != "PullRequest":
+            continue
+        repo = nt["repository"]["full_name"]
+        n = int(nt["subject"]["url"].rsplit("/", 1)[1])
+        if (repo, n) in seen:
+            continue
+        seen.add((repo, n))
+        pr = pr_info(repo, n, login)
+        if pr["state"] != "OPEN" or (pr.get("author") or {}).get("login") == login:
+            continue
+        asked = [e["createdAt"] for e in pr["timelineItems"]["nodes"]
+                 if e and ((e.get("requestedReviewer") or {}).get("login") == login
+                           or (e.get("requestedReviewer") or {}).get("__typename") == "Team")]
+        asked_at = max(asked) if asked else nt["updated_at"]
+        mine = [r["submittedAt"] for r in pr["reviews"]["nodes"] if r.get("submittedAt")]
+        if mine and max(mine) >= asked_at:
+            continue  # déjà relue depuis la demande
+        if state["review"].get(f"{repo}#{n}", "") >= asked_at:
+            continue
+        events.append((repo, n, pr["title"], pr["url"], asked_at))
+    return events
+
+
+def feedback_events(state, delay):
+    """Mes PR ouvertes avec une review d'un autre depuis la dernière traitée :
+    [(repo, n, titre, url, date de la dernière review, à traiter ?)]. Une review trop
+    récente (< delay s) attend le passage suivant : le relecteur n'a peut-être pas fini."""
+    login = me(state)
+    nodes = graphql(MINE_QUERY, q=f"is:pr is:open author:{login} archived:false")["search"]["nodes"]
+    events = []
+    for pr in nodes:
+        if not pr:
+            continue
+        repo, n = pr["repository"]["nameWithOwner"], pr["number"]
+        last = state["feedback"].get(f"{repo}#{n}", "")
+        new = [r for r in pr["reviews"]["nodes"]
+               if r.get("submittedAt") and r["state"] != "PENDING" and r.get("author")
+               and r["author"]["login"] != login and r["submittedAt"] > last]
+        if not new:
+            continue
+        latest = max(r["submittedAt"] for r in new)
+        if (now() - parse(latest)).total_seconds() < delay:
+            continue
+        actionable = any(r["comments"]["totalCount"] or (r.get("body") or "").strip()
+                         or r["state"] == "CHANGES_REQUESTED" for r in new)
+        events.append((repo, n, pr["title"], pr["url"], latest, actionable))
+    return events
+
+
+# --- clone local et worktree ----------------------------------------------------------------
+
+def remote_repo(path):
+    try:
+        url = run(["git", "-C", path, "remote", "get-url", "origin"]).strip()
+    except RuntimeError:
+        return None
+    m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
+    return m.group(1).lower() if m else None
+
+
+def workspaces():
+    f = os.path.join(os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config"), "cl", "workspaces")
+    dirs = []
+    try:
+        with open(f, encoding="utf-8") as fh:
+            dirs = [os.path.expanduser(l.strip()) for l in fh if l.strip() and not l.startswith("#")]
+    except FileNotFoundError:
+        pass
+    return dirs or [os.path.join(HOME, d) for d in sorted(os.listdir(HOME)) if d.startswith("workspace")]
+
+
+def clone_path(cfg, state, repo):
+    """Clone du dépôt : `path` de la config, sinon cherché (et retenu) dans les espaces de
+    travail de `cl` (~/workspace* à défaut)."""
+    p = repo_cfg(cfg, repo).get("path") or state["clones"].get(repo.lower())
+    if p and os.path.isdir(os.path.expanduser(p)):
+        return os.path.expanduser(p)
+    for ws in workspaces():
+        if not os.path.isdir(ws):
+            continue
+        for d in sorted(os.listdir(ws)):
+            p = os.path.join(ws, d)
+            if os.path.exists(os.path.join(p, ".git")) and remote_repo(p) == repo.lower():
+                state["clones"][repo.lower()] = p
+                return p
+    return None
+
+
+def worktree_for(clone, branch):
+    cur = None
+    for line in run(["git", "-C", clone, "worktree", "list", "--porcelain"]).splitlines():
+        if line.startswith("worktree "):
+            cur = line[9:]
+        elif line == f"branch refs/heads/{branch}":
+            return cur
+    return None
+
+
+def ensure_worktree(clone, branch, base, root):
+    """Dossier où `branch` est extraite : celui qui l'a déjà, sinon un worktree créé sous
+    `root` (branche créée depuis `base` si elle n'existe pas en local)."""
+    p = worktree_for(clone, branch)
+    if p:
+        return p
+    p = os.path.join(root, os.path.basename(clone), branch.replace("/", "-"))
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    exists = subprocess.run(["git", "-C", clone, "show-ref", "--verify", "--quiet",
+                             f"refs/heads/{branch}"]).returncode == 0
+    if exists:
+        run(["git", "-C", clone, "worktree", "add", p, branch])
+    else:
+        run(["git", "-C", clone, "worktree", "add", "--track", "-b", branch, p, base]
+            if base.startswith("origin/") else
+            ["git", "-C", clone, "worktree", "add", "-b", branch, p, base])
+    return p
+
+
+def slug(title):
+    s = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    return s[:40].rstrip("-") or "pr"
+
+
+# --- herdr ------------------------------------------------------------------------------------
+
+def herdr_running():
+    if not shutil.which("herdr"):
+        return False
+    r = subprocess.run(["herdr", "status", "server"], capture_output=True, text=True, timeout=5)
+    return r.returncode == 0 and "status: running" in r.stdout
+
+
+def herdr(*args):
+    return json.loads(run(["herdr", *args]))["result"]
+
+
+def herdr_alive(session):
+    if session.get("mode") != "herdr":
+        return False
+    try:
+        herdr("agent", "get", session["pane"])  # échoue si Claude est sorti du pane
+        return True
+    except Exception:
+        return False
+
+
+def herdr_open(clone, path, label):
+    """Pane dans un workspace herdr sur `path` : nouvel onglet si un workspace l'a déjà
+    ouvert, sinon workspace de worktree (herdr worktree open)."""
+    try:
+        listing = herdr("worktree", "list", "--cwd", clone)
+        ws = next((w.get("open_workspace_id") for w in listing.get("worktrees", [])
+                   if os.path.realpath(w["path"]) == os.path.realpath(path)), None)
+    except Exception:
+        ws = None
+    if ws:
+        res = herdr("tab", "create", "--workspace", ws, "--cwd", path, "--label", label, "--no-focus")
+    else:
+        res = herdr("worktree", "open", "--cwd", clone, "--path", path, "--label", label, "--no-focus")
+    pane = res["root_pane"]
+    return pane["workspace_id"], pane["pane_id"]
+
+
+# --- notifications --------------------------------------------------------------------------
+
+def notify(title, body, action=None, urgency="normal"):
+    """Notification desktop ; `action` (argv) est lancé au clic. Rend la main tout de suite."""
+    payload = {"title": title, "body": body, "action": action, "urgency": urgency}
+    log = os.environ.get("REVIEW_WATCH_NOTIFY_LOG")  # tests
+    if log:
+        with open(log, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        return
+    print(f"notification : {title} — {body}")
+    detach([sys.executable, SELF, "_notify", json.dumps(payload)])
+
+
+def detach(cmd, cwd=None, log=None):
+    out = open(log, "a") if log else subprocess.DEVNULL
+    subprocess.Popen(cmd, cwd=cwd, stdin=subprocess.DEVNULL, stdout=out, stderr=out,
+                     start_new_session=True)
+
+
+def notify_wait(payload):
+    try:
+        import gi
+        gi.require_version("Notify", "0.7")
+        from gi.repository import GLib, Notify
+    except (ImportError, ValueError):
+        if shutil.which("notify-send"):
+            body = payload["body"]
+            if payload.get("action"):
+                body += "\n" + shlex.join(payload["action"])
+            subprocess.run(["notify-send", "-a", "Claude Code", payload["title"], body])
+        return
+    Notify.init("Claude Code")
+    n = Notify.Notification.new(payload["title"], payload["body"])
+    n.set_urgency(Notify.Urgency.CRITICAL if payload.get("urgency") == "critical" else Notify.Urgency.NORMAL)
+    loop, clicked = GLib.MainLoop(), []
+    if payload.get("action"):
+        n.add_action("default", "Ouvrir", lambda *_: (clicked.append(1), loop.quit()), None)
+    n.connect("closed", lambda *_: loop.quit())
+    n.show()
+    GLib.timeout_add_seconds(12 * 3600, loop.quit)  # la notification reste, le clic ne fait plus rien
+    loop.run()
+    if clicked:
+        subprocess.run(payload["action"])
+
+
+# --- lancement --------------------------------------------------------------------------------
+
+def key_of(repo, n, kind):
+    return f"{repo}#{n}:{kind}"
+
+
+def launch(cfg, state, repo, n, kind):
+    """Lance la session de `kind` sur la PR. Retourne une ligne de compte rendu."""
+    key = key_of(repo, n, kind)
+    prev = state["sessions"].get(key)
+    if prev and herdr_alive(prev):
+        notify(f"Nouvelle activité sur {repo}#{n}",
+               f"Session de {LABEL[kind]} déjà ouverte dans herdr",
+               ["herdr", "agent", "focus", prev["pane"]])
+        return f"{key} : session herdr déjà ouverte"
+    if prev and prev.get("status") == "running" and pid_alive(prev.get("pid")):
+        return f"{key} : analyse déjà en cours"
+    clone = clone_path(cfg, state, repo)
+    if not clone:
+        notify(f"Clone introuvable : {repo}", f"review-watch add {repo} --path <clone>")
+        return f"{key} : clone introuvable"
+    pr = json.loads(run(["gh", "pr", "view", str(n), "--repo", repo, "--json",
+                         "title,url,state,headRefName,headRefOid"]))
+    if pr["state"] != "OPEN":
+        return f"{key} : PR {pr['state'].lower()}"
+    prompt = f"/review:{SKILL[kind]} {n}"
+    if herdr_running():
+        if kind == "review":
+            run(["git", "-C", clone, "fetch", "-q", "origin", f"pull/{n}/head"], check=False)
+            branch, base = f"agent/review-{n}-{slug(pr['title'])}", pr["headRefOid"]
+        else:
+            run(["git", "-C", clone, "fetch", "-q", "origin", pr["headRefName"]], check=False)
+            branch, base = pr["headRefName"], f"origin/{pr['headRefName']}"
+        path = ensure_worktree(clone, branch, base, os.path.join(HOME, ".herdr", "worktrees"))
+        ws, pane = herdr_open(clone, path, f"{LABEL[kind]} #{n}")
+        run(["herdr", "pane", "run", pane, shlex.join([*claude_cmd(cfg), prompt])])  # pas de JSON en retour
+        state["sessions"][key] = {"mode": "herdr", "workspace": ws, "pane": pane, "dir": path,
+                                  "url": pr["url"], "launched": iso(now())}
+        notify(f"{LABEL[kind].capitalize()} lancée : {repo}#{n}", f"{pr['title']}\nherdr : {LABEL[kind]} #{n}",
+               ["herdr", "agent", "focus", pane])
+        return f"{key} : lancée dans herdr ({path})"
+    # Sans herdr : analyse en fond, reprise au clic
+    if kind == "review":
+        path = clone  # /review:pr lit le diff et le code à la tête de la PR, sans s'y placer
+    else:
+        run(["git", "-C", clone, "fetch", "-q", "origin", pr["headRefName"]], check=False)
+        path = ensure_worktree(clone, pr["headRefName"], f"origin/{pr['headRefName']}", WORKTREES)
+    sid = str(uuid.uuid4())
+    log = os.path.join(STATE_DIR, "logs", f"{key.replace('/', '_').replace(':', '-')}.log")
+    os.makedirs(os.path.dirname(log), exist_ok=True)
+    state["sessions"][key] = {"mode": "background", "session_id": sid, "dir": path, "url": pr["url"],
+                              "title": pr["title"], "status": "running", "log": log, "launched": iso(now())}
+    detach([sys.executable, SELF, "_run", key], cwd=path)
+    return f"{key} : analyse lancée en fond (session {sid})"
+
+
+def pid_alive(pid):
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def background_run(key):
+    """Analyse en fond (lancé détaché par launch) : claude -p … --prepare, puis notification."""
+    cfg = load_json(CONFIG)
+    with State() as state:
+        s = state["sessions"][key]
+        s["pid"] = os.getpid()
+    repo_n, kind = key.rsplit(":", 1)
+    n = repo_n.rsplit("#", 1)[1]
+    cmd = [*claude_cmd(cfg), "-p", f"/review:{SKILL[kind]} {n} --prepare", "--session-id",
+           s["session_id"], "--allowedTools", *BACKGROUND_TOOLS]
+    with open(s["log"], "a", encoding="utf-8") as out:
+        out.write(f"[{iso(now())}] {shlex.join(cmd)}\n")
+        out.flush()
+        code = subprocess.run(cmd, cwd=s["dir"], stdin=subprocess.DEVNULL, stdout=out, stderr=out).returncode
+    with State() as state:
+        s = state["sessions"][key]
+        s["status"] = "ready" if code == 0 else "failed"
+        s["finished"] = iso(now())
+    resume = [sys.executable, SELF, "resume", repo_n, kind]
+    if code == 0:
+        notify(f"{LABEL[kind].capitalize()} prête à valider : {repo_n}", s.get("title", ""), resume, "critical")
+    else:
+        notify(f"Échec de l'analyse : {repo_n}", f"journal : {s['log']}", resume, "critical")
+
+
+def terminal_cmd(cfg, cwd, argv):
+    if cfg.get("terminal"):
+        return [*shlex.split(cfg["terminal"]), *argv]
+    if shutil.which("gnome-terminal"):
+        return ["gnome-terminal", f"--working-directory={cwd}", "--", *argv]
+    if shutil.which("x-terminal-emulator"):
+        return ["x-terminal-emulator", "-e", shlex.join(argv)]
+    return None
+
+
+def resume(cfg, state, target, kind):
+    ready = {k: s for k, s in state["sessions"].items() if s.get("mode") == "background"
+             and s.get("status") in ("ready", "failed")}
+    if not target:
+        if not ready:
+            print("aucune session préparée en fond")
+        for k, s in ready.items():
+            print(f"{k}  {s['status']}  {s.get('title', '')}\n  review-watch resume {k.replace(':', ' ')}")
+        return
+    repo, n = split_target(target, state)
+    key = key_of(repo, n, kind or "review")
+    if key not in state["sessions"] and not kind:
+        key = key_of(repo, n, "feedback")
+    s = state["sessions"].get(key)
+    if not s or s.get("mode") != "background":
+        die(f"pas de session préparée pour {key}")
+    argv = [*claude_cmd(cfg), "--resume", s["session_id"],
+            "Reprends à la validation (l'analyse en fond est faite)."]
+    term = terminal_cmd(cfg, s["dir"], argv)
+    s["status"] = "resumed"
+    if term and (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+                 or os.environ.get("DBUS_SESSION_BUS_ADDRESS")) and not sys.stdout.isatty():
+        detach(term, cwd=s["dir"])
+        return
+    # dans un terminal : reprendre ici
+    os.chdir(s["dir"])
+    save_json(STATE, state)
+    os.execvp(argv[0], argv)
+
+
+# --- poll -------------------------------------------------------------------------------------
+
+def poll(cfg, state, dry_run=False, seed=False):
+    start = now()
+    since = parse(state["since"]) if state.get("since") else start - dt.timedelta(days=1)
+    delay = int(cfg.get("feedback_delay", FEEDBACK_DELAY))
+    out = []
+    events = [("review", repo, n, title, url, at, True)
+              for repo, n, title, url, at in review_events(state, since - dt.timedelta(minutes=2))]
+    events += [("feedback", repo, n, title, url, at, ok)
+               for repo, n, title, url, at, ok in feedback_events(state, delay)]
+    for kind, repo, n, title, url, at, actionable in events:
+        m = mode(cfg, repo, kind)
+        tag = f"{repo}#{n} ({kind}, {m})"
+        if seed:
+            out.append(f"{tag} : déjà là, ignoré — review-watch launch {repo}#{n} {kind}")
+        elif m == "off":
+            out.append(f"{tag} : ignoré")
+        elif not actionable:
+            out.append(f"{tag} : approuvée sans commentaire")
+            if not dry_run:
+                notify(f"PR approuvée : {repo}#{n}", title, ["xdg-open", url])
+        elif dry_run:
+            out.append(f"{tag} : {'lancerait' if m == 'auto' else 'notifierait'}")
+        elif m == "auto":
+            try:
+                out.append(launch(cfg, state, repo, n, kind))
+            except Exception as e:  # un échec ne doit pas bloquer les autres PR
+                out.append(f"{tag} : échec — {e}")
+                notify(f"review-watch : échec sur {repo}#{n}", str(e)[:200],
+                       [sys.executable, SELF, "launch", f"{repo}#{n}", kind])
+        else:
+            what = "Revue demandée" if kind == "review" else "Nouveaux retours"
+            notify(f"{what} : {repo}#{n}", f"{title}\nclic : lancer /review:{SKILL[kind]}",
+                   [sys.executable, SELF, "launch", f"{repo}#{n}", kind])
+            out.append(f"{tag} : notifié")
+        if not dry_run:
+            state[kind][f"{repo}#{n}"] = at
+    if not dry_run:
+        state["since"] = iso(start)
+        state["initialized"] = True
+    return out
+
+
+# --- commandes --------------------------------------------------------------------------------
+
+def current_repo():
+    repo = remote_repo(".")
+    if not repo:
+        die("dossier courant : pas de remote origin GitHub")
+    out = run(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"], check=False).strip()
+    return out or repo
+
+
+def split_target(target, state):
+    m = re.fullmatch(r"(?:([\w.-]+/[\w.-]+))?#?(\d+)", target)
+    if not m:
+        die(f"cible attendue : owner/repo#n ou n (dépôt courant), pas « {target} »")
+    return (m.group(1) or current_repo()), int(m.group(2))
+
+
+def timer_state():
+    if not shutil.which("systemctl"):
+        return "systemd absent"
+    r = subprocess.run(["systemctl", "--user", "is-active", TIMER], capture_output=True, text=True)
+    return r.stdout.strip() or "inconnu"
+
+
+def interval(cfg):
+    return int(cfg.get("interval") or INTERVAL)
+
+
+def apply_interval(cfg):
+    """Drop-in du timer pour un intervalle autre que celui de l'unité (5 min) ; timer
+    relancé s'il tourne."""
+    n = interval(cfg)
+    if n == INTERVAL:
+        if os.path.exists(DROPIN):
+            os.remove(DROPIN)
+            try:
+                os.rmdir(os.path.dirname(DROPIN))
+            except OSError:
+                pass
+    else:
+        os.makedirs(os.path.dirname(DROPIN), exist_ok=True)
+        with open(DROPIN, "w", encoding="utf-8") as f:
+            f.write(f"# Écrit par review-watch interval (config : interval = {n})\n"
+                    f"[Timer]\nOnUnitActiveSec=\nOnUnitActiveSec={n}min\n")
+    if shutil.which("systemctl"):
+        run(["systemctl", "--user", "daemon-reload"], check=False)
+        if timer_state() == "active":
+            run(["systemctl", "--user", "restart", TIMER], check=False)
+
+
+def cmd_status(cfg, state):
+    print(f"surveillance : {timer_state()} ({TIMER}, toutes les {interval(cfg)} min) ;"
+          f" dernier passage : {state.get('since', 'jamais')}")
+    d = {**DEFAULTS, **cfg.get("default", {})}
+    print(f"dépôts non listés : review={d['review']} feedback={d['feedback']}")
+    for repo, r in sorted(cfg.get("repos", {}).items()):
+        print(f"  {repo}  review={mode(cfg, repo, 'review')} feedback={mode(cfg, repo, 'feedback')}"
+              f"  {r.get('path') or state['clones'].get(repo.lower()) or '(clone cherché au besoin)'}")
+    sessions = state["sessions"]
+    if sessions:
+        print("sessions :")
+    for k, s in sorted(sessions.items(), key=lambda kv: kv[1].get("launched", "")):
+        if s["mode"] == "herdr":
+            st = "ouverte" if herdr_alive(s) else "fermée"
+            print(f"  {k}  herdr {st}  {s['dir']}")
+        else:
+            print(f"  {k}  fond {s.get('status')}  {s['dir']}  (log : {s.get('log')})")
+
+
+def cmd_add(cfg, state, args):
+    repo = (current_repo() if args.repo == "." else args.repo).lower()
+    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo):
+        die(f"dépôt attendu : owner/repo, pas « {repo} »")
+    r = cfg.setdefault("repos", {}).setdefault(repo, {})
+    if not args.review and not args.feedback:
+        args.review = args.feedback = "auto"
+    for kind in KINDS:
+        if getattr(args, kind):
+            r[kind] = getattr(args, kind)
+    if args.path:
+        p = os.path.abspath(os.path.expanduser(args.path))
+        if remote_repo(p) != repo.lower():
+            die(f"{p} : pas un clone de {repo}")
+        r["path"] = p
+    elif args.repo == ".":
+        r.setdefault("path", run(["git", "rev-parse", "--show-toplevel"]).strip())
+    save_json(CONFIG, cfg)
+    print(f"{repo} : review={mode(cfg, repo, 'review')} feedback={mode(cfg, repo, 'feedback')}")
+    if timer_state() != "active":
+        print("surveillance arrêtée : review-watch enable")
+
+
+def local_repos(cfg, state):
+    """Dépôts GitHub connus : ceux de la config, plus les clones des espaces de travail."""
+    found = {}
+    for ws in workspaces():
+        if not os.path.isdir(ws):
+            continue
+        for d in sorted(os.listdir(ws)):
+            p = os.path.join(ws, d)
+            if os.path.exists(os.path.join(p, ".git")):
+                r = remote_repo(p)
+                if r:
+                    found.setdefault(r, p)
+    out = []
+    for repo, r in cfg.get("repos", {}).items():
+        out.append((repo, r.get("path") or found.pop(repo.lower(), None) or state["clones"].get(repo.lower())))
+    out += sorted(found.items())
+    return [{"repo": repo, "path": path, "review": mode(cfg, repo, "review"),
+             "feedback": mode(cfg, repo, "feedback")} for repo, path in out]
+
+
+def cmd_auto(cfg, args):
+    """auto <repo|.> on|off [review|feedback] : off remet le mode des dépôts non listés
+    (notify par défaut), jamais « off »."""
+    repo = (current_repo() if args.repo == "." else args.repo).lower()
+    kinds = [args.kind] if args.kind else list(KINDS)
+    r = cfg.setdefault("repos", {}).setdefault(repo, {})
+    for kind in kinds:
+        if args.state == "on":
+            r[kind] = "auto"
+        else:
+            r.pop(kind, None)
+    if args.state == "on" and args.repo == "." and "path" not in r:
+        r["path"] = run(["git", "rev-parse", "--show-toplevel"]).strip()
+    if not any(k in r for k in KINDS):
+        cfg["repos"].pop(repo)
+    save_json(CONFIG, cfg)
+    print(f"{repo} : review={mode(cfg, repo, 'review')} feedback={mode(cfg, repo, 'feedback')}")
+    if args.state == "on" and timer_state() != "active":
+        print("surveillance arrêtée : review-watch enable")
+
+
+def main():
+    p = argparse.ArgumentParser(prog="review-watch", description=__doc__.split("\n")[0])
+    sub = p.add_subparsers(dest="cmd")
+    sub.add_parser("status")
+    sub.add_parser("repos").add_argument("--json", action="store_true")
+    au = sub.add_parser("auto")
+    au.add_argument("repo")
+    au.add_argument("state", choices=("on", "off"))
+    au.add_argument("kind", nargs="?", choices=KINDS)
+    a = sub.add_parser("add")
+    a.add_argument("repo")
+    a.add_argument("--review", choices=MODES)
+    a.add_argument("--feedback", choices=MODES)
+    a.add_argument("--path")
+    sub.add_parser("remove").add_argument("repo")
+    d = sub.add_parser("default")
+    d.add_argument("--review", choices=MODES)
+    d.add_argument("--feedback", choices=MODES)
+    sub.add_parser("interval").add_argument("minutes", nargs="?", type=int)
+    sub.add_parser("enable")
+    sub.add_parser("disable")
+    sub.add_parser("poll").add_argument("--dry-run", action="store_true")
+    for name in ("launch", "resume"):
+        c = sub.add_parser(name)
+        c.add_argument("target", nargs="?" if name == "resume" else None)
+        c.add_argument("kind", nargs="?", choices=KINDS)
+    sub.add_parser("_run").add_argument("key")
+    sub.add_parser("_notify").add_argument("payload")
+    args = p.parse_args()
+    cfg = load_json(CONFIG)
+
+    if args.cmd == "_notify":
+        return notify_wait(json.loads(args.payload))
+    if args.cmd == "_run":
+        return background_run(args.key)
+    if args.cmd in (None, "status"):
+        with State() as state:
+            return cmd_status(cfg, state)
+    if args.cmd == "repos":
+        with State() as state:
+            repos = local_repos(cfg, state)
+        if args.json:
+            return print(json.dumps(repos, ensure_ascii=False))
+        for r in repos:
+            print(f"{r['repo']}  review={r['review']} feedback={r['feedback']}  {r['path'] or '(pas de clone)'}")
+        return
+    if args.cmd == "auto":
+        return cmd_auto(cfg, args)
+    if args.cmd == "add":
+        with State() as state:
+            return cmd_add(cfg, state, args)
+    if args.cmd == "remove":
+        repo = (current_repo() if args.repo == "." else args.repo).lower()
+        if cfg.get("repos", {}).pop(repo, None) is None:
+            die(f"{repo} n'est pas listé")
+        save_json(CONFIG, cfg)
+        print(f"{repo} retiré (mode des dépôts non listés désormais)")
+        return
+    if args.cmd == "default":
+        dflt = cfg.setdefault("default", {})
+        for kind in KINDS:
+            if getattr(args, kind):
+                dflt[kind] = getattr(args, kind)
+        if args.review or args.feedback:
+            save_json(CONFIG, cfg)
+        print(" ".join(f"{k}={({**DEFAULTS, **dflt})[k]}" for k in KINDS))
+        return
+    if args.cmd == "enable":
+        with State() as state:
+            if not state.get("initialized"):
+                print("état initial (rien n'est lancé pour ce qui est déjà là) :")
+                for line in poll(cfg, state, seed=True) or ["  rien en attente"]:
+                    print(f"  {line}")
+        apply_interval(cfg)
+        run(["systemctl", "--user", "enable", "--now", TIMER])
+        print(f"surveillance active ({TIMER}, toutes les {interval(cfg)} min)")
+        return
+    if args.cmd == "interval":
+        if args.minutes is not None:
+            if args.minutes < 1:
+                die("intervalle en minutes, 1 au moins")
+            if args.minutes == INTERVAL:
+                cfg.pop("interval", None)
+            else:
+                cfg["interval"] = args.minutes
+            save_json(CONFIG, cfg)
+        apply_interval(cfg)  # sans argument : applique aussi une valeur éditée à la main
+        print(f"scan toutes les {interval(cfg)} min ({timer_state()})")
+        return
+    if args.cmd == "disable":
+        run(["systemctl", "--user", "disable", "--now", TIMER], check=False)
+        print("surveillance arrêtée")
+        return
+    if args.cmd == "poll":
+        with State() as state:
+            seed = not state.get("initialized") and not args.dry_run
+            for line in poll(cfg, state, dry_run=args.dry_run, seed=seed):
+                print(line)
+        return
+    if args.cmd == "launch":
+        with State() as state:
+            repo, n = split_target(args.target, state)
+            kind = args.kind
+            if not kind:
+                author = json.loads(run(["gh", "pr", "view", str(n), "--repo", repo, "--json", "author"]))
+                kind = "feedback" if author["author"]["login"] == me(state) else "review"
+            print(launch(cfg, state, repo, n, kind))
+        return
+    if args.cmd == "resume":
+        with State() as state:
+            return resume(cfg, state, args.target, args.kind)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except RuntimeError as e:
+        die(str(e))
