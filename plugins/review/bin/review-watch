@@ -17,7 +17,7 @@ Mode par dépôt et par événement (config ~/.config/claude-tools/review-watch.
 Session herdr déjà ouverte sur la PR : message dans son pane (herdr agent prompt), sauf si
 Claude y attend une réponse (notification critique à la place).
 Dans tous les cas, rien n'est posté sur GitHub sans validation dans la session.
-Mécanique commune (lancement, notifications, timer) : lib/watchlib.py.
+Mécanique commune (lancement, notifications, timer) : lib/watchlib.py du plugin gh-watch.
 
   review-watch status                          surveillance, dépôts, sessions
   review-watch repos [--json]                  dépôts configurés et clones GitHub trouvés
@@ -36,7 +36,9 @@ Mécanique commune (lancement, notifications, timer) : lib/watchlib.py.
 """
 import json, os, sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+# watchlib : plugin gh-watch (dépendance), à côté dans le même clone
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
+                                "gh-watch", "lib"))
 import watchlib as w  # noqa: E402
 
 PR_QUERY = """query($o: String!, $r: String!, $n: Int!, $me: String!) {
@@ -126,6 +128,7 @@ def events(cfg, state, since, delay, dry_run=False, seed=False):
         out.append(f"{repo}#{n} (feedback, {w.mode(cfg, repo, 'feedback')}) : approuvée sans commentaire")
         if not dry_run:
             w.notify(f"PR approuvée : {repo}#{n}", title, ["xdg-open", url])
+            w.record(state, "feedback", repo, n, "notifié", "PR approuvée sans commentaire", title, at)
             state["feedback"][f"{repo}#{n}"] = at
     return todo, out
 

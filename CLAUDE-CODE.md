@@ -8,7 +8,7 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 
 **Fichiers** : `home/.claude/settings.json` (le profil de référence), `profiles/*.json` (surcharges, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh` ;
 plugins : `.claude-plugin/marketplace.json`,
-`plugins/{pr-comments,intellij,profiles,git-nav,git-tidy,notify,herdr-session,build-brief,session-analysis,review}/` (avec
+`plugins/{pr-comments,intellij,profiles,git-nav,gh-watch,git-tidy,notify,herdr-session,build-brief,session-analysis,review}/` (avec
 leur `setup.sh`), `install.sh plugin` (voir [Installation des plugins](#installation-des-plugins)).
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line) ; `gh`
@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:status` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -122,12 +122,14 @@ Déroulé d'un appel :
    liens sont visés, jamais un fichier ordinaire ni un lien vers ailleurs
    (`./install.sh link` fait le même ménage).
 2. Marketplace `claude-tools` déclarée (`claude plugin marketplace add`, sinon `update`).
-3. Pour chaque plugin : `claude plugin install <p>@claude-tools`, ou `update` s'il est
-   installé ; puis les liens déclarés dans son `setup.sh` (un fichier ordinaire différent
+3. Pour chaque plugin, précédé des plugins dont il dépend (`dependencies` de son
+   `plugin.json`, une fois chacun) : `claude plugin install <p>@claude-tools`, ou `update`
+   s'il est installé ; puis les liens déclarés dans son `setup.sh` (un fichier ordinaire différent
    déjà en place est sauvegardé en `*.bak.<date>`) ; puis son `on_install`. Au retrait :
    `on_remove`, liens retirés s'ils pointent bien vers le plugin (sinon laissés et
    signalés), `claude plugin uninstall`, et la liste des profils (référence comprise) qui
-   l'activent encore, avec la commande pour l'y éteindre.
+   l'activent encore, avec la commande pour l'y éteindre. Ses dépendances restent ; une
+   dépendance dont plus aucun plugin installé n'a besoin est signalée (`note`).
 4. Profil de référence remis tel qu'il était : `claude plugin` écrit dans
    `~/.claude/settings.json`, donc dans `home/.claude/settings.json` versionné
    (`extraKnownMarketplaces`, `model`, entrée `enabledPlugins` retirée par `uninstall`).
@@ -139,7 +141,7 @@ Déroulé d'un appel :
 `./install.sh status` (et `./install.sh plugin` sans argument) donne pour chaque plugin de
 `marketplace.json` : `absent` (pas une erreur, installation à la carte), `ok` ou `UPDATE`
 (un commit a touché `plugins/<p>/` depuis la version installée, le SHA du dépôt à
-l'install/update), puis l'état de ses liens (`ok`, `MISSING`, `WRONG`, `DIFF`) et ce que
+l'install/update), une dépendance manquante (`MISSING … dépendance`), puis l'état de ses liens (`ok`, `MISSING`, `WRONG`, `DIFF`) et ce que
 signale son `on_status` (`note` : avertissement ; échec : erreur). Les liens morts vers le
 dépôt sortent en `ORPHAN`. Code retour 1 si quelque chose cloche.
 
@@ -161,6 +163,13 @@ on_status()  { …; }   # retour non nul = erreur
 Les liens suffisent au cas courant : pose, contrôle et retrait sont faits par
 `install.sh`. Les hooks ne servent qu'à ce qui ne se ramène pas à un lien (MCP à retirer,
 outil à vérifier). Pas de `setup.sh` : le plugin n'a rien hors de lui (`pr-comments`).
+
+Un plugin qui a besoin d'un autre plugin du dépôt le déclare dans son
+`.claude-plugin/plugin.json` (`"dependencies": ["gh-watch"]`) : `claude plugin install`
+l'installe et l'active avec lui, et `./install.sh plugin` l'installe d'abord, liens de son
+`setup.sh` compris. Un hook qui touche à systemd utilisateur vérifie que l'unité est celle
+de ce `HOME` (`systemctl --user show -p FragmentPath`) : sur un HOME de test, le
+gestionnaire systemd reste celui de la session.
 
 ### `pr-comments`
 
@@ -624,6 +633,65 @@ ajoute des alias.
   [ménage après un merge](#ménage-après-un-merge)).
 - Alias : `gbrs` (= `gbr list`).
 
+### `gh-watch`
+
+**Rôle** : base des watchers GitHub de claude-tools ([`review-watch`](#review) du plugin
+`review`, [`tidy-watch`](#git-tidy) du plugin `git-tidy`) — la mécanique qu'ils partagent
+(config et état, clone et worktree, lancement d'une session Claude dans herdr ou en fond
+reprise au clic, notifications, timer systemd, commandes communes) — et leur supervision :
+`gh-watch status` en terminal, `/gh-watch:status` dans Claude. Dépendance déclarée de
+`review` et `git-tidy` : installé avec eux.
+
+**Fichiers** : `plugins/gh-watch/` (`lib/watchlib.py`, `bin/gh-watch`,
+`skills/status/SKILL.md`, `tests/gh-watch.test.sh`, `setup.sh`) ; hors du plugin, le lien
+`~/.local/bin/gh-watch` posé par `setup.sh`. Les watchers se déclarent dans
+`~/.config/claude-tools/watchers.d/<nom>` (lien vers leur script, posé par le `setup.sh` de
+leur plugin). **Activé dans** : tous les profils (avec `review` ou `git-tidy`).
+
+**Prérequis** : `python3` ; systemd utilisateur (`systemctl --user list-timers -o json`,
+systemd ≥ 248) pour le prochain passage. Tests : `bash plugins/gh-watch/tests/gh-watch.test.sh`
+(faux watchers, rien n'est lancé).
+
+#### Installation hors de ce dépôt
+
+Installé d'office avec `review` ou `git-tidy` (`claude plugin install` suit les
+`dependencies` de leur `plugin.json`), ou seul :
+
+```bash
+claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
+claude plugin install gh-watch@claude-tools
+```
+
+Les watchers et la commande `gh-watch` ne tournent que depuis un clone (liens posés par
+`./install.sh plugin <plugin>` ; les watchers importent `watchlib` depuis
+`plugins/gh-watch/lib/` du même clone).
+
+#### Supervision
+
+- `gh-watch status` (défaut) : un bloc par watcher déclaré — timer actif ou non, intervalle,
+  dernier et prochain passage, « ⚠ arrêté » si un dépôt est en auto avec le timer arrêté,
+  mode des dépôts non listés, dépôts et modes (avec leurs réglages : `approvals`,
+  `validation_status`…), sessions (herdr ouverte/fermée, analyse en fond `running`, `ready`
+  ou `failed`, lancée quand, avec la commande `resume` et le journal en cas d'échec), puis
+  les 5 derniers déclenchements (`--since <D>` : tous ceux depuis `D`). Un watcher en
+  erreur ou un lien mort est signalé sans cacher les autres.
+- `gh-watch history [--since <D>] [--json]` : déclenchements de tous les watchers, du plus
+  récent au plus ancien — `lancé` (session herdr ou analyse en fond, ou message à une
+  session déjà ouverte), `notifié`, `ignoré` (mode off, ou déjà là à l'activation),
+  `en attente` (ex. `tidy-watch` : fil de review en attente de ma réponse ; noté une fois
+  tant que rien ne change), `échec`. `D` : `30m`, `24h`, `7d` ou une date ISO. Chaque
+  watcher garde ses 300 derniers déclenchements dans son état (`history`,
+  `watchlib.record`).
+- `gh-watch status --dry-run` : ajoute ce qu'un passage de chaque watcher ferait
+  maintenant (`<watcher> poll --dry-run`). `--json` : la même chose pour un programme.
+- `gh-watch list [--json]` : les watchers déclarés.
+- `/gh-watch:status [--dry-run] [--since <D>]` : la même vue dans Claude, en tableaux, avec
+  les déclenchements depuis `D` (24 h par défaut) et ce qui cloche en fin de réponse
+  (timer arrêté, analyse ou déclenchement en échec, session prête oubliée). Lecture
+  seule.
+
+Chaque watcher donne son état par `<watcher> status --json` (`watchlib.status_data`).
+
 ### `git-tidy`
 
 **Rôle** : remettre une branche au propre avant relecture ou avant merge — réécrire ses commits
@@ -634,10 +702,11 @@ lancent qu'à la demande (`disable-model-invocation`, ou par `tidy-watch` pour l
 auto) et n'écrivent rien hors du dépôt local sans accord.
 
 **Fichiers** : `plugins/git-tidy/` (`skills/{commits,pr-sync,ready,approved-auto}/SKILL.md`,
-`bin/tidy-watch`, `lib/watchlib.py` (mécanique commune des watchers, copie identique de celle
-du plugin [`review`](#review)), `systemd/tidy-watch.{service,timer}`,
-`tests/tidy-watch.test.sh`, `setup.sh`) ; hors du plugin, les liens `~/.local/bin/tidy-watch`
-et `~/.config/systemd/user/tidy-watch.{service,timer}` posés par `setup.sh`, le drop-in
+`bin/tidy-watch`, `systemd/tidy-watch.{service,timer}`, `tests/tidy-watch.test.sh`,
+`setup.sh`) ; hors du plugin, les liens `~/.local/bin/tidy-watch`,
+`~/.config/systemd/user/tidy-watch.{service,timer}` et
+`~/.config/claude-tools/watchers.d/tidy-watch` (déclaration auprès de
+[`gh-watch`](#gh-watch)) posés par `setup.sh`, le drop-in
 `tidy-watch.timer.d/interval.conf` écrit par `tidy-watch interval`, les réglages par dépôt
 `~/.config/claude-tools/git-tidy.json` (non versionnés : mode auto, approbations,
 relecteurs, statut JIRA de validation, environnement de test ; écrits par `tidy-watch`,
@@ -647,15 +716,16 @@ relecteurs, statut JIRA de validation, environnement de test ; écrits par `tidy
 **Prérequis** : `git` ; `gh` authentifié (base de la PR, `/git-tidy:pr-sync`) ; pour JIRA, un
 MCP Atlassian connecté (`claude.ai Atlassian Rovo` ou `claude.ai Atlassian MCP`) ; sans lui,
 seules la PR et les issues GitHub sont traitées (et aucun ticket n'est passé en
-validation). Mode auto (`tidy-watch`) : `python3`, systemd utilisateur ; herdr facultatif
-(sinon analyse en fond, reprise dans `gnome-terminal`) ; `python3-gi` avec `Notify 0.7`
-pour le clic des notifications (sinon `notify-send`, sans clic). Tests :
-`bash plugins/git-tidy/tests/tidy-watch.test.sh` (faux `gh`, `claude`, `herdr` ; vérifie
-aussi que `lib/watchlib.py` est identique à celui de `review` quand les deux sont là).
+validation). Plugin [`gh-watch`](#gh-watch) (dépendance déclarée, installé
+automatiquement : mécanique commune des watchers et supervision). Mode auto (`tidy-watch`) :
+`python3`, systemd utilisateur ; herdr facultatif (sinon analyse en fond, reprise dans
+`gnome-terminal`) ; `python3-gi` avec `Notify 0.7` pour le clic des notifications (sinon
+`notify-send`, sans clic). Tests : `bash plugins/git-tidy/tests/tidy-watch.test.sh` (faux
+`gh`, `claude`, `herdr`).
 
 #### Installation hors de ce dépôt
 
-Le plugin ne dépend pas du reste de la config :
+Le plugin ne dépend que de [`gh-watch`](#gh-watch), installé avec lui :
 
 ```bash
 claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
@@ -835,7 +905,8 @@ la session) ou `off` (rien ; défaut des dépôts non listés).
   déjà là, sans rien lancer) / `disable`, `poll [--dry-run]`, `interval [<minutes>]`
   (drop-in `~/.config/systemd/user/tidy-watch.timer.d/interval.conf`), `launch`, `resume`.
 
-**Lancement**, comme `review-watch` pour un feedback (même mécanique, `lib/watchlib.py`) :
+**Lancement**, comme `review-watch` pour un feedback (même mécanique, `lib/watchlib.py` du
+plugin [`gh-watch`](#gh-watch), qui supervise aussi `tidy-watch` : `gh-watch status`) :
 herdr tourne → la branche de la PR (son dossier si elle est déjà extraite, sinon un
 worktree sous `~/.herdr/worktrees/`), onglet « merge #n », `claude '/git-tidy:ready <n>'` ;
 sinon analyse en fond `claude -p '/git-tidy:ready <n> --prepare'` (outils en lecture
@@ -1150,11 +1221,12 @@ y compris par [`review-watch`](#review-watch-reviewpr-auto-reviewfeedback-auto),
 **Fichiers** : `plugins/review/` (`agents/reviewer.md`,
 `skills/{diff,pr,feedback,pr-auto,feedback-auto}/SKILL.md`, `validation.md` et `ticket.md`
 communs aux skills, `auto.md` commun à `pr-auto` et `feedback-auto`,
-`bin/{review-post,review-watch}`, `lib/watchlib.py` (mécanique commune des watchers, copie
-identique de celle du plugin [`git-tidy`](#git-tidy)), `systemd/review-watch.{service,timer}`,
+`bin/{review-post,review-watch}`, `systemd/review-watch.{service,timer}`,
 `tests/{review-post,review-watch}.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
-hors du plugin, les liens `~/.local/bin/review-watch` et
-`~/.config/systemd/user/review-watch.{service,timer}` posés par `setup.sh`, le drop-in
+hors du plugin, les liens `~/.local/bin/review-watch`,
+`~/.config/systemd/user/review-watch.{service,timer}` et
+`~/.config/claude-tools/watchers.d/review-watch` (déclaration auprès de
+[`gh-watch`](#gh-watch)) posés par `setup.sh`, le drop-in
 `review-watch.timer.d/interval.conf` écrit par `review-watch interval`, la config
 `~/.config/claude-tools/review-watch.json` et l'état `~/.local/state/claude-tools/review-watch/`
 (non versionnés), et le profil Herdr UI facultatif
@@ -1163,7 +1235,8 @@ hors du plugin, les liens `~/.local/bin/review-watch` et
 le profil de référence et `vidal` (pas `lean`).
 
 **Prérequis** : `git`, `python3` ; `gh` authentifié (`/review:pr`, `/review:feedback`) ;
-plugin [`git-nav`](#git-nav) pour chercher une PR par mots-clés dans `/review:pr` (`gpr`).
+plugin [`gh-watch`](#gh-watch) (dépendance déclarée, installé automatiquement : mécanique
+commune des watchers et supervision) ; plugin [`git-nav`](#git-nav) pour chercher une PR par mots-clés dans `/review:pr` (`gpr`).
 Lecture du ticket : MCP Atlassian (`getJiraIssue`) pour JIRA, `gh` pour une issue GitHub ;
 sans eux, la revue se fait sans le ticket. Outils IntelliJ utilisés par l'agent s'ils répondent (plugin [`intellij`](#intellij)),
 sinon recherche classique. Mode auto (`review-watch`) : systemd utilisateur ; herdr
@@ -1174,8 +1247,8 @@ facultatif (sinon analyse en fond, reprise dans `gnome-terminal`) ; `python3-gi`
 
 #### Installation hors de ce dépôt
 
-Le plugin ne dépend pas du reste de la config (`git-nav` seulement pour la recherche de
-PR par mots-clés) :
+Le plugin ne dépend que de [`gh-watch`](#gh-watch), installé avec lui (`git-nav` en plus
+seulement pour la recherche de PR par mots-clés) :
 
 ```bash
 claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
@@ -1373,7 +1446,8 @@ dont le clic lance la session ; défaut des dépôts non listés) ou `off` (rien
   Si la surveillance est arrêtée, le skill propose `review-watch enable`.
 - En terminal : `review-watch auto <owner/repo|.> on|off [review|feedback]`,
   `add <repo> [--review M] [--feedback M] [--path <clone>]`, `remove <repo>`,
-  `default [--review M] [--feedback M]`, `repos`, `status`.
+  `default [--review M] [--feedback M]`, `repos`, `status` (`--json` : pour
+  [`gh-watch`](#gh-watch), qui supervise tous les watchers : `gh-watch status`, `/gh-watch:status`).
 - `review-watch enable` : enregistre d'abord ce qui est déjà en attente, sans rien lancer
   (listé, avec la commande `launch` pour le faire), puis active le timer ; `disable`
   l'arrête. `poll --dry-run` montre ce qu'un passage ferait.

@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""gh-watch — supervise les watchers GitHub de claude-tools (review-watch, tidy-watch…).
+
+Un watcher se déclare par un lien ~/.config/claude-tools/watchers.d/<nom> vers son script,
+posé par le setup.sh de son plugin (./install.sh plugin <plugin>) : gh-watch les lit tous.
+
+  gh-watch [status] [--dry-run] [--since D] [--json]
+                                           état de chaque watcher : timer (actif ou non,
+                                           dernier et prochain passage), dépôts et modes,
+                                           sessions (lancées quand, herdr, analyses en fond
+                                           à reprendre), derniers déclenchements (5, ou ceux
+                                           depuis D) ; --dry-run : ce qu'un passage ferait
+  gh-watch history [--since D] [--json]    déclenchements de tous les watchers, du plus récent
+                                           au plus ancien : session lancée, notification,
+                                           ignoré, en attente, échec (D : 30m, 24h, 7d ou une
+                                           date ISO)
+  gh-watch list [--json]                   watchers déclarés
+"""
+import argparse, json, os, re, subprocess, sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+import watchlib as w  # noqa: E402
+
+WATCHERS = os.environ.get("GH_WATCH_DIR") or os.path.join(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "claude-tools", "watchers.d")
+
+
+def watchers():
+    """[(nom, script ou None si le lien est mort)]."""
+    try:
+        names = sorted(os.listdir(WATCHERS))
+    except FileNotFoundError:
+        return []
+    out = []
+    for n in names:
+        p = os.path.join(WATCHERS, n)
+        out.append((n, os.path.realpath(p) if os.path.exists(p) else None))
+    return out
+
+
+def call(script, *args, timeout=120):
+    r = subprocess.run([script, *args], capture_output=True, text=True, timeout=timeout)
+    if r.returncode:
+        raise RuntimeError((r.stderr or r.stdout).strip() or f"code {r.returncode}")
+    return r.stdout
+
+
+def collect(dry_run):
+    out = []
+    for name, script in watchers():
+        if not script:
+            out.append({"name": name, "error": f"script introuvable (lien mort dans {WATCHERS})"})
+            continue
+        try:
+            d = json.loads(call(script, "status", "--json"))
+        except Exception as e:  # un watcher en panne ne cache pas les autres
+            out.append({"name": name, "script": script, "error": str(e)})
+            continue
+        d["script"] = script
+        if dry_run:
+            try:
+                d["dry_run"] = [l for l in call(script, "poll", "--dry-run").splitlines() if l.strip()]
+            except Exception as e:
+                d["dry_run_error"] = str(e)
+        out.append(d)
+    return out
+
+
+def local(t):
+    return w.parse(t).astimezone().strftime("%d/%m %H:%M") if t else "—"
+
+
+def since_arg(v):
+    """« 30m », « 24h », « 7d » ou une date ISO → date UTC ISO."""
+    m = re.fullmatch(r"(\d+)\s*([mhd])", v.strip())
+    if m:
+        unit = {"m": "minutes", "h": "hours", "d": "days"}[m.group(2)]
+        return w.iso(w.now() - w.dt.timedelta(**{unit: int(m.group(1))}))
+    try:
+        t = w.dt.datetime.fromisoformat(v)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"durée (30m, 24h, 7d) ou date ISO attendue, pas « {v} »")
+    if t.tzinfo is None:
+        t = t.astimezone()
+    return w.iso(t.astimezone(w.dt.timezone.utc))
+
+
+def history(data, since=None):
+    """Déclenchements de tous les watchers, du plus récent au plus ancien."""
+    rows = [{"watcher": d["name"], **e} for d in data if not d.get("error") for e in d.get("history", [])
+            if not since or e["when"] >= since]
+    return sorted(rows, key=lambda e: e["when"], reverse=True)
+
+
+def history_line(e, watcher=True):
+    what = f"{e['action']}" + (f" — {e['detail']}" if e.get("detail") else "")
+    who = f"{e['watcher']}  " if watcher else ""
+    return f"{local(e['when'])}  {who}{e['repo']}#{e['n']} ({e['kind']})  {what}"
+
+
+def show(data, dry_run, since=None):
+    if not data:
+        print(f"aucun watcher déclaré ({WATCHERS})")
+        return
+    for d in data:
+        print(f"== {d['name']}")
+        if d.get("error"):
+            print(f"  erreur : {d['error']}")
+            continue
+        auto = [r for r in d["repos"] if any(r.get(k) == "auto" for k in d["kinds"])]
+        warn = "  ⚠ arrêté alors qu'un dépôt est en auto" if d["state"] != "active" and auto else ""
+        print(f"  timer {d['timer']} : {d['state']}, toutes les {d['interval']} min ;"
+              f" dernier passage {local(d['last'])}, prochain {local(d['next'])}{warn}")
+        print("  dépôts non listés : " + " ".join(f"{k}={d['default'].get(k)}" for k in d["kinds"]))
+        for r in d["repos"]:
+            extra = " ".join(f"{k}={v}" for k, v in r.items()
+                             if k not in ("repo", "path", *d["kinds"]) and v is not None)
+            print(f"  {r['repo']}  " + " ".join(f"{k}={r[k]}" for k in d["kinds"])
+                  + (f"  ({extra})" if extra else ""))
+        for s in d["sessions"]:
+            line = f"  session {s['key']}  {s['mode']} {s.get('status')}, lancée {local(s.get('launched'))}"
+            if s.get("resume"):
+                line += f"  → {s['resume']}"
+            if s.get("status") == "failed" and s.get("log"):
+                line += f"  (journal : {s['log']})"
+            print(line)
+        hist = history([d], since)
+        if not since:
+            hist = hist[:5]
+        if hist:
+            print("  derniers déclenchements" + (f" depuis {local(since)}" if since else "") + " :")
+            for e in hist:
+                print("    " + history_line(e, watcher=False))
+        if dry_run:
+            for l in d.get("dry_run", []) or ["  (rien à faire)"]:
+                print(f"  passage : {l.strip()}")
+            if d.get("dry_run_error"):
+                print(f"  passage : erreur — {d['dry_run_error']}")
+
+
+def main():
+    p = argparse.ArgumentParser(prog="gh-watch", description=__doc__.split("\n")[0])
+    sub = p.add_subparsers(dest="cmd")
+    st = sub.add_parser("status")
+    st.add_argument("--dry-run", action="store_true")
+    st.add_argument("--since", type=since_arg)
+    st.add_argument("--json", action="store_true")
+    hi = sub.add_parser("history")
+    hi.add_argument("--since", type=since_arg)
+    hi.add_argument("--json", action="store_true")
+    sub.add_parser("list").add_argument("--json", action="store_true")
+    args = p.parse_args()
+    if args.cmd == "list":
+        rows = [{"name": n, "script": s} for n, s in watchers()]
+        if args.json:
+            return print(json.dumps(rows, ensure_ascii=False))
+        for r in rows or [{"name": f"aucun watcher déclaré ({WATCHERS})", "script": ""}]:
+            print(f"{r['name']}  {r['script'] or '(lien mort)'}")
+        return
+    since = getattr(args, "since", None)
+    if args.cmd == "history":
+        rows = history(collect(False), since)
+        if args.json:
+            return print(json.dumps(rows, ensure_ascii=False))
+        if not rows:
+            print("aucun déclenchement" + (f" depuis {local(since)}" if since else ""))
+        for e in rows:
+            print(history_line(e))
+        return
+    dry_run = getattr(args, "dry_run", False)
+    data = collect(dry_run)
+    if getattr(args, "json", False):
+        if since:
+            for d in data:
+                d["history"] = [e for e in d.get("history", []) if e["when"] >= since]
+        return print(json.dumps(data, ensure_ascii=False))
+    show(data, dry_run, since)
+
+
+if __name__ == "__main__":
+    main()

@@ -10,7 +10,8 @@
 #   ./install.sh capture <f>… recopie un fichier de $HOME vers home/ (repli quand un lien n'est pas possible)
 # Plugins : ceux de .claude-plugin/marketplace.json (marketplace locale « claude-tools »). Leurs
 # dépendances hors du plugin sont déclarées dans plugins/<p>/setup.sh, sourcé ici : links=( "<chemin
-# dans le plugin> <destination>" … ) et, facultatifs, on_install, on_remove, on_status.
+# dans le plugin> <destination>" … ) et, facultatifs, on_install, on_remove, on_status. Les
+# plugins dont il dépend (`dependencies` de son plugin.json) sont installés avant lui.
 set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -96,6 +97,30 @@ cmd_setup() {
 ## Plugins
 
 plugin_names() { jq -r '.plugins[].name' "$repo/.claude-plugin/marketplace.json"; }
+
+# Dépendances d'un plugin (`dependencies` de son plugin.json, plugins de ce dépôt).
+plugin_deps() {
+  local f=$plugins_root/$1/.claude-plugin/plugin.json
+  [ -f "$f" ] || return 0
+  jq -r '.dependencies // [] | .[] | if type == "string" then . else .name end | sub("@.*"; "")' "$f"
+}
+
+# with_deps <p>… : les plugins demandés précédés de leurs dépendances (récursif, sans doublon).
+with_deps() {
+  local -A seen=()
+  local -a out=()
+  visit() {
+    local q d
+    q=$1
+    [ -n "${seen[$q]:-}" ] && return
+    seen[$q]=1
+    for d in $(plugin_deps "$q"); do visit "$d"; done
+    out+=("$q")
+  }
+  local p
+  for p in "$@"; do visit "$p"; done
+  printf '%s\n' "${out[@]}"
+}
 
 # Liens déclarés par plugins/<p>/setup.sh, « <source absolue>\t<destination absolue> » par ligne.
 plugin_links() {
@@ -215,7 +240,7 @@ remove_one() {
 # État des plugins : installé et à jour (aucun commit sur plugins/<p> depuis la version installée,
 # le SHA du dépôt à l'install/update), liens déclarés, on_status. Un plugin absent n'est pas une erreur.
 plugins_status() {
-  local p v src dst out rc=0
+  local p v src dst out d rc=0
   if ! command -v claude >/dev/null 2>&1; then echo "claude absent : plugins non vérifiés"; return 0; fi
   refresh_installed
   for p in $(plugin_names); do
@@ -238,6 +263,9 @@ plugins_status() {
         printf 'MISSING plugin %s : %s\n' "$p" "${dst/#$dst_root/\~}"; rc=1
       fi
     done < <(plugin_links "$p")
+    for d in $(plugin_deps "$p"); do
+      [ -n "$(plugin_version "$d")" ] || { printf 'MISSING plugin %s : dépendance %s (./install.sh plugin %s)\n' "$p" "$d" "$d"; rc=1; }
+    done
     if ! out=$(plugin_hook "$p" on_status); then
       printf 'ERREUR  plugin %s : %s\n' "$p" "$out"; rc=1
     elif [ -n "$out" ]; then
@@ -266,6 +294,9 @@ cmd_plugin() {
   command -v claude >/dev/null 2>&1 || { echo "claude absent : plugins ignorés"; return 0; }
   command -v jq >/dev/null 2>&1 || { echo "jq requis pour les plugins" >&2; return 1; }
   [ $all = 1 ] && mapfile -t names < <(plugin_names)
+  # À l'installation, les dépendances passent d'abord (avec leurs liens ; claude plugin install
+  # les installerait de toute façon, mais sans ce que pose leur setup.sh).
+  [ $remove = 1 ] || mapfile -t names < <(with_deps "${names[@]}")
   for p in "${names[@]}"; do
     grep -qx -- "$p" < <(plugin_names) || { printf 'plugin inconnu : %s (plugins : %s)\n' "$p" "$(plugin_names | tr '\n' ' ')" >&2; return 2; }
   done
@@ -285,6 +316,22 @@ cmd_plugin() {
     fi
   done
   settings_restore; trap - EXIT
+
+  # Dépendances retirées avec rien : on les garde, en disant si plus rien n'en a besoin.
+  if [ $remove = 1 ]; then
+    refresh_installed
+    local d q needed
+    for d in $(for p in "${names[@]}"; do plugin_deps "$p"; done | sort -u); do
+      [ -n "$(plugin_version "$d")" ] || continue
+      needed=""
+      for q in $(plugin_names); do
+        [ -n "$(plugin_version "$q")" ] && plugin_deps "$q" | grep -qx -- "$d" && needed+=" $q"
+      done
+      if [ -z "$needed" ]; then
+        printf 'note    plugin %s gardé, plus aucun plugin n'"'"'en dépend : ./install.sh plugin --remove %s\n' "$d" "$d"
+      fi
+    done
+  fi
 
   # Dossiers de profil régénérés (settings.json = référence + surcharge, liens à jour).
   refresh_installed

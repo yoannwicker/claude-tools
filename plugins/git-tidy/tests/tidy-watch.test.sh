@@ -93,12 +93,16 @@ check "1 approbation, changements demandés, brouillon, trop récente → rien" 
 appr "25tb=a:APPROVED:10 minutes,b:APPROVED:9 minutes" > "$tmp/mine.json"
 out=$("$bin" poll)
 check "fil non résolu d'un autre → attend" "1|" "$(grep -c 'o/r#25 (approved) : 1 fil' <<<"$out")|$(calls)"
+"$bin" poll >/dev/null  # toujours en attente : pas une deuxième entrée d'historique
 appr "25tmoi=a:APPROVED:10 minutes,b:APPROVED:9 minutes" > "$tmp/mine.json"
 "$bin" poll >/dev/null
 wait_notif
 check "fil répondu → /git-tidy:ready --prepare dans le worktree de la branche" \
   "$wt -p /git-tidy:ready 25 --prepare" "$(cut -d' ' -f1-5 "$tmp/claude-calls")"
 check "notification « prête »" "Préparation au merge prête à valider : o/r#25" "$(notifs)"
+st=$XDG_STATE_HOME/claude-tools/tidy-watch/state.json
+check "historique : en attente (une fois), puis lancé" "en attente|lancé" \
+  "$(jq -r '[.history[] | select(.key == "o/r#25:approved") | .action] | join("|")' "$st")"
 
 # 5. Approbation de plus → pas relancé
 rm -f "$tmp/notifs" "$tmp/claude-calls"
@@ -122,12 +126,5 @@ check "default → valeur par défaut" "o/r : validation_status = En validation 
 (cd "$tmp/clone" && "$bin" auto . off >/dev/null)
 check "auto off : réglages gardés" "null https://recette/{branch}" \
   "$(jq -r '.repos["o/r"] | "\(.approved) \(.test_env)"' "$cfg")"
-
-# 7. Module commun : copie identique dans review (chaque plugin s'installe seul)
-other=$(dirname "$bin")/../../review/lib/watchlib.py
-if [ -f "$other" ]; then
-  check "lib/watchlib.py identique dans git-tidy et review" same \
-    "$(cmp -s "$(dirname "$bin")/../lib/watchlib.py" "$other" && echo same || echo différent)"
-fi
 
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

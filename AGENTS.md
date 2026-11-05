@@ -57,6 +57,13 @@ Un plugin peut être installé seul, sans le reste de la config : sa sous-sectio
   hors de Claude.
 - Pas de ménage écrit à la main pour les anciens liens d'avant le plugin : devenus morts,
   ils sont retirés par `./install.sh`.
+- Besoin du code ou des commandes d'un autre plugin du dépôt : le déclarer dans
+  `.claude-plugin/plugin.json` (`"dependencies": ["<plugin>"]`), installé alors avec lui
+  (`claude plugin install` comme `./install.sh plugin`). Jamais de copie de code entre
+  plugins (ex. `watchlib.py` vit dans `gh-watch`, dont dépendent `review` et `git-tidy`).
+- Un hook de `setup.sh` qui agit sur systemd utilisateur vérifie que l'unité est celle de
+  ce `HOME` (`systemctl --user show -p FragmentPath`) : sur un HOME de test, le
+  gestionnaire systemd est celui de la vraie session.
 - Vérifier sur un HOME de test (`HOME=$(mktemp -d)`, depuis une copie du dépôt pour ne pas
   toucher au `settings.json` versionné) : `./install.sh plugin <plugin>`, `status`,
   `plugin --remove <plugin>`, `status`.

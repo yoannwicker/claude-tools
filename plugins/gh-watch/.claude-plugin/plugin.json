@@ -1,0 +1,7 @@
+{
+  "name": "gh-watch",
+  "description": "Base des watchers GitHub de claude-tools (review-watch, tidy-watch) : mécanique commune (lancement d'une session Claude, notifications, timer systemd) et supervision de tous les watchers, par /gh-watch:status ou la commande gh-watch",
+  "author": {
+    "name": "ywicker"
+  }
+}

@@ -3,9 +3,9 @@ review, tidy-watch du plugin git-tidy) : config et état, clone et worktree, lan
 session Claude (herdr, ou analyse en fond reprise au clic), notifications, timer systemd,
 commandes communes.
 
-Copié à l'identique dans plugins/review/lib/ et plugins/git-tidy/lib/ (chaque plugin
-s'installe seul) : les tests des deux plugins vérifient que les copies sont identiques.
-Toute modification se fait dans les deux.
+Plugin gh-watch, dépendance déclarée de review et git-tidy. Chaque watcher se déclare
+par un lien ~/.config/claude-tools/watchers.d/<nom> vers son script (posé par le setup.sh
+de son plugin) : `gh-watch status` les supervise tous.
 
 Le watcher appelle configure(...) avec ses réglages, puis main(events=…).
 """
@@ -395,7 +395,8 @@ def launch(cfg, state, repo, n, kind, at=None):
         ws, pane = herdr_open(clone, path, f"{S.tab[kind]} #{n}")
         run(["herdr", "pane", "run", pane, shlex.join([*claude_cmd(cfg), prompt])])  # pas de JSON en retour
         state["sessions"][key] = {"mode": "herdr", "workspace": ws, "pane": pane, "dir": path,
-                                  "url": pr["url"], "launched": iso(now())}
+                                  "url": pr["url"], "title": pr["title"], "launched": iso(now()),
+                                  "event_at": at}
         notify(f"{S.label[kind].capitalize()} lancée : {repo}#{n}", f"{pr['title']}\nherdr : {S.tab[kind]} #{n}",
                ["herdr", "agent", "focus", pane])
         return f"{key} : lancée dans herdr ({path})"
@@ -409,7 +410,8 @@ def launch(cfg, state, repo, n, kind, at=None):
     log = os.path.join(S.state_dir, "logs", f"{key.replace('/', '_').replace(':', '-')}.log")
     os.makedirs(os.path.dirname(log), exist_ok=True)
     state["sessions"][key] = {"mode": "background", "session_id": sid, "dir": path, "url": pr["url"],
-                              "title": pr["title"], "status": "running", "log": log, "launched": iso(now())}
+                              "title": pr["title"], "status": "running", "log": log, "launched": iso(now()),
+                              "event_at": at}
     detach([sys.executable, S.self, "_run", key], cwd=path)
     return f"{key} : analyse lancée en fond (session {sid})"
 
@@ -481,6 +483,23 @@ def resume(cfg, state, target, kind):
 
 # --- passage ----------------------------------------------------------------------------------
 
+HISTORY = 300  # déclenchements gardés dans l'état (les plus anciens sortent)
+
+
+def record(state, kind, repo, n, action, detail="", title="", at=None):
+    """Note un déclenchement dans l'historique (supervision : gh-watch history). Une entrée
+    identique à la dernière de la même PR (même action et détail, ex. « en attente » à
+    chaque passage) n'est pas répétée."""
+    h = state.setdefault("history", [])
+    key = key_of(repo, n, kind)
+    last = next((e for e in reversed(h) if e["key"] == key), None)
+    if last and last["action"] == action and last.get("detail") == detail:
+        return
+    h.append({"when": iso(now()), "key": key, "kind": kind, "repo": repo, "n": n,
+              "action": action, "detail": detail, "title": title, "event_at": at})
+    del h[:-HISTORY]
+
+
 def dispatch(cfg, state, events, dry_run=False, seed=False):
     """Traite les événements [(kind, repo, n, titre, url, date)] selon le mode du dépôt, et
     retient leur date (sauf --dry-run). Retourne les lignes de compte rendu."""
@@ -488,23 +507,31 @@ def dispatch(cfg, state, events, dry_run=False, seed=False):
     for kind, repo, n, title, url, at in events:
         m = mode(cfg, repo, kind)
         tag = f"{repo}#{n} ({kind}, {m})"
+        rec = (lambda action, detail="": None) if dry_run else (
+            lambda action, detail="": record(state, kind, repo, n, action, detail, title, at))
         if seed:
             out.append(f"{tag} : déjà là, ignoré — {S.name} launch {repo}#{n} {kind}")
+            rec("ignoré", "déjà là à l'activation")
         elif m == "off":
             out.append(f"{tag} : ignoré")
+            rec("ignoré", "mode off")
         elif dry_run:
             out.append(f"{tag} : {'lancerait' if m == 'auto' else 'notifierait'}")
         elif m == "auto":
             try:
-                out.append(launch(cfg, state, repo, n, kind, at))
+                line = launch(cfg, state, repo, n, kind, at)
+                out.append(line)
+                rec("lancé", line.split(" : ", 1)[-1])
             except Exception as e:  # un échec ne doit pas bloquer les autres PR
                 out.append(f"{tag} : échec — {e}")
+                rec("échec", str(e)[:200])
                 notify(f"{S.name} : échec sur {repo}#{n}", str(e)[:200],
                        [sys.executable, S.self, "launch", f"{repo}#{n}", kind])
         else:
             notify(f"{S.announce[kind]} : {repo}#{n}", f"{title}\nclic : lancer /{S.skill[kind]}",
                    [sys.executable, S.self, "launch", f"{repo}#{n}", kind])
             out.append(f"{tag} : notifié")
+            rec("notifié", f"{S.announce[kind]} (clic : /{S.skill[kind]})")
         if not dry_run:
             state[kind][f"{repo}#{n}"] = at
     return out
@@ -586,7 +613,48 @@ def modes_line(cfg, repo):
     return " ".join(f"{k}={mode(cfg, repo, k)}" for k in S.kinds) + S.repo_extra(cfg, repo)
 
 
-def cmd_status(cfg, state):
+def next_run():
+    """Prochain passage du timer (heure locale), ou None."""
+    if not shutil.which("systemctl"):
+        return None
+    r = subprocess.run(["systemctl", "--user", "list-timers", S.timer, "-o", "json", "--no-pager"],
+                       capture_output=True, text=True)
+    try:
+        t = json.loads(r.stdout or "[]")
+    except ValueError:
+        return None
+    nxt = t[0].get("next") if t else None
+    return iso(dt.datetime.fromtimestamp(nxt / 1e6, dt.timezone.utc)) if nxt else None
+
+
+def status_data(cfg, state):
+    """État du watcher pour `status --json` (supervision par gh-watch)."""
+    repos = []
+    for repo, r in sorted(cfg.get("repos", {}).items()):
+        if not any(k in r for k in S.kinds) and "path" not in r:
+            continue
+        repos.append({"repo": repo, **{k: mode(cfg, repo, k) for k in S.kinds}, **S.extra(cfg, repo),
+                      "path": r.get("path") or state["clones"].get(repo.lower())})
+    sessions = []
+    for k, s in sorted(state["sessions"].items(), key=lambda kv: kv[1].get("launched", "")):
+        d = {"key": k, "mode": s["mode"], "dir": s.get("dir"), "url": s.get("url"),
+             "title": s.get("title"), "launched": s.get("launched"), "event_at": s.get("event_at")}
+        if s["mode"] == "herdr":
+            d["status"] = "ouverte" if herdr_alive(s) else "fermée"
+        else:
+            d.update(status=s.get("status"), log=s.get("log"), finished=s.get("finished"))
+            if s.get("status") in ("ready", "failed"):
+                d["resume"] = f"{S.name} resume {k.replace(':', ' ')}"
+        sessions.append(d)
+    return {"name": S.name, "timer": S.timer, "state": timer_state(), "interval": interval(cfg),
+            "last": state.get("since"), "next": next_run(), "kinds": list(S.kinds),
+            "default": {**{k: v for k, v in {**S.defaults, **cfg.get("default", {})}.items()}},
+            "repos": repos, "sessions": sessions, "history": state.get("history", [])}
+
+
+def cmd_status(cfg, state, as_json=False):
+    if as_json:
+        return print(json.dumps(status_data(cfg, state), ensure_ascii=False))
     print(f"surveillance : {timer_state()} ({S.timer}, toutes les {interval(cfg)} min) ;"
           f" dernier passage : {state.get('since', 'jamais')}")
     print(f"dépôts non listés : {modes_line(cfg, None)}")
@@ -686,7 +754,7 @@ def main(doc, events, extend=None, handle=None):
     les options ajoutées à `default`."""
     p = argparse.ArgumentParser(prog=S.name, description=doc.split("\n")[0])
     sub = p.add_subparsers(dest="cmd")
-    sub.add_parser("status")
+    sub.add_parser("status").add_argument("--json", action="store_true")
     sub.add_parser("repos").add_argument("--json", action="store_true")
     au = sub.add_parser("auto")
     au.add_argument("repo")
@@ -728,7 +796,7 @@ def _main(cfg, args, events, handle):
         return background_run(args.key)
     if args.cmd in (None, "status"):
         with State() as state:
-            return cmd_status(cfg, state)
+            return cmd_status(cfg, state, getattr(args, "json", False))
     if handle and args.cmd != "default" and handle(cfg, args):
         return
     if args.cmd == "repos":

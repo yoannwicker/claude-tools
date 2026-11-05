@@ -128,6 +128,9 @@ rm -f "$tmp/notifs" "$tmp/claude-calls"
 mine "9:10 minutes:COMMENTED:2" "10:10 minutes:APPROVED:0" > "$tmp/mine.json"
 "$bin" poll >/dev/null
 check "approuvée → notification, rien lancé" "PR approuvée : o/r#10|" "$(notifs)|$(cat "$tmp/claude-calls" 2>/dev/null)"
+check "historique : notifié, approuvée sans commentaire" "notifié PR approuvée sans commentaire" \
+  "$(jq -r '[.history[] | select(.key == "o/r#10:feedback")][-1] | "\(.action) \(.detail)"' \
+     "$XDG_STATE_HOME/claude-tools/review-watch/state.json")"
 
 # 7. off : retour au mode par défaut ; mode off : ignoré
 (cd "$tmp/clone" && "$bin" auto . off review >/dev/null && "$bin" auto . off feedback >/dev/null)
@@ -162,12 +165,5 @@ mine "30:6 minutes:COMMENTED:1" > "$tmp/mine.json"
 rm -f "$tmp/notifs"
 HERDR_PROMPT_RC=1 "$bin" poll >/dev/null
 check "agent en attente d'une réponse → notification critique" "occupée, message non envoyé critical" "$(body)"
-
-# 10. Module commun : copie identique dans git-tidy (chaque plugin s'installe seul)
-other=$(dirname "$bin")/../../git-tidy/lib/watchlib.py
-if [ -f "$other" ]; then
-  check "lib/watchlib.py identique dans review et git-tidy" same \
-    "$(cmp -s "$(dirname "$bin")/../lib/watchlib.py" "$other" && echo same || echo différent)"
-fi
 
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

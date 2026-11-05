@@ -16,7 +16,7 @@ Mode par dépôt (config ~/.config/claude-tools/git-tidy.json, partagée avec le
   notify   notification seulement ; son clic lance la session comme en auto
   off      rien (défaut des dépôts non listés)
 Rien n'est réécrit, poussé ni publié sans validation dans la session.
-Mécanique commune avec review-watch (plugin review) : lib/watchlib.py, copie identique.
+Mécanique commune avec review-watch : lib/watchlib.py du plugin gh-watch.
 
   tidy-watch status                          surveillance, dépôts, sessions
   tidy-watch repos [--json]                  dépôts configurés et clones GitHub trouvés
@@ -35,7 +35,9 @@ Mécanique commune avec review-watch (plugin review) : lib/watchlib.py, copie id
 """
 import os, sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
+# watchlib : plugin gh-watch (dépendance), à côté dans le même clone
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
+                                "gh-watch", "lib"))
 import watchlib as w  # noqa: E402
 
 APPROVALS = 2
@@ -85,7 +87,7 @@ def approved_events(cfg, state, delay):
                    if t and not t["isResolved"] and any(
                        (c.get("author") or {}).get("login") != login for c in t["comments"]["nodes"])]
         if pending:
-            waiting.append((repo, n, len(pending)))
+            waiting.append((repo, n, pr["title"], len(pending)))
             continue
         events.append((repo, n, pr["title"], pr["url"], at))
     return events, waiting
@@ -93,8 +95,11 @@ def approved_events(cfg, state, delay):
 
 def events(cfg, state, since, delay, dry_run=False, seed=False):
     found, waiting = approved_events(cfg, state, delay)
-    out = [f"{repo}#{n} (approved) : {k} fil(s) de review en attente de réponse, attend le passage suivant"
-           for repo, n, k in waiting]
+    out = []
+    for repo, n, title, k in waiting:
+        out.append(f"{repo}#{n} (approved) : {k} fil(s) de review en attente de réponse, attend le passage suivant")
+        if not dry_run and not seed and w.mode(cfg, repo, "approved") != "off":
+            w.record(state, "approved", repo, n, "en attente", f"{k} fil(s) de review en attente de ta réponse", title)
     return [("approved", *e) for e in found], out
 
 

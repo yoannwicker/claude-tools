@@ -6,6 +6,8 @@ links=(                                                  # <chemin dans le plugi
   "bin/review-watch              ~/.local/bin/review-watch"
   "systemd/review-watch.service  ~/.config/systemd/user/review-watch.service"
   "systemd/review-watch.timer    ~/.config/systemd/user/review-watch.timer"
+  # déclaration auprès de gh-watch (supervision : gh-watch status, /gh-watch:status)
+  "bin/review-watch              ~/.config/claude-tools/watchers.d/review-watch"
 )
 on_install() {
   "$plugin_dir/herdr/profile.sh" install
@@ -14,7 +16,12 @@ on_install() {
 }
 on_remove() {
   "$plugin_dir/herdr/profile.sh" remove
-  command -v systemctl >/dev/null 2>&1 && systemctl --user disable --now review-watch.timer 2>/dev/null || true
+  # systemd --user ne connaît que le vrai HOME : sur un HOME de test, ne pas arrêter (ni
+  # délier) le timer de la session
+  if command -v systemctl >/dev/null 2>&1 && [ "$(systemctl --user show -p FragmentPath --value review-watch.timer 2>/dev/null)" \
+       = "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/review-watch.timer" ]; then
+    systemctl --user disable --now review-watch.timer 2>/dev/null || true
+  fi
   rm -rf "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/review-watch.timer.d"   # review-watch interval
 }
 on_status() {
