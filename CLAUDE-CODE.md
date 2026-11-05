@@ -698,8 +698,8 @@ Chaque watcher donne son état par `<watcher> status --json` (`watchlib.status_d
 
 #### Point sur les PR : `board`
 
-`gh-watch board [<owner/repo> | --all] [--full] [--json]`, et
-`/gh-watch:board [<owner/repo> | --all] [--full]` dans Claude (mêmes données en tableaux ;
+`gh-watch board [<owner/repo> | --all] [--full | --auto | --missed] [--json]`, et
+`/gh-watch:board [<owner/repo> | --all] [--full | --auto | --missed]` dans Claude (mêmes données en tableaux ;
 lecture seule). Sans argument : le dépôt courant, ou tous hors d'un clone GitHub (signalé).
 Ne lit que l'état actuel de GitHub, jamais les notifications : une demande de revue que je
 me fais moi-même y apparaît.
@@ -725,6 +725,17 @@ Alertes sur mes PR, à la suite de l'état : CI ✗, conflit, en retard (sur sa 
 comparaison par l'API REST). Avec `--all` : seulement ce sur quoi j'ai à agir (ce qui est
 à moi, et les mentions), par dépôt (le plus de lignes à moi d'abord), puis le nombre de PR
 non montrées ; `--full` : tout, comme pour un dépôt.
+
+Suivi par les watchers : `--auto` ne garde que les PR dont un watcher gère l'état (dépôt
+en `auto` ou `notify` : à relire, redemandée, retours pour `review-watch`, approuvée pour
+`tidy-watch`), avec leur mode et leur suivi — session herdr ouverte, analyse en cours ou
+prête à reprendre (avec la commande `resume`), lancée, notifiée, traitée, au prochain
+passage (événement plus récent que l'intervalle du watcher + 5 min). `--missed` ne garde
+que les **manquées**, avec la commande pour les lancer (`<watcher> launch <repo#n>
+<événement>`) : événement jamais vu par le watcher (date traitée antérieure, ex. une
+revue que je me demande moi-même, sans notification), lancement ou analyse en échec,
+ignorée (déjà là à l'activation), notifiée sans session lancée depuis. Le watcher expose
+pour cela ses dates traitées dans `status --json` (`handled`).
 
 Dépôts pris par `--all` (et hors d'un clone) : `gh-watch set board <owner | owner/repo | .>
 on | off | default` (sans argument : les réglages). Rien d'activé : tous les dépôts sauf

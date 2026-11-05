@@ -28,6 +28,13 @@ posé par le setup.sh de son plugin (./install.sh plugin <plugin>) : gh-watch le
                                            à relire, relue, mentionné, ouvertes sans demande),
                                            depuis quand (⚠ au-delà de stale_days jours
                                            ouvrés), et l'action proposée
+  gh-watch board … --auto                  seulement les PR dont un watcher (auto ou notify)
+                                           gère l'état, avec leur suivi : session ouverte,
+                                           analyse en cours ou prête, lancée, notifiée,
+                                           traitée, manquée
+  gh-watch board … --missed                seulement les manquées (pas vues, échec, ignorées,
+                                           notifiées sans session), avec la commande pour
+                                           les lancer
   gh-watch set stale_days [<n> | default]  seuil du ⚠ en jours ouvrés (2 par défaut)
   gh-watch set board [<owner> | <owner/repo> | .] [on | off | default]
                                            dépôts pris par board --all (sans argument :
@@ -259,7 +266,7 @@ def board_data(repo=None, fallback=False):
     active = None if repo else active_for(cfg)
     login, items = b.fetch(repo, open_repos, active)
     stale = cfg.get("stale_days", STALE_DAYS)
-    rows = actions(b.build(login, items, approvals_for(data), stale), data)
+    rows = b.watch(actions(b.build(login, items, approvals_for(data), stale), data), data)
     return {"login": login, "repo": repo, "fallback": fallback, "filtered": bool(active), "stale_days": stale,
             "generated": w.iso(w.now()), "prs": rows}
 
@@ -354,6 +361,35 @@ def show_board(d, full=False):
             print(" " + rest_line(rest))
     if not detailed and hidden:
         print(f"+ {len(hidden)} autre(s) PR (en attente des autres, brouillons) : --full pour tout")
+
+
+def show_watch(d, missed):
+    """--auto / --missed : par dépôt, une ligne par PR suivie par un watcher —
+    #n, état, âge, mode, suivi, commande (lancer si manquée, reprendre si prête), titre."""
+    rows = [r for r in d["prs"] if r.get("watch") and r["watch"]["mode"] != "off"
+            and (r["watch"]["missed"] or not missed)]
+    if d.get("fallback"):
+        print("(hors d'un clone GitHub : tous les dépôts)")
+    if not rows:
+        print(("aucune action manquée" if missed else "aucune PR suivie par un watcher en auto ou notify")
+              + (f" sur {d['repo']}" if d["repo"] else ""))
+        return
+    table = {}
+    for r in rows:
+        x = r["watch"]
+        table[id(r)] = [f"#{r['n']}", r["short"], age(r["age_days"]) + (" ⚠" if r["stale"] else ""),
+                        x["mode"], ("manquée : " if x["missed"] else "") + x["follow"], x["command"] or "",
+                        LEAD.sub("", r["title"])]
+    widths = [max(len(c[i]) for c in table.values()) for i in range(6)]
+    room = max(20, shutil.get_terminal_size((120, 20)).columns - 2 - sum(widths) - 2 * 6)
+    for repo in sorted({r["repo"] for r in rows}):
+        if not d["repo"]:
+            print(repo)
+        for r in rows:
+            if r["repo"] == repo:
+                c = table[id(r)]
+                title = c[6] if len(c[6]) <= room else c[6][:room - 1] + "…"
+                print("  " + "  ".join(v.ljust(wd) for v, wd in zip(c[:6], widths)) + "  " + title)
 
 
 def show_active(cfg):
@@ -454,6 +490,9 @@ def main():
     bo.add_argument("repo", nargs="?")
     bo.add_argument("--all", action="store_true")
     bo.add_argument("--full", action="store_true")
+    fl = bo.add_mutually_exclusive_group()
+    fl.add_argument("--auto", action="store_true")
+    fl.add_argument("--missed", action="store_true")
     bo.add_argument("--json", action="store_true")
     se = sub.add_parser("set")
     se.add_argument("key", choices=("stale_days", "others", "board"))
@@ -470,6 +509,10 @@ def main():
             d = board_data(repo, fallback=not args.all and not args.repo and not repo)
         except RuntimeError as e:
             die(str(e))
+        if args.auto or args.missed:
+            d["prs"] = [r for r in d["prs"] if r.get("watch") and r["watch"]["mode"] != "off"
+                        and (r["watch"]["missed"] or not args.missed)]
+            return print(json.dumps(d, ensure_ascii=False)) if args.json else show_watch(d, args.missed)
         return print(json.dumps(d, ensure_ascii=False)) if args.json else show_board(d, args.full)
     if args.cmd == "list":
         rows = [{"name": n, "script": s} for n, s in watchers()]

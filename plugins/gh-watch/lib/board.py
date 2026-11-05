@@ -325,3 +325,82 @@ def build(login, items, approvals, stale_days, now=None):
     border = {k: i for i, (k, _) in enumerate(BUCKETS)}
     rows.sort(key=lambda r: (border[r["bucket"]], not r["mine"], order[r["state"]], r["since"] or ""))
     return rows
+
+
+# --- suivi par les watchers (gh-watch board --auto, --missed) --------------------------------
+
+GRACE = 5  # min ajoutées à l'intervalle d'un watcher : un événement plus récent attend son passage
+
+
+def _local(t):
+    return w.parse(t).astimezone().strftime("%d/%m %H:%M") if t else "—"
+
+
+def same(a, b):
+    return (a or "").lower() == (b or "").lower()
+
+
+def follow(r, d, kind, now):
+    """Suivi d'une ligne par le watcher `d` qui gère son état sous `kind` : {watcher, kind,
+    mode, handled, follow, missed, command}. Manquée : dépôt en auto ou notify, et rien de
+    ce que le watcher a fait ne couvre l'événement — pas vue (date traitée antérieure),
+    échec, ignorée (déjà là à l'activation, mode off à l'époque), notifiée sans session
+    lancée depuis — ni session en cours (herdr ouverte, analyse en cours ou prête)."""
+    repo, n, ev = r["repo"], r["n"], r.get("event_at")
+    rc = next((x for x in d.get("repos", []) if same(x["repo"], repo)), {})
+    mode = rc.get(kind) or (d.get("default") or {}).get(kind) or "off"
+    key = f"{repo}#{n}:{kind}"
+    handled = max((v or "" for k, v in (d.get("handled") or {}).get(kind, {}).items() if same(k, f"{repo}#{n}")),
+                  default="")
+    sess = [s for s in d.get("sessions", []) if same(s["key"], key)]
+    s = sess[-1] if sess else None
+    hist = [e for e in d.get("history", []) if same(e["key"], key)]
+    last = max(hist, key=lambda e: e["when"]) if hist else None
+    out = {"watcher": d["name"], "kind": kind, "mode": mode, "handled": handled or None,
+           "missed": False, "command": None}
+
+    def done(text, missed=False, command=None):
+        out.update(follow=text, missed=missed, command=command)
+        return out
+
+    launch = f"{d['name']} launch {repo}#{n} {kind}"
+    if mode == "off":
+        return done("mode off")
+    if not ev:
+        return done("—")
+    fresh = s and (s.get("launched") or "") >= ev
+    if s and s.get("status") in ("ouverte", "running", "ready") and (fresh or s.get("event_at") == ev):
+        return done({"ouverte": "session herdr ouverte", "running": "analyse en cours",
+                     "ready": "prête à reprendre"}[s["status"]], command=s.get("resume"))
+    if fresh and s.get("status") == "failed":
+        return done(f"analyse en échec {_local(s.get('launched'))}", True, launch)
+    if fresh:
+        return done(f"lancée {_local(s.get('launched'))}")
+    if last and last["when"] >= ev:
+        a = last["action"]
+        if a == "lancé":
+            return done(f"lancée {_local(last['when'])}")
+        if a == "échec":
+            return done(f"échec {_local(last['when'])}", True, launch)
+        if a == "ignoré":
+            return done(f"ignorée ({last.get('detail') or 'ignoré'})", True, launch)
+        if a == "notifié":
+            return done(f"notifiée {_local(last['when'])}, pas lancée", True, launch)
+    if handled >= ev:
+        return done("traitée")
+    if (now - w.parse(ev)).total_seconds() < (int(d.get("interval") or 5) + GRACE) * 60:
+        return done("au prochain passage")
+    return done("pas vue", True, launch)
+
+
+def watch(rows, data, now=None):
+    """Ajoute `watch` (suivi, voir follow) aux lignes dont un watcher gère l'état."""
+    now = now or w.now()
+    by_state = {}
+    for d in data:
+        if not d.get("error"):
+            for state, kind in (d.get("board") or {}).items():
+                by_state.setdefault(state, (d, kind))
+    for r in rows:
+        r["watch"] = follow(r, *by_state[r["state"]], now) if r["state"] in by_state else None
+    return rows

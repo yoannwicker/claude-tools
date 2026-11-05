@@ -655,7 +655,9 @@ def status_data(cfg, state):
             "last": state.get("since"), "next": next_run(), "kinds": list(S.kinds),
             "default": {**{k: v for k, v in {**S.defaults, **cfg.get("default", {})}.items()}},
             "repos": repos, "sessions": sessions, "history": state.get("history", []),
-            "skill": S.skill, "board": S.board, "suggest": S.suggest}
+            "skill": S.skill, "board": S.board, "suggest": S.suggest,
+            # Date du dernier événement traité, par événement et PR (repo#n) : suivi de gh-watch board
+            "handled": {k: state.get(k, {}) for k in S.kinds}}
 
 
 def cmd_status(cfg, state, as_json=False):

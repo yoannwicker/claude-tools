@@ -178,5 +178,74 @@ class Build(unittest.TestCase):
         self.assertEqual(stale, {1: False, 2: False, 3: True, 4: True})
 
 
+def watcher(mode="auto", handled=None, sessions=(), history=(), interval=5):
+    return {"name": "review-watch", "interval": interval, "board": {"to_review": "review"},
+            "default": {"review": "notify"}, "repos": [{"repo": "o/r", "review": mode}],
+            "handled": {"review": handled or {}}, "sessions": list(sessions), "history": list(history)}
+
+
+EV = "2026-11-05T08:00:00Z"
+NOW = dt.datetime(2026, 11, 5, 12, tzinfo=dt.timezone.utc)
+
+
+def row(ev=EV, repo="O/R"):
+    return {"repo": repo, "n": 5, "state": "to_review", "event_at": ev}
+
+
+def hist(action, when="2026-11-05T08:05:00Z", detail=""):
+    return {"key": "o/r#5:review", "when": when, "action": action, "detail": detail}
+
+
+class Follow(unittest.TestCase):
+    def follow(self, **kw):
+        return b.watch([row(kw.pop("ev", EV))], [watcher(**kw)], NOW)[0]["watch"]
+
+    def test_not_seen_is_missed(self):
+        f = self.follow()
+        self.assertEqual((f["follow"], f["missed"], f["command"]), ("pas vue", True, "review-watch launch O/R#5 review"))
+
+    def test_handled_case_insensitive(self):
+        f = self.follow(handled={"o/r#5": EV})
+        self.assertEqual((f["follow"], f["missed"]), ("traitée", False))
+
+    def test_older_handled_event_is_missed(self):
+        self.assertTrue(self.follow(handled={"o/r#5": "2026-11-01T00:00:00Z"})["missed"])
+
+    def test_recent_event_waits_for_next_poll(self):
+        f = self.follow(ev="2026-11-05T11:55:00Z")
+        self.assertEqual((f["follow"], f["missed"]), ("au prochain passage", False))
+
+    def test_mode_off_and_default(self):
+        self.assertEqual(self.follow(mode="off")["follow"], "mode off")
+        w = watcher()
+        w["repos"] = []
+        self.assertEqual(b.watch([row()], [w], NOW)[0]["watch"]["mode"], "notify")
+
+    def test_failure_ignored_notified_are_missed(self):
+        for action, text in (("échec", "échec"), ("ignoré", "ignorée"), ("notifié", "notifiée")):
+            f = self.follow(handled={"o/r#5": EV}, history=[hist(action)])
+            self.assertTrue(f["missed"], action)
+            self.assertTrue(f["follow"].startswith(text), f["follow"])
+
+    def test_launched_then_history_for_older_event_ignored(self):
+        f = self.follow(handled={"o/r#5": EV}, history=[hist("échec", when="2026-11-04T08:00:00Z")])
+        self.assertEqual(f["follow"], "traitée")
+        self.assertTrue(self.follow(handled={"o/r#5": EV}, history=[hist("lancé")])["follow"].startswith("lancée"))
+
+    def test_sessions(self):
+        s = {"key": "o/r#5:review", "launched": "2026-11-05T09:00:00Z", "event_at": None}
+        f = self.follow(sessions=[{**s, "status": "ready", "resume": "review-watch resume o/r#5 review"}])
+        self.assertEqual((f["follow"], f["missed"], f["command"]),
+                         ("prête à reprendre", False, "review-watch resume o/r#5 review"))
+        self.assertEqual(self.follow(sessions=[{**s, "status": "ouverte"}])["follow"], "session herdr ouverte")
+        self.assertTrue(self.follow(sessions=[{**s, "status": "failed"}])["missed"])
+        self.assertFalse(self.follow(sessions=[{**s, "status": "fermée"}])["missed"])
+        old = {**s, "launched": "2026-11-04T09:00:00Z", "status": "fermée"}
+        self.assertTrue(self.follow(sessions=[old])["missed"])  # session d'un événement antérieur
+
+    def test_state_without_watcher(self):
+        self.assertIsNone(b.watch([{**row(), "state": "draft"}], [watcher()], NOW)[0]["watch"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

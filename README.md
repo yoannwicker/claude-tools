@@ -106,7 +106,8 @@ demander une déconnexion/reconnexion de session.
 - `/gh-watch:board [<owner/repo> | --all]` (ou `gh-watch board`) : le point sur mes PR
   ouvertes et les relectures qu'on attend de moi, sur le dépôt courant ou tous (`--all` :
   seulement ce sur quoi j'ai à agir, dans les dépôts activés par `gh-watch set board`) —
-  depuis quand, action proposée (plugin `gh-watch`).
+  depuis quand, action proposée ; `--missed` : les actions que les watchers ont manquées
+  (plugin `gh-watch`).
 - `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des
   agents (AgentsView), rangé dans `docs/analyses-sessions/` pour ce dépôt ;
   `/session-analysis:session` : bilan de la session en cours (plugin `session-analysis`).

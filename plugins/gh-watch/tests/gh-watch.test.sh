@@ -131,6 +131,12 @@ check "set stale_days" "stale_days = 50 jour(s) ouvré(s)" "$("$bin" set stale_d
 check "stale_days 50 → plus de ⚠" 0 "$("$bin" board --all | grep -c '⚠')"
 check "set stale_days invalide → erreur" 1 "$("$bin" set stale_days zéro >/dev/null 2>&1; echo $?)"
 
+check "board --auto : seulement les états suivis par un watcher" "#7" "$("$bin" board --auto | awk '{print $1}' | paste -sd'|')"
+check "board --missed : approuvée jamais vue → commande de lancement" 1 \
+  "$("$bin" board --missed | grep -c 'auto  manquée : pas vue  a-watch launch o/r#7 approved')"
+check "board --missed --json : suivi" "a-watch approved auto true" \
+  "$("$bin" board --missed --json | jq -r '.prs[0].watch | "\(.watcher) \(.kind) \(.mode) \(.missed)"')"
+check "board --auto et --missed ensemble → erreur" 2 "$("$bin" board --auto --missed >/dev/null 2>&1; echo $?)"
 check "set board o off → dépôts écartés" "aucune PR ouverte qui te concerne (dépôts filtrés : gh-watch set board)" \
   "$("$bin" set board o off >/dev/null; "$bin" board --all)"
 check "board <dépôt> : jamais filtré" 1 "$("$bin" board o/r | grep -c '^o/r')"

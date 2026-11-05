@@ -1,13 +1,15 @@
 ---
 name: board
-description: Faire le point sur les PR ouvertes qui me concernent — sur le dépôt courant, un dépôt donné ou tous (--all : seulement ce sur quoi j'ai à agir, dépôts filtrés par gh-watch set board) — ce qui est à moi (retours à traiter, approuvée à préparer, à faire relire, relecture demandée…), ce qui attend les autres, depuis quand, et l'action proposée pour chacune
-argument-hint: "[<owner/repo> | --all] [--full]"
+description: Faire le point sur les PR ouvertes qui me concernent — sur le dépôt courant, un dépôt donné ou tous (--all : seulement ce sur quoi j'ai à agir, dépôts filtrés par gh-watch set board) — ce qui est à moi (retours à traiter, approuvée à préparer, à faire relire, relecture demandée…), ce qui attend les autres, depuis quand, et l'action proposée pour chacune ; --auto : le suivi par les watchers (review-watch, tidy-watch) ; --missed : les actions qu'ils ont manquées
+argument-hint: "[<owner/repo> | --all] [--full | --auto | --missed]"
 disable-model-invocation: true
 allowed-tools: Bash(gh-watch board:*), Bash(command -v gh-watch)
 ---
 
 Argument : `$ARGUMENTS` (vide : le dépôt courant, tous hors d'un clone GitHub ;
-`owner/repo` : ce dépôt ; `--all` : tous ; `--full` avec `--all` : tout le détail).
+`owner/repo` : ce dépôt ; `--all` : tous ; `--full` avec `--all` : tout le détail ;
+`--auto` : les PR dont un watcher gère l'état, avec leur suivi ; `--missed` : celles dont
+il a manqué l'action).
 
 Lecture seule : rien n'est lancé, posté ni modifié. **Court** : la réponse tient sur un
 écran, sans commentaire en plus des tableaux.
@@ -38,3 +40,10 @@ dépendent) et s'arrêter.
    un dépôt, pour chaque dépôt.
 5. Rien à moi : le dire en une ligne (avec `filtered` vrai : « dépôts filtrés :
    `gh-watch set board` »).
+6. `--auto` ou `--missed` (les `prs` ne contiennent alors que les lignes suivies) : un
+   tableau, avec une colonne **Dépôt** si `repo` est nul — **PR**, **État**, **Âge** comme
+   ci-dessus, **Mode** (`watch.mode`), **Suivi** (`watch.follow`, précédé de « manquée : »
+   si `watch.missed`), **Commande** (`watch.command` en code : lancer si manquée, reprendre
+   si prête), **Titre**. Vide : « aucune action manquée » (`--missed`) ou « aucune PR
+   suivie par un watcher en auto ou notify » (`--auto`). Avec `--missed`, finir par une
+   ligne : les commandes se lancent depuis un terminal ; rien n'est lancé ici.

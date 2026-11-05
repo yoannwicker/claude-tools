@@ -1,6 +1,6 @@
 # gh-watch : tableau de bord des PR (`board`), actions manquées et rattrapage
 
-- **Statut** : en cours (étape 1 faite)
+- **Statut** : en cours (étapes 1 et 2 faites)
 - **Origine** : idée (2026-11-05), fusion de
   [review : faire le point sur mes PR](2-review-point-mes-pr.md),
   [gh-watch : vue des PR en cours](3-gh-watch-vue-pr.md),
@@ -157,7 +157,12 @@ si l'arborescence change).
 - Dépôts de `--all` réglables (`gh-watch set board <owner | owner/repo> on|off`) : dès
   qu'un propriétaire ou un dépôt est activé, seulement ce qui est activé (2026-11-05).
 - Étape 1 : `watchlib.configure(board=…, suggest=…)` est déjà là (action proposée par
-  ligne) ; l'étape 2 y ajoute les dates traitées.
+  ligne) ; l'étape 2 y ajoute les dates traitées (`handled` dans `status --json`).
+- Étape 2 : une ligne notifiée sans session lancée depuis compte comme manquée, ainsi
+  qu'une ligne ignorée à l'activation ; un événement plus récent que l'intervalle du
+  watcher + 5 min attend son passage (« au prochain passage »). Le suivi (`watch`) est
+  calculé dans `board.py` (testé sans réseau). Commande affichée pour lancer :
+  `<watcher> launch` en attendant `gh-watch launch` (étape 3) (2026-11-05).
 
 ## À trancher
 
