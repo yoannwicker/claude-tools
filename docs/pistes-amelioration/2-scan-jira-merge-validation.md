@@ -22,6 +22,10 @@ Un scan des tickets liés à mes PR ouvertes, selon leur statut JIRA :
 
 ## À trancher
 
+- L'affichage du statut JIRA des PR approuvées est l'étape 6 de
+  [gh-watch : tableau de bord des PR](1-gh-watch-board.md) : cette piste garde le merge et
+  le traitement des retours du testeur, et peut partir de ce tableau.
+
 - Accès JIRA depuis un timer : le MCP Atlassian n'existe que dans une session Claude ;
   token d'API JIRA lu par le watcher (REST), ou scan seulement à la demande dans une
   session (skill), sans timer.

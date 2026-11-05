@@ -1,6 +1,6 @@
 # review : faire le point sur mes PR
 
-- **Statut** : proposée
+- **Statut** : abandonnée — fusionnée dans [gh-watch : tableau de bord des PR](1-gh-watch-board.md)
 - **Origine** : idée (2026-11-05)
 
 ## Constat
