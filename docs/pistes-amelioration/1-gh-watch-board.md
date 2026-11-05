@@ -1,6 +1,6 @@
 # gh-watch : tableau de bord des PR (`board`), actions manquées et rattrapage
 
-- **Statut** : validée
+- **Statut** : en cours (étape 1 faite)
 - **Origine** : idée (2026-11-05), fusion de
   [review : faire le point sur mes PR](2-review-point-mes-pr.md),
   [gh-watch : vue des PR en cours](3-gh-watch-vue-pr.md),
@@ -70,30 +70,33 @@ Tri par ancienneté dans chaque groupe ; ⚠ au-delà de `stale_days` (2 par dé
 
 | Commande | Effet |
 |---|---|
-| `gh-watch board [<owner/repo>\|.] [--json]` | le point, tout GitHub ou un dépôt |
-| `… --auto` | lignes prises en charge par un watcher en `auto`, avec leur suivi : session lancée, ouverte, prête à reprendre, en échec, manquée |
-| `… --missed [--include-notify]` | les manquées seulement (`--missed` implique `--auto`) |
+| `gh-watch board [<owner/repo>\|--all] [--full] [--json]` | le point : dépôt courant (tous hors d'un clone), un dépôt, ou tous (`--all` : ce sur quoi j'ai à agir, dépôts filtrés par `set board` ; `--full` : tout) |
+| `… --auto` | lignes prises en charge par un watcher (`auto` ou `notify`), avec leur mode et leur suivi : session lancée, ouverte, prête à reprendre, en échec, manquée |
+| `… --missed` | les manquées seulement, dépôts en `auto` ou `notify` |
 | `… --missed --launch` | les lance toutes (`<watcher> launch`) ; `--launch` sans `--missed` : refusé |
 | `… --skipped` | montre aussi les lignes écartées |
 | `gh-watch launch <repo#n> [état]` | lance une ligne par le watcher qui la gère |
-| `gh-watch board skip <repo#n> [état] [--pr]` / `unskip …` | écarter / réintégrer |
-| `/gh-watch:board [<owner/repo>\|.] [--auto\|--missed] [--launch]` | la même vue dans Claude ; avec `--missed`, sélection multiple des lignes à lancer ou écarter (non cochée : rien d'enregistré, revient au prochain point) ; `--launch` : tout sans demander |
+| `gh-watch board skip <repo#n> [état] [--until-closed]` / `unskip …` | écarter / réintégrer |
+| `/gh-watch:board [<owner/repo>\|--all] [--auto\|--missed] [--launch]` | la même vue dans Claude ; avec `--missed`, sélection multiple des lignes à lancer ou écarter (non cochée : rien d'enregistré, revient au prochain point) ; `--launch` : tout sans demander |
 | `/gh-watch:board-auto on\|off` | rattrapage automatique (étape 5) |
 
-**Manquée** : un watcher gère l'état, le dépôt est en `auto` pour cet événement (`notify`
-aussi avec `--include-notify`), et le watcher ne l'a pas traitée — date retenue
+**Manquée** : un watcher gère l'état, le dépôt est en `auto` ou `notify` pour cet
+événement (une notification a pu être perdue), et le watcher ne l'a pas traitée — date retenue
 (`state[kind]`) antérieure à l'événement, aucune session en cours — ou son dernier
 déclenchement est un `échec`. La date de l'événement est celle de `poll` : demande de
 revue (`review`), dernière review d'un autre (`feedback`), N-ième approbation (`approved`).
 
-**Écarter** : par défaut jusqu'au prochain événement sur cet état. État géré par un
+**Écarter** : au choix à chaque fois. `skip` seul : jusqu'au prochain événement GitHub sur
+cet état (nouvelle demande, nouvelle review…). État géré par un
 watcher → `<watcher> skip` (`state[kind] = date de l'événement`, historique « refusé »),
 pour que `poll` ne le relance pas non plus ; sinon état propre de gh-watch
-(`~/.local/state/claude-tools/gh-watch/state.json`). `--pr` : toute la PR, jusqu'à sa
-fermeture. Les lignes écartées sont comptées en bas du tableau.
+(`~/.local/state/claude-tools/gh-watch/state.json`). `--until-closed` : toute la PR,
+jusqu'à sa fermeture. Les lignes écartées sont comptées en bas du tableau.
 
 **Réglages** (`~/.config/claude-tools/gh-watch.json`) : `others` par dépôt
-(`requested` par défaut, ou `open`), `stale_days`, `board_auto` (étape 5).
+(`requested` par défaut, ou `open`), `stale_days` (jours ouvrés, week-ends exclus ; 2 par
+défaut, choix arbitraire : une relecture attendue sous un ou deux jours ouvrés),
+`board_auto` (étape 5).
 
 ## Plan
 
@@ -116,13 +119,13 @@ si l'arborescence change).
 2. **Suivi auto et manqués.**
    - `watchlib.configure(board={état: kind})` ; `status_data` expose `board` et les dates
      traitées (`handled[kind][repo#n]`).
-   - `gh-watch board --auto`, `--missed`, `--include-notify` : croisement avec modes,
+   - `gh-watch board --auto`, `--missed` : croisement avec modes,
      dates traitées, sessions et dernier déclenchement.
    - `review-watch`, `tidy-watch` : déclaration `board=…`.
 3. **Actions.**
    - `watchlib` : sous-commande commune `skip <repo#n> <kind> --at <date>`.
    - `gh-watch launch`, `board --missed --launch`, `board skip|unskip` (état gh-watch pour
-     les états sans watcher, `--pr`), `--skipped`.
+     les états sans watcher, `--until-closed`), `--skipped`.
    - `/gh-watch:board --missed` : sélection (`AskUserQuestion`, 16 lignes au plus par
      tour), lancer / écarter ; `--launch`.
 4. **Un seul calcul partout.** `review-watch` (`feedback_events`) et `tidy-watch`
@@ -141,10 +144,22 @@ si l'arborescence change).
    `validation_status`). Le merge après validation reste la piste
    [scan JIRA](2-scan-jira-merge-validation.md).
 
+## Décisions
+
+- `skip` seul : jusqu'au prochain événement ; `--until-closed` : jusqu'à la fermeture de
+  la PR (2026-11-05).
+- `stale_days` en jours ouvrés, 2 par défaut (2026-11-05).
+- `--missed` inclut les dépôts en `notify`, sans option (2026-11-05).
+- Portée par défaut : le dépôt courant, `--all` pour tous (tous hors d'un clone) ; tenir
+  sur un écran : une ligne par PR, rangée selon qui doit agir (à toi, en attente des
+  autres, le reste en une ligne) ; `--all` ne montre que ce sur quoi j'ai à agir (à moi,
+  mentions), `--full` tout (2026-11-05).
+- Dépôts de `--all` réglables (`gh-watch set board <owner | owner/repo> on|off`) : dès
+  qu'un propriétaire ou un dépôt est activé, seulement ce qui est activé (2026-11-05).
+- Étape 1 : `watchlib.configure(board=…, suggest=…)` est déjà là (action proposée par
+  ligne) ; l'étape 2 y ajoute les dates traitées.
+
 ## À trancher
 
-- `--pr` de `skip` : jusqu'à la fermeture de la PR, ou aussi « jusqu'à nouvelle demande
-  explicite » ?
-- `stale_days` : jours calendaires ou ouvrés.
 - `unrequested` sur un dépôt sans relecteurs demandés par convention (ex. dépôt perso) :
   à masquer par réglage ?

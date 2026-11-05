@@ -180,6 +180,8 @@ w.configure(
                       "Revérifie l'état de la PR avant de continuer."},
     guess_kind=lambda state, repo, n: "approved",
     repo_extra=repo_extra, extra=extra,
+    # États du tableau de gh-watch board : pris en charge, ou seulement proposés
+    board={"approved": "approved"}, suggest={"behind": "git-tidy:pr-sync"},
 )
 
 if __name__ == "__main__":

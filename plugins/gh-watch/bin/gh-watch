@@ -15,14 +15,44 @@ posé par le setup.sh de son plugin (./install.sh plugin <plugin>) : gh-watch le
                                            ignoré, en attente, échec (D : 30m, 24h, 7d ou une
                                            date ISO)
   gh-watch list [--json]                   watchers déclarés
+  gh-watch board [<owner/repo> | --all] [--full] [--json]
+                                           état des PR ouvertes qui me concernent, sur le
+                                           dépôt courant (tous hors d'un clone GitHub), un
+                                           dépôt donné, ou tous (--all : par dépôt, ce sur
+                                           quoi j'ai à agir, à moi ou mentions ; --full :
+                                           tout ; dépôts filtrés par set board) : les
+                                           miennes (retours à traiter, approuvée, à faire
+                                           relire, en relecture, en attente du relecteur,
+                                           brouillon ; CI en échec, conflit, en retard sur sa
+                                           base) et celles des autres (relecture redemandée,
+                                           à relire, relue, mentionné, ouvertes sans demande),
+                                           depuis quand (⚠ au-delà de stale_days jours
+                                           ouvrés), et l'action proposée
+  gh-watch set stale_days [<n> | default]  seuil du ⚠ en jours ouvrés (2 par défaut)
+  gh-watch set board [<owner> | <owner/repo> | .] [on | off | default]
+                                           dépôts pris par board --all (sans argument :
+                                           affiche) : dès qu'un propriétaire ou un dépôt est
+                                           activé, seulement ce qui est activé ; un dépôt
+                                           réglé l'emporte sur son propriétaire (off :
+                                           écarté) ; rien d'activé : tous sauf les off
+  gh-watch set others <owner/repo | .> [open | requested | default]
+                                           PR des autres montrées pour ce dépôt : celles où
+                                           l'on me sollicite (requested, défaut), ou aussi
+                                           toutes celles qui attendent des relecteurs (open)
+
+Config : ~/.config/claude-tools/gh-watch.json (GH_WATCH_CONFIG).
 """
-import argparse, json, os, re, subprocess, sys
+import argparse, json, os, re, shutil, subprocess, sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
 import watchlib as w  # noqa: E402
+import board as b  # noqa: E402
 
-WATCHERS = os.environ.get("GH_WATCH_DIR") or os.path.join(
-    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "claude-tools", "watchers.d")
+CFGDIR = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "claude-tools")
+WATCHERS = os.environ.get("GH_WATCH_DIR") or os.path.join(CFGDIR, "watchers.d")
+CONFIG = os.environ.get("GH_WATCH_CONFIG") or os.path.join(CFGDIR, "gh-watch.json")
+STALE_DAYS = 2
+APPROVALS = 2
 
 
 def watchers():
@@ -138,6 +168,277 @@ def show(data, dry_run, since=None):
                 print(f"  passage : erreur — {d['dry_run_error']}")
 
 
+# --- tableau des PR --------------------------------------------------------------------------
+
+def die(msg):
+    print(f"gh-watch: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def current_repo():
+    """Dépôt GitHub du dossier courant, None hors d'un clone."""
+    r = subprocess.run(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+                       capture_output=True, text=True)
+    return r.stdout.strip().lower() if not r.returncode and r.stdout.strip() else None
+
+
+def repo_arg(arg):
+    if arg != ".":
+        if not re.fullmatch(r"[\w.-]+/[\w.-]+", arg):
+            die(f"dépôt attendu : owner/repo ou . (dépôt courant), pas « {arg} »")
+        return arg.lower()
+    return current_repo() or die("dossier courant : pas un clone d'un dépôt GitHub")
+
+
+def approvals_for(data):
+    """Approbations attendues par dépôt : réglage d'un watcher (tidy-watch) qui en déclare,
+    sinon 2."""
+    def get(repo):
+        for d in data:
+            if d.get("error"):
+                continue
+            for r in d.get("repos", []):
+                if r["repo"].lower() == repo.lower() and r.get("approvals"):
+                    return int(r["approvals"])
+            if (d.get("default") or {}).get("approvals"):
+                return int(d["default"]["approvals"])
+        return APPROVALS
+    return get
+
+
+def actions(rows, data):
+    """Action proposée par ligne : le skill du watcher qui prend l'état en charge (ou le
+    propose, `suggest`, pour un état ou une alerte), sinon un texte."""
+    handled, suggested = {}, {}
+    for d in data:
+        if d.get("error"):
+            continue
+        for state, kind in (d.get("board") or {}).items():
+            handled.setdefault(state, (d["name"], kind, d["skill"][kind]))  # premier watcher déclaré
+        for k, v in (d.get("suggest") or {}).items():
+            suggested.setdefault(k, v)
+    for r in rows:
+        if r["state"] in handled:
+            name, kind, skill = handled[r["state"]]
+            r["action"] = {"watcher": name, "kind": kind, "command": f"/{skill} {r['n']}"}
+        elif r["state"] in suggested:
+            r["action"] = {"command": f"/{suggested[r['state']]} {r['n']}"}
+        elif r["state"] in b.TEXT:
+            r["action"] = {"text": b.TEXT[r["state"]]}
+        else:
+            r["action"] = None
+        for a in r["alerts"]:
+            if a in suggested and not (r["action"] or {}).get("command"):
+                r["action"] = {**(r["action"] or {}), "command": f"/{suggested[a]} {r['n']}"}
+    return rows
+
+
+def active_for(cfg):
+    """Dépôts retenus par `board` sur tous les dépôts : réglage `board` du dépôt (on/off), sinon
+    celui de son propriétaire ; dès qu'un propriétaire ou un dépôt est activé, seuls les
+    dépôts activés (par leur propriétaire ou eux-mêmes) comptent. None : aucun filtre."""
+    owners = {k.lower(): v for k, v in cfg.get("owners", {}).items()}
+    repos = {k.lower(): v["board"] for k, v in cfg.get("repos", {}).items() if v.get("board")}
+    if not owners and not repos:
+        return None
+    only = "on" in owners.values() or "on" in repos.values()
+
+    def active(name):
+        name = name.lower()
+        if name in repos:
+            return repos[name] == "on"
+        o = owners.get(name.split("/")[0])
+        return o == "on" if o else not only
+    return active
+
+
+def board_data(repo=None, fallback=False):
+    cfg = w.load_json(CONFIG)
+    data = collect(False)
+    open_repos = [k.lower() for k, v in cfg.get("repos", {}).items() if v.get("others") == "open"]
+    active = None if repo else active_for(cfg)
+    login, items = b.fetch(repo, open_repos, active)
+    stale = cfg.get("stale_days", STALE_DAYS)
+    rows = actions(b.build(login, items, approvals_for(data), stale), data)
+    return {"login": login, "repo": repo, "fallback": fallback, "filtered": bool(active), "stale_days": stale,
+            "generated": w.iso(w.now()), "prs": rows}
+
+
+def age(days):
+    if days is None:
+        return "—"
+    if days < 1 / 24:
+        return f"{max(1, round(days * 1440))} min"
+    if days < 2:
+        return f"{round(days * 24)} h"
+    return f"{round(days)} j"
+
+
+SHORT_ALERT = {"ci": "CI ✗", "conflict": "conflit", "behind": "en retard"}
+LEAD = re.compile(r"^[^\w\[(]+")  # gitmoji ou emoji en tête de titre
+
+
+def cells(r):
+    """[#n, état, âge, action, titre] d'une ligne du tableau."""
+    a = r.get("action") or {}
+    act = (a.get("command") or "").split(" ")[0] or a.get("text") or ""
+    return [f"#{r['n']}", r["short"] + "".join(f", {SHORT_ALERT[x]}" for x in r["alerts"]),
+            age(r["age_days"]) + (" ⚠" if r["stale"] else ""), act, LEAD.sub("", r["title"])]
+
+
+def rest_line(rows):
+    """Le reste en une ligne : « brouillon #199 (conflit), #204 · mentionné #168 »."""
+    groups = {}
+    for r in rows:
+        alerts = ", ".join(SHORT_ALERT[x] for x in r["alerts"])
+        groups.setdefault(r["short"].split(" (")[0], []).append(f"#{r['n']}" + (f" ({alerts})" if alerts else ""))
+    return " · ".join(f"{k} {', '.join(v)}" for k, v in groups.items())
+
+
+def counts(rows):
+    n = {k: sum(r["bucket"] == k for r in rows) for k, _ in b.BUCKETS}
+    parts = [f"{n['me']} à toi"] if n["me"] else []
+    if n["others"]:
+        parts.append(f"{n['others']} en attente des autres")
+    if n["rest"]:
+        parts.append(f"{n['rest']} autre" + ("s" if n["rest"] > 1 else ""))
+    return " · ".join(parts)
+
+
+def show_board(d, full=False):
+    """Une ligne par PR, à la largeur du terminal. Un dépôt : « À toi », « En attente des
+    autres » en tableau, le reste en une ligne. Tous (--all) : par dépôt, seulement ce sur
+    quoi j'ai à agir (à moi, mentions), le reste compté en une ligne (tout avec full)."""
+    rows = d["prs"]
+    if d.get("fallback"):
+        print("(hors d'un clone GitHub : tous les dépôts)")
+    if not rows:
+        print("aucune PR ouverte qui te concerne" + (f" sur {d['repo']}" if d["repo"] else "")
+              + (" (dépôts filtrés : gh-watch set board)" if d.get("filtered") else ""))
+        return
+    detailed = full or bool(d["repo"])
+    if not detailed:  # --all : seulement ce sur quoi j'ai à agir (à moi, mentions)
+        hidden = [r for r in rows if not (r["bucket"] == "me" or r["state"] == "mentioned")]
+        rows = [r for r in rows if r not in hidden]
+        if not rows:
+            print("rien à faire de ton côté")
+    repos = sorted({r["repo"] for r in rows},
+                   key=lambda x: (-sum(r["repo"] == x and r["bucket"] == "me" for r in rows), x))
+    shown = [r for r in rows if detailed and r["bucket"] != "rest" or not detailed]
+    table = {id(r): cells(r) for r in shown}
+    widths = [max((len(c[i]) for c in table.values()), default=0) for i in range(4)]
+    cols = shutil.get_terminal_size((120, 20)).columns
+    room = max(20, cols - 4 - sum(widths) - 2 * 4)
+
+    def line(r):
+        c = table[id(r)]
+        title = c[4] if len(c[4]) <= room else c[4][:room - 1] + "…"
+        print("  " + "  ".join(x.ljust(wd) for x, wd in zip(c[:4], widths)) + "  " + title)
+
+    for repo in repos:
+        mine = [r for r in rows if r["repo"] == repo]
+        if not detailed:
+            print(repo)
+            for r in mine:
+                line(r)
+            continue
+        print(f"{repo} — {counts(mine)}")
+        for key, label in b.BUCKETS[:2]:
+            part = [r for r in mine if id(r) in table and r["bucket"] == key]
+            if part:
+                print(f" {label}")
+                for r in part:
+                    line(r)
+        rest = [r for r in mine if r["bucket"] == "rest"]
+        if rest:
+            print(" " + rest_line(rest))
+    if not detailed and hidden:
+        print(f"+ {len(hidden)} autre(s) PR (en attente des autres, brouillons) : --full pour tout")
+
+
+def show_active(cfg):
+    owners, repos = cfg.get("owners", {}), {k: v["board"] for k, v in cfg.get("repos", {}).items() if v.get("board")}
+    if not owners and not repos:
+        print("board --all : tous les dépôts (aucun propriétaire ni dépôt réglé)")
+        return
+    only = "on" in owners.values() or "on" in repos.values()
+    print("board --all : " + ("seulement les propriétaires et dépôts activés" if only
+                              else "tous les dépôts sauf ceux désactivés"))
+    for k, v in sorted(owners.items()):
+        print(f"  {k}  {v}")
+    for k, v in sorted(repos.items()):
+        print(f"  {k}  {v}")
+
+
+def cmd_set_board(cfg, args):
+    if not args.target:
+        return show_active(cfg)
+    if args.value not in (None, "on", "off", "default"):
+        die("valeur attendue : on, off ou default")
+    if "/" in args.target or args.target == ".":
+        key = repo_arg(args.target)
+        if args.value:
+            repos = cfg.setdefault("repos", {})
+            if args.value == "default":
+                repos.get(key, {}).pop("board", None)
+                if key in repos and not repos[key]:
+                    del repos[key]
+            else:
+                repos.setdefault(key, {})["board"] = args.value
+            if not repos:
+                cfg.pop("repos")
+        value = cfg.get("repos", {}).get(key, {}).get("board")
+    else:
+        key = args.target.lower()
+        if not re.fullmatch(r"[\w.-]+", key):
+            die(f"propriétaire (owner) ou dépôt (owner/repo, .) attendu, pas « {args.target} »")
+        if args.value:
+            owners = cfg.setdefault("owners", {})
+            if args.value == "default":
+                owners.pop(key, None)
+            else:
+                owners[key] = args.value
+            if not owners:
+                cfg.pop("owners")
+        value = cfg.get("owners", {}).get(key)
+    if args.value:
+        w.save_json(CONFIG, cfg)
+    print(f"{key} : board = {value or 'default'}")
+    show_active(cfg)
+
+
+def cmd_set(args):
+    cfg = w.load_json(CONFIG)
+    if args.key == "board":
+        return cmd_set_board(cfg, args)
+    if args.key == "stale_days":
+        if args.target not in (None, "default") and (not args.target.isdigit() or int(args.target) < 1):
+            die("nombre de jours ouvrés attendu (1 au moins), ou default")
+        if args.target == "default":
+            cfg.pop("stale_days", None)
+        elif args.target:
+            cfg["stale_days"] = int(args.target)
+        if args.target:
+            w.save_json(CONFIG, cfg)
+        print(f"stale_days = {cfg.get('stale_days', STALE_DAYS)} jour(s) ouvré(s)")
+        return
+    if not args.target:
+        die("dépôt attendu : gh-watch set others <owner/repo | .> [open | requested | default]")
+    repo = repo_arg(args.target)
+    if args.value not in (None, "open", "requested", "default"):
+        die("valeur attendue : open, requested ou default")
+    if args.value:
+        repos = cfg.setdefault("repos", {})
+        if args.value in ("default", "requested"):
+            repos.get(repo, {}).pop("others", None)
+            if repo in repos and not repos[repo]:
+                del repos[repo]
+        else:
+            repos.setdefault(repo, {})["others"] = args.value
+        w.save_json(CONFIG, cfg)
+    print(f"{repo} : others = {cfg.get('repos', {}).get(repo, {}).get('others', 'requested')}")
+
+
 def main():
     p = argparse.ArgumentParser(prog="gh-watch", description=__doc__.split("\n")[0])
     sub = p.add_subparsers(dest="cmd")
@@ -149,7 +450,27 @@ def main():
     hi.add_argument("--since", type=since_arg)
     hi.add_argument("--json", action="store_true")
     sub.add_parser("list").add_argument("--json", action="store_true")
+    bo = sub.add_parser("board")
+    bo.add_argument("repo", nargs="?")
+    bo.add_argument("--all", action="store_true")
+    bo.add_argument("--full", action="store_true")
+    bo.add_argument("--json", action="store_true")
+    se = sub.add_parser("set")
+    se.add_argument("key", choices=("stale_days", "others", "board"))
+    se.add_argument("target", nargs="?")
+    se.add_argument("value", nargs="?")
     args = p.parse_args()
+    if args.cmd == "set":
+        return cmd_set(args)
+    if args.cmd == "board":
+        if args.all and args.repo:
+            die("board : un dépôt ou --all, pas les deux")
+        repo = None if args.all else repo_arg(args.repo) if args.repo else current_repo()
+        try:
+            d = board_data(repo, fallback=not args.all and not args.repo and not repo)
+        except RuntimeError as e:
+            die(str(e))
+        return print(json.dumps(d, ensure_ascii=False)) if args.json else show_board(d, args.full)
     if args.cmd == "list":
         rows = [{"name": n, "script": s} for n, s in watchers()]
         if args.json:

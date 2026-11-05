@@ -155,6 +155,8 @@ w.configure(
                     "qui ne sont pas dans ton analyse avant de répondre ou de relancer les relecteurs.",
     },
     guess_kind=guess_kind, worktrees="review-worktrees", detached=("review",),
+    # États du tableau de gh-watch board pris en charge
+    board={"to_review": "review", "re_requested": "review", "feedback": "feedback"},
 )
 
 if __name__ == "__main__":

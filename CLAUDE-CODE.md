@@ -638,19 +638,22 @@ ajoute des alias.
 **Rôle** : base des watchers GitHub de claude-tools ([`review-watch`](#review) du plugin
 `review`, [`tidy-watch`](#git-tidy) du plugin `git-tidy`) — la mécanique qu'ils partagent
 (config et état, clone et worktree, lancement d'une session Claude dans herdr ou en fond
-reprise au clic, notifications, timer systemd, commandes communes) — et leur supervision :
-`gh-watch status` en terminal, `/gh-watch:status` dans Claude. Dépendance déclarée de
+reprise au clic, notifications, timer systemd, commandes communes) — leur supervision
+(`gh-watch status` en terminal, `/gh-watch:status` dans Claude) et le point sur les PR
+ouvertes qui me concernent (`gh-watch board`, `/gh-watch:board`). Dépendance déclarée de
 `review` et `git-tidy` : installé avec eux.
 
-**Fichiers** : `plugins/gh-watch/` (`lib/watchlib.py`, `bin/gh-watch`,
-`skills/status/SKILL.md`, `tests/gh-watch.test.sh`, `setup.sh`) ; hors du plugin, le lien
-`~/.local/bin/gh-watch` posé par `setup.sh`. Les watchers se déclarent dans
+**Fichiers** : `plugins/gh-watch/` (`lib/watchlib.py`, `lib/board.py`, `bin/gh-watch`,
+`skills/{status,board}/SKILL.md`, `tests/{gh-watch.test.sh,board.test.py}`, `setup.sh`) ;
+hors du plugin, le lien `~/.local/bin/gh-watch` posé par `setup.sh`, et la config
+`~/.config/claude-tools/gh-watch.json` (réglages de `board`, écrite par `gh-watch set`). Les watchers se déclarent dans
 `~/.config/claude-tools/watchers.d/<nom>` (lien vers leur script, posé par le `setup.sh` de
 leur plugin). **Activé dans** : tous les profils (avec `review` ou `git-tidy`).
 
 **Prérequis** : `python3` ; systemd utilisateur (`systemctl --user list-timers -o json`,
-systemd ≥ 248) pour le prochain passage. Tests : `bash plugins/gh-watch/tests/gh-watch.test.sh`
-(faux watchers, rien n'est lancé).
+systemd ≥ 248) pour le prochain passage ; `gh` authentifié pour `board`. Tests :
+`bash plugins/gh-watch/tests/gh-watch.test.sh` (faux watchers, faux `gh`, rien n'est lancé)
+et `python3 plugins/gh-watch/tests/board.test.py` (classement des PR, sans réseau).
 
 #### Installation hors de ce dépôt
 
@@ -685,12 +688,68 @@ Les watchers et la commande `gh-watch` ne tournent que depuis un clone (liens po
 - `gh-watch status --dry-run` : ajoute ce qu'un passage de chaque watcher ferait
   maintenant (`<watcher> poll --dry-run`). `--json` : la même chose pour un programme.
 - `gh-watch list [--json]` : les watchers déclarés.
+- `gh-watch board` : le point sur les PR, voir [plus bas](#point-sur-les-pr--board).
 - `/gh-watch:status [--dry-run] [--since <D>]` : la même vue dans Claude, en tableaux, avec
   les déclenchements depuis `D` (24 h par défaut) et ce qui cloche en fin de réponse
   (timer arrêté, analyse ou déclenchement en échec, session prête oubliée). Lecture
   seule.
 
 Chaque watcher donne son état par `<watcher> status --json` (`watchlib.status_data`).
+
+#### Point sur les PR : `board`
+
+`gh-watch board [<owner/repo> | --all] [--full] [--json]`, et
+`/gh-watch:board [<owner/repo> | --all] [--full]` dans Claude (mêmes données en tableaux ;
+lecture seule). Sans argument : le dépôt courant, ou tous hors d'un clone GitHub (signalé).
+Ne lit que l'état actuel de GitHub, jamais les notifications : une demande de revue que je
+me fais moi-même y apparaît.
+
+Fait pour tenir sur un écran : une ligne par PR, à la largeur du terminal
+(`#n  état  âge  action  titre`, gitmoji de tête retiré, titre coupé), rangée selon qui doit
+agir :
+
+- **À toi** — retours à traiter (changements demandés, ou fil non résolu dont le dernier
+  message n'est pas de moi), approuvée (au moins `approvals` approbations, aucun changement
+  demandé ni fil en attente de moi), à faire relire (aucun relecteur en attente), à relire
+  ou redemandée (relecture demandée à moi ou à une de mes équipes : « via @équipe » ;
+  redemandée : après une review de moi), réponse de l'auteur sur une PR que j'ai relue, et
+  mes PR en attente des autres mais avec CI en échec ou en conflit.
+- **En attente des autres** — mes PR en relecture (qui est attendu) ou en attente du
+  relecteur (fils où j'ai répondu en dernier), les PR des autres que j'ai relues (fils en
+  attente de l'auteur, approuvée par moi…).
+- **Le reste**, en une ligne : brouillons, mentions, et `sans demande` pour les dépôts
+  réglés en `others = open` (PR d'un autre, hors brouillon, sans toutes ses approbations,
+  pas relue par moi).
+
+Alertes sur mes PR, à la suite de l'état : CI ✗, conflit, en retard (sur sa base,
+comparaison par l'API REST). Avec `--all` : seulement ce sur quoi j'ai à agir (ce qui est
+à moi, et les mentions), par dépôt (le plus de lignes à moi d'abord), puis le nombre de PR
+non montrées ; `--full` : tout, comme pour un dépôt.
+
+Dépôts pris par `--all` (et hors d'un clone) : `gh-watch set board <owner | owner/repo | .>
+on | off | default` (sans argument : les réglages). Rien d'activé : tous les dépôts sauf
+ceux en `off` ; dès qu'un propriétaire ou un dépôt est activé, seulement ce qui est activé.
+Le réglage d'un dépôt l'emporte sur celui de son propriétaire. Filtré dès la recherche
+légère : un dépôt écarté ne coûte pas son détail. Un dépôt donné, ou le dépôt courant,
+n'est jamais filtré.
+
+Chaque ligne dit depuis quand (dernière demande, premier retour sans réponse, N-ième
+approbation…), avec ⚠ quand quelqu'un attend une action depuis plus de `stale_days` jours
+ouvrés (2 par défaut, week-ends exclus ; pas sur un brouillon, une mention ou une PR
+relue), et l'action proposée : le skill du watcher qui
+prend l'état en charge (`board` de `watchlib.configure` : `review-watch` pour à relire,
+redemandée et retours ; `tidy-watch` pour approuvée), celui qu'un watcher propose pour un
+état ou une alerte (`suggest` : `/git-tidy:pr-sync` pour une PR en retard), sinon un texte
+(relancer, demander une relecture). Le `--json` donne aussi le libellé long (`detail`) et
+qui doit agir (`bucket`). Watcher absent : l'état s'affiche sans action. Seuil
+d'approbations : celui de `tidy-watch` (`approvals` du dépôt ou par défaut), sinon 2.
+
+Coût : une recherche (identifiants seulement) puis le détail par `nodes(ids:)`, une
+vingtaine de points GraphQL pour une dizaine de PR, plus un appel REST par PR à moi.
+
+Réglages (`~/.config/claude-tools/gh-watch.json`, `GH_WATCH_CONFIG`) :
+`gh-watch set stale_days [<n> | default]`, `gh-watch set board …` (ci-dessus) et
+`gh-watch set others <owner/repo | .> [open | requested | default]`.
 
 ### `git-tidy`
 

@@ -42,7 +42,8 @@ S = SimpleNamespace()  # réglages du watcher, posés par configure()
 
 
 def configure(name, env, self_path, kinds, skill, label, tab, defaults, announce, tell,
-              guess_kind, config=None, worktrees=None, detached=(), extra=None, default_kinds=None, repo_extra=None):
+              guess_kind, config=None, worktrees=None, detached=(), extra=None, default_kinds=None, repo_extra=None,
+              board=None, suggest=None):
     """name : nom de la commande (review-watch) ; env : préfixe des variables d'environnement
     (REVIEW_WATCH : _CONFIG, _STATE, _NOTIFY_LOG) ; config : nom du fichier de config dans
     ~/.config/claude-tools/ (<name>.json par défaut) ; worktrees : dossier des worktrees
@@ -53,7 +54,10 @@ def configure(name, env, self_path, kinds, skill, label, tab, defaults, announce
     événement donné ; detached : événements lancés sur une branche agent/ à la
     tête de la PR (relecture), les autres sur la branche de la PR ; default_kinds : événements
     d'`auto` sans événement (tous par défaut) ; repo_extra(cfg, repo) : texte ajouté aux
-    lignes de dépôt ; extra : dict ajouté à `repos --json` (repo → dict)."""
+    lignes de dépôt ; extra : dict ajouté à `repos --json` (repo → dict) ; board : états du
+    tableau de `gh-watch board` que le watcher prend en charge (état → kind) ; suggest :
+    skill proposé par le tableau pour un état ou une alerte sans événement (« behind » →
+    « git-tidy:pr-sync »)."""
     cfgdir = os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config")
     S.name, S.env, S.self = name, env, os.path.realpath(self_path)
     S.config = os.environ.get(f"{env}_CONFIG") or os.path.join(cfgdir, "claude-tools", config or f"{name}.json")
@@ -70,6 +74,7 @@ def configure(name, env, self_path, kinds, skill, label, tab, defaults, announce
     S.guess_kind = guess_kind
     S.repo_extra = repo_extra or (lambda cfg, repo: "")
     S.extra = extra or (lambda cfg, repo: {})
+    S.board, S.suggest = board or {}, suggest or {}
 
 
 def die(msg, code=1):
@@ -649,7 +654,8 @@ def status_data(cfg, state):
     return {"name": S.name, "timer": S.timer, "state": timer_state(), "interval": interval(cfg),
             "last": state.get("since"), "next": next_run(), "kinds": list(S.kinds),
             "default": {**{k: v for k, v in {**S.defaults, **cfg.get("default", {})}.items()}},
-            "repos": repos, "sessions": sessions, "history": state.get("history", [])}
+            "repos": repos, "sessions": sessions, "history": state.get("history", []),
+            "skill": S.skill, "board": S.board, "suggest": S.suggest}
 
 
 def cmd_status(cfg, state, as_json=False):
