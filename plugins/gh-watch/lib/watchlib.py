@@ -56,7 +56,7 @@ def configure(name, env, self_path, kinds, skill, label, tab, defaults, announce
     d'`auto` sans événement (tous par défaut) ; repo_extra(cfg, repo) : texte ajouté aux
     lignes de dépôt ; extra : dict ajouté à `repos --json` (repo → dict) ; board : états du
     tableau de `gh-watch board` que le watcher prend en charge (état → kind) ; suggest :
-    skill proposé par le tableau pour un état ou une alerte sans événement (« behind » →
+    skill proposé par le tableau pour un état ou une alerte, sans le lancer (« behind » →
     « git-tidy:pr-sync »)."""
     cfgdir = os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config")
     S.name, S.env, S.self = name, env, os.path.realpath(self_path)
@@ -366,9 +366,10 @@ def pid_alive(pid):
         return False
 
 
-def launch(cfg, state, repo, n, kind, at=None):
-    """Lance la session de `kind` sur la PR (`at` : date de l'événement). Retourne une ligne
-    de compte rendu."""
+def launch(cfg, state, repo, n, kind, at=None, background=False):
+    """Lance la session de `kind` sur la PR (`at` : date de l'événement) : herdr s'il tourne,
+    sinon (ou avec background) analyse en fond (--prepare) reprise au clic de la
+    notification. Retourne une ligne de compte rendu."""
     key = key_of(repo, n, kind)
     prev = state["sessions"].get(key)
     if prev and herdr_alive(prev):
@@ -389,7 +390,7 @@ def launch(cfg, state, repo, n, kind, at=None):
     if pr["state"] != "OPEN":
         return f"{key} : PR {pr['state'].lower()}"
     prompt = f"/{S.skill[kind]} {n}"
-    if herdr_running():
+    if herdr_running() and not background:
         if kind in S.detached:
             run(["git", "-C", clone, "fetch", "-q", "origin", f"pull/{n}/head"], check=False)
             branch, base = f"agent/review-{n}-{slug(pr['title'])}", pr["headRefOid"]
@@ -503,6 +504,12 @@ def record(state, kind, repo, n, action, detail="", title="", at=None):
     h.append({"when": iso(now()), "key": key, "kind": kind, "repo": repo, "n": n,
               "action": action, "detail": detail, "title": title, "event_at": at})
     del h[:-HISTORY]
+
+
+def mark(state, kind, repo, n, at):
+    """Retient l'événement `at` comme traité (sans reculer une date plus récente)."""
+    k = f"{repo}#{n}"
+    state[kind][k] = max(state[kind].get(k) or "", at)
 
 
 def dispatch(cfg, state, events, dry_run=False, seed=False):
@@ -785,6 +792,13 @@ def main(doc, events, extend=None, handle=None):
         c = sub.add_parser(name)
         c.add_argument("target", nargs="?" if name == "resume" else None)
         c.add_argument("kind", nargs="?", choices=S.kinds)
+        if name == "launch":
+            c.add_argument("--at")
+            c.add_argument("--background", action="store_true")
+    sk = sub.add_parser("skip")
+    sk.add_argument("target")
+    sk.add_argument("kind", choices=S.kinds)
+    sk.add_argument("--at", required=True)
     sub.add_parser("_run").add_argument("key")
     sub.add_parser("_notify").add_argument("payload")
     if extend:
@@ -876,7 +890,22 @@ def _main(cfg, args, events, handle):
         with State() as state:
             repo, n = split_target(args.target, state)
             kind = args.kind or S.guess_kind(state, repo, n)
-            print(launch(cfg, state, repo, n, kind))
+            try:
+                line = launch(cfg, state, repo, n, kind, args.at, args.background)
+            except Exception as e:
+                record(state, kind, repo, n, "échec", f"lancé à la main : {str(e)[:180]}", at=args.at)
+                raise
+            record(state, kind, repo, n, "lancé", "à la main : " + line.split(" : ", 1)[-1], at=args.at)
+            if args.at:  # événement donné (gh-watch launch) : traité, comme par poll
+                mark(state, kind, repo, n, args.at)
+            print(line)
+        return
+    if args.cmd == "skip":
+        with State() as state:
+            repo, n = split_target(args.target, state)
+            mark(state, args.kind, repo, n, args.at)
+            record(state, args.kind, repo, n, "refusé", "écarté (gh-watch skip)", at=args.at)
+            print(f"{key_of(repo, n, args.kind)} : écarté jusqu'au prochain événement")
         return
     if args.cmd == "resume":
         with State() as state:

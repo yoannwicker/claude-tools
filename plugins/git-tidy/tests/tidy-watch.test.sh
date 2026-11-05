@@ -127,4 +127,25 @@ check "default → valeur par défaut" "o/r : validation_status = En validation 
 check "auto off : réglages gardés" "null https://recette/{branch}" \
   "$(jq -r '.repos["o/r"] | "\(.approved) \(.test_env)"' "$cfg")"
 
+# skip et launch --at (gh-watch skip / launch) : date retenue, historique, sans reculer
+st=$XDG_STATE_HOME/claude-tools/tidy-watch/state.json
+"$bin" skip o/r#77 approved --at 2026-11-04T10:00:00Z >/dev/null
+check "skip : date retenue et historique « refusé »" "2026-11-04T10:00:00Z refusé" \
+  "$(jq -r '"\(.approved["o/r#77"]) \(.history[-1].action)"' "$st")"
+"$bin" skip o/r#77 approved --at 2026-11-01T10:00:00Z >/dev/null
+check "skip : une date plus ancienne ne recule pas" "2026-11-04T10:00:00Z" "$(jq -r '.approved["o/r#77"]' "$st")"
+check "skip sans --at → erreur" 2 "$("$bin" skip o/r#77 approved >/dev/null 2>&1; echo $?)"
+"$bin" launch o/r#78 approved --at 2026-11-04T12:00:00Z >/dev/null 2>&1
+check "launch --at : date retenue, historique « lancé » à la main" "2026-11-04T12:00:00Z lancé à la main" \
+  "$(jq -r '"\(.approved["o/r#78"]) \(.history[-1].action) \(.history[-1].detail | split(" :")[0])"' "$st")"
+
+# launch --background : analyse en fond même quand herdr tourne
+rm -f "$tmp/claude-calls" "$tmp/notifs"
+printf '#!/usr/bin/env bash\n[ "$1 $2" = "status server" ] && echo "status: running" && exit 0\nexit 1\n' > "$tmp/fakebin/herdr"
+"$bin" launch o/r#79 approved --background >/dev/null 2>&1
+for _ in $(seq 50); do grep -q ' 79 --prepare' "$tmp/claude-calls" 2>/dev/null && break; sleep 0.1; done
+check "launch --background avec herdr en marche → analyse en fond (--prepare)" "-p /git-tidy:ready 79 --prepare" \
+  "$(grep ' 79 --prepare' "$tmp/claude-calls" | cut -d' ' -f2-5)"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/fakebin/herdr"
+
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

@@ -30,7 +30,12 @@ Mécanique commune avec review-watch : lib/watchlib.py du plugin gh-watch.
   tidy-watch enable | disable                timer systemd (enable : état initial d'abord)
   tidy-watch interval [<minutes>]            fréquence du scan (5 par défaut), appliquée au timer
   tidy-watch poll [--dry-run]                un passage
-  tidy-watch launch <owner/repo#n | n>
+  tidy-watch launch <owner/repo#n | n> [approved] [--at <date>] [--background]
+                                             (--at : date de l'événement, alors retenu
+                                             comme traité ; --background : analyse en fond
+                                             même si herdr tourne)
+  tidy-watch skip <owner/repo#n | n> approved --at <date>
+                                             écarter cet événement (gh-watch skip)
   tidy-watch resume [<owner/repo#n>]         session préparée en fond
 """
 import os, sys

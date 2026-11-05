@@ -1,6 +1,6 @@
 # gh-watch : tableau de bord des PR (`board`), actions manquées et rattrapage
 
-- **Statut** : en cours (étapes 1 et 2 faites)
+- **Statut** : en cours (étapes 1 à 3 faites, liste interactive comprise)
 - **Origine** : idée (2026-11-05), fusion de
   [review : faire le point sur mes PR](2-review-point-mes-pr.md),
   [gh-watch : vue des PR en cours](3-gh-watch-vue-pr.md),
@@ -76,7 +76,7 @@ Tri par ancienneté dans chaque groupe ; ⚠ au-delà de `stale_days` (2 par dé
 | `… --missed --launch` | les lance toutes (`<watcher> launch`) ; `--launch` sans `--missed` : refusé |
 | `… --skipped` | montre aussi les lignes écartées |
 | `gh-watch launch <repo#n> [état]` | lance une ligne par le watcher qui la gère |
-| `gh-watch board skip <repo#n> [état] [--until-closed]` / `unskip …` | écarter / réintégrer |
+| `gh-watch skip <repo#n> [--until-closed]` / `unskip <repo#n>` | écarter / réintégrer |
 | `/gh-watch:board [<owner/repo>\|--all] [--auto\|--missed] [--launch]` | la même vue dans Claude ; avec `--missed`, sélection multiple des lignes à lancer ou écarter (non cochée : rien d'enregistré, revient au prochain point) ; `--launch` : tout sans demander |
 | `/gh-watch:board-auto on\|off` | rattrapage automatique (étape 5) |
 
@@ -124,7 +124,7 @@ si l'arborescence change).
    - `review-watch`, `tidy-watch` : déclaration `board=…`.
 3. **Actions.**
    - `watchlib` : sous-commande commune `skip <repo#n> <kind> --at <date>`.
-   - `gh-watch launch`, `board --missed --launch`, `board skip|unskip` (état gh-watch pour
+   - `gh-watch launch`, `board --missed --launch`, `skip|unskip` (état gh-watch pour
      les états sans watcher, `--until-closed`), `--skipped`.
    - `/gh-watch:board --missed` : sélection (`AskUserQuestion`, 16 lignes au plus par
      tour), lancer / écarter ; `--launch`.
@@ -162,7 +162,23 @@ si l'arborescence change).
   qu'une ligne ignorée à l'activation ; un événement plus récent que l'intervalle du
   watcher + 5 min attend son passage (« au prochain passage »). Le suivi (`watch`) est
   calculé dans `board.py` (testé sans réseau). Commande affichée pour lancer :
-  `<watcher> launch` en attendant `gh-watch launch` (étape 3) (2026-11-05).
+  `gh-watch launch <repo#n>` depuis l'étape 3 (2026-11-05).
+
+- Étape 3 : `skip`, `unskip`, `launch` sont des commandes de premier niveau
+  (`gh-watch skip`, pas `gh-watch board skip`) ; une PR n'a qu'un état, donc pas
+  d'argument d'état. `gh-watch unskip` ne relance rien et ne recule pas la date retenue
+  par le watcher (la ligne apparaît « écartée » dans `--auto`, `gh-watch launch` pour la
+  lancer). Dans le skill, une question par ligne manquée plutôt qu'une sélection multiple :
+  lancer, écarter, écarter jusqu'à la fermeture, plus tard (2026-11-05).
+- Liste interactive (`gh-watch board -i`, curses) plutôt qu'un skill ou un panneau dans
+  Claude : agir sur toutes les lignes, pas seulement les manquées ; `f` lance en fond
+  (`--background` : analyse `--prepare` même si herdr tourne, puis notification). Seules
+  les lignes dont un watcher gère l'état se lancent ; le rebase (`/git-tidy:pr-sync`)
+  reste proposé à la main, en attendant [pr-sync-auto](2-git-tidy-pr-sync-auto.md)
+  (2026-11-05).
+- `/gh-watch:board -i` lance aussi la liste : le Bash de Claude n'a pas de terminal, donc
+  pane herdr sous la session (fermé en quittant la liste) ; sans herdr, une question par
+  ligne dans Claude, comme `--missed` mais sur tout ce qui est à moi (2026-11-05).
 
 ## À trancher
 

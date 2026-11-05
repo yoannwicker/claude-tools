@@ -5,6 +5,7 @@ import datetime as dt, os, sys, unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
 import board as b  # noqa: E402
+import tui  # noqa: E402
 
 ME = "moi"
 
@@ -202,7 +203,7 @@ class Follow(unittest.TestCase):
 
     def test_not_seen_is_missed(self):
         f = self.follow()
-        self.assertEqual((f["follow"], f["missed"], f["command"]), ("pas vue", True, "review-watch launch O/R#5 review"))
+        self.assertEqual((f["follow"], f["missed"], f["command"]), ("pas vue", True, "gh-watch launch O/R#5"))
 
     def test_handled_case_insensitive(self):
         f = self.follow(handled={"o/r#5": EV})
@@ -245,6 +246,72 @@ class Follow(unittest.TestCase):
 
     def test_state_without_watcher(self):
         self.assertIsNone(b.watch([{**row(), "state": "draft"}], [watcher()], NOW)[0]["watch"])
+
+
+class Tui(unittest.TestCase):
+    def rows(self):
+        return [{"repo": "a/x", "n": 1, "bucket": "me", "short": "à relire"},
+                {"repo": "a/x", "n": 2, "bucket": "others", "short": "en relecture"},
+                {"repo": "b/y", "n": 3, "bucket": "me", "short": "approuvée"}]
+
+    def model(self):
+        return tui.Model(self.rows(), lambda r: [f"#{r['n']}", r["short"], "1 h", "", "titre"], True)
+
+    def test_keys(self):
+        self.assertEqual([tui.key_action(k) for k in ("z", "s", "\n", "f", "x", "X", "u", "r", "q", "\x1b", "w")],
+                         ["up", "down", "launch", "background", "skip", "skip_closed", "unskip", "refresh",
+                          "quit", "quit", None])
+        self.assertEqual((tui.key_action(tui.curses.KEY_UP), tui.key_action(tui.curses.KEY_DOWN), tui.key_action(10)),
+                         ("up", "down", "launch"))
+
+    def test_lines_grouped_by_repo_and_bucket(self):
+        lines = self.model().lines()
+        self.assertEqual([c if i is None else i for c, i in lines],
+                         ["a/x", " À toi", 0, " En attente des autres", 1, "b/y", " À toi", 2])
+
+    def test_move_clamped(self):
+        m = self.model()
+        tui.apply(m, "up", None)
+        self.assertEqual(m.sel, 0)
+        for _ in range(5):
+            tui.apply(m, "down", None)
+        self.assertEqual(m.sel, 2)
+
+    def test_actions(self):
+        calls = []
+
+        class Ops:
+            @staticmethod
+            def launch(r, background):
+                calls.append(("launch", r["n"], background))
+                return r["n"] != 2, f"lancé {r['n']}" if r["n"] != 2 else "pas d'action à lancer"
+
+            @staticmethod
+            def skip(r, until_closed):
+                calls.append(("skip", r["n"], until_closed))
+                return "écartée"
+
+            @staticmethod
+            def unskip(r):
+                return False, "pas écartée"
+
+            @staticmethod
+            def refresh():
+                return [{"repo": "a/x", "n": 9, "bucket": "me", "short": "x"}]
+        m = self.model()
+        tui.apply(m, "background", Ops)
+        tui.apply(m, "down", Ops)
+        tui.apply(m, "launch", Ops)
+        tui.apply(m, "down", Ops)
+        tui.apply(m, "skip_closed", Ops)
+        tui.apply(m, "unskip", Ops)
+        self.assertEqual(calls, [("launch", 1, True), ("launch", 2, False), ("skip", 3, True)])
+        self.assertEqual(m.notes, {0: "en fond", 2: "écartée jusqu'à la fermeture"})  # 2 : échec, pas noté
+        self.assertEqual(m.msg, "pas écartée")
+        self.assertIn("· en fond", m.lines()[2][0][1])
+        tui.apply(m, "refresh", Ops)
+        self.assertEqual((m.sel, m.notes, len(m.rows)), (0, {}, 1))
+        self.assertFalse(tui.apply(m, "quit", Ops))
 
 
 if __name__ == "__main__":

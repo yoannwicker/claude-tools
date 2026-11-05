@@ -363,7 +363,7 @@ def follow(r, d, kind, now):
         out.update(follow=text, missed=missed, command=command)
         return out
 
-    launch = f"{d['name']} launch {repo}#{n} {kind}"
+    launch = f"gh-watch launch {repo}#{n}"
     if mode == "off":
         return done("mode off")
     if not ev:
@@ -384,6 +384,8 @@ def follow(r, d, kind, now):
             return done(f"échec {_local(last['when'])}", True, launch)
         if a == "ignoré":
             return done(f"ignorée ({last.get('detail') or 'ignoré'})", True, launch)
+        if a == "refusé":
+            return done(f"écartée {_local(last['when'])}")
         if a == "notifié":
             return done(f"notifiée {_local(last['when'])}, pas lancée", True, launch)
     if handled >= ev:

@@ -6,8 +6,9 @@ bin=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bin/gh-watch
 fails=0
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-export GH_WATCH_DIR=$tmp/watchers.d GH_WATCH_CONFIG=$tmp/gh-watch.json PATH=$tmp/fakebin:$PATH
+export GH_WATCH_DIR=$tmp/watchers.d GH_WATCH_CONFIG=$tmp/gh-watch.json GH_WATCH_STATE=$tmp/gh-watch-state.json PATH=$tmp/fakebin:$PATH
 mkdir -p "$GH_WATCH_DIR" "$tmp/fakebin"
+unset HERDR_PANE_ID  # jamais le vrai herdr de la session qui lance les tests
 
 check() { # check <libellé> <attendu> <obtenu>
   if [ "$2" = "$3" ]; then printf 'ok    %s\n' "$1"
@@ -23,7 +24,8 @@ case "\$1 \${2:-}" in
 {"name": "$1", "timer": "$1.timer", "state": "$2", "interval": 5,
  "last": "2026-11-05T07:00:00Z", "next": "2026-11-05T07:05:00Z", "kinds": ["approved"],
  "default": {"approved": "off"},
- "skill": {"approved": "git-tidy:ready"}, "board": {"approved": "approved"}, "suggest": {"behind": "git-tidy:pr-sync"},
+ "skill": {"approved": "git-tidy:ready"}, "board": {"approved": "approved"},
+ "suggest": {"behind": "git-tidy:pr-sync"},
  "repos": [{"repo": "o/r", "approved": "auto", "approvals": 2, "path": "/x"}],
  "sessions": [{"key": "o/r#3:approved", "mode": "background", "status": "ready",
                "resume": "$1 resume o/r#3 approved", "launched": "2026-11-05T06:00:00Z"}],
@@ -35,6 +37,8 @@ case "\$1 \${2:-}" in
 J
   ;;
   "poll --dry-run") echo "o/r#4 (approved, auto) : lancerait" ;;
+  launch\ *) echo "$1 \$*" >> "$tmp/calls.log"; echo "\$2:\$3 : lancé ($1)" ;;
+  skip\ *) echo "$1 \$*" >> "$tmp/calls.log"; echo "écarté" ;;
   *) exit 2 ;;
 esac
 EOF
@@ -74,10 +78,12 @@ case "$*" in
     q=$(cat)
     case "$q" in
       *'search('*) echo "$q" >> "${GH_FAKE_LOG:-/dev/null}"
-        echo '{"data": {"mine": {"nodes": [{"id": "A", "repository": {"nameWithOwner": "o/r"}}]},
+        extra=; [ -n "${GH_FAKE_EXTRA:-}" ] && extra=', {"id": "C", "repository": {"nameWithOwner": "o/r"}}'
+        echo '{"data": {"mine": {"nodes": [{"id": "A", "repository": {"nameWithOwner": "o/r"}}'"$extra"']},
           "requested": {"nodes": [{"id": "B", "repository": {"nameWithOwner": "o/r"}}]},
           "reviewed": {"nodes": []}, "mentioned": {"nodes": []}, "viewer": {"login": "moi"}}}' ;;
-      *'nodes(ids'*) cat "$(dirname "$0")/../nodes.json" ;;
+      *'nodes(ids'*) if [ -n "${GH_FAKE_EXTRA:-}" ]; then cat "$(dirname "$0")/../nodes-extra.json"
+                     else cat "$(dirname "$0")/../nodes.json"; fi ;;
     esac ;;
   api\ repos/o/r/compare/*) echo 3 ;;
   "repo view --json nameWithOwner --jq .nameWithOwner") [ -z "${GH_FAKE_NOREPO:-}" ] && echo O/R || exit 1 ;;
@@ -133,10 +139,66 @@ check "set stale_days invalide → erreur" 1 "$("$bin" set stale_days zéro >/de
 
 check "board --auto : seulement les états suivis par un watcher" "#7" "$("$bin" board --auto | awk '{print $1}' | paste -sd'|')"
 check "board --missed : approuvée jamais vue → commande de lancement" 1 \
-  "$("$bin" board --missed | grep -c 'auto  manquée : pas vue  a-watch launch o/r#7 approved')"
+  "$("$bin" board --missed | grep -c 'auto  manquée : pas vue  gh-watch launch o/r#7')"
 check "board --missed --json : suivi" "a-watch approved auto true" \
   "$("$bin" board --missed --json | jq -r '.prs[0].watch | "\(.watcher) \(.kind) \(.mode) \(.missed)"')"
 check "board --auto et --missed ensemble → erreur" 2 "$("$bin" board --auto --missed >/dev/null 2>&1; echo $?)"
+# --- launch, skip, unskip ---
+: > "$tmp/calls.log"
+check "launch : par le watcher qui gère l'état, événement retenu" "o/r#7:approved : lancé (a-watch)|a-watch launch o/r#7 approved --at 2026-11-04T11:00:00Z" \
+  "$({ "$bin" launch o/r#7; cat "$tmp/calls.log"; } | paste -sd'|')"
+check "launch : n seul → dépôt courant ; ligne sans action → refus" "1 1" \
+  "$("$bin" launch 9 >/dev/null; echo $?) $("$bin" launch 9 | grep -c "pas d'action à lancer")"
+check "launch : PR absente du tableau → erreur" 1 "$("$bin" launch o/r#42 >/dev/null 2>&1; echo $?)"
+: > "$tmp/calls.log"
+"$bin" board --missed --launch >/dev/null
+check "board --missed --launch : lance les manquées" "a-watch launch o/r#7 approved --at 2026-11-04T11:00:00Z" "$(cat "$tmp/calls.log")"
+check "board --launch sans --missed → erreur" 1 "$("$bin" board --launch >/dev/null 2>&1; echo $?)"
+: > "$tmp/calls.log"
+check "skip : jusqu'au prochain événement" "o/r#7 (approuvée 2/2) : écartée jusqu'au prochain événement" "$("$bin" skip o/r#7)"
+check "skip : relayé au watcher" "a-watch skip o/r#7 approved --at 2026-11-04T11:00:00Z" "$(cat "$tmp/calls.log")"
+out=$("$bin" board --missed)
+check "écartée : masquée, comptée" "aucune action manquée sur o/r|(1 écartée(s) : --skipped pour les voir, gh-watch unskip <repo#n>)" \
+  "$(paste -sd'|' <<<"$out")"
+check "--skipped : montrée" 1 "$("$bin" board --skipped | grep -c '#7  écartée : approuvée 2/2')"
+check "unskip" "o/r#7 : réintégrée (pour la lancer : gh-watch launch o/r#7)" "$("$bin" unskip o/r#7)"
+check "unskip d'une ligne non écartée → erreur" 1 "$("$bin" unskip o/r#7 >/dev/null 2>&1; echo $?)"
+check "skip --until-closed" "o/r#9 (à relire) : écartée jusqu'à la fermeture de la PR" "$("$bin" skip 9 --until-closed)"
+check "écartée jusqu'à la fermeture : masquée" 0 "$("$bin" board | grep -c '#9')"
+jq '.skipped["o/r#99"] = {"state": "to_review", "event": "x", "until_closed": true}' "$GH_WATCH_STATE" > "$tmp/s" && mv "$tmp/s" "$GH_WATCH_STATE"
+"$bin" board >/dev/null
+check "écart d'une PR fermée oublié, les autres gardés" "o/r#9" "$(jq -r '.skipped | keys | join(" ")' "$GH_WATCH_STATE")"
+"$bin" unskip 9 >/dev/null
+
+# --- toute action proposée se lance ; en fond au choix ; -i ---
+jq '.data.nodes += [.data.nodes[0] | .id = "C" | .number = 8 | .title = "En retard" | .latestOpinionatedReviews.nodes = []]' \
+  "$tmp/nodes.json" > "$tmp/nodes-extra.json"
+check "à faire relire et en retard → /git-tidy:pr-sync proposé, pas lançable" "1|o/r#8 (à faire relire) : pas d'action à lancer (/git-tidy:pr-sync 8)" \
+  "$(GH_FAKE_EXTRA=1 "$bin" launch o/r#8 >/dev/null; echo $?)|$(GH_FAKE_EXTRA=1 "$bin" launch o/r#8)"
+check "launch d'une ligne sans action → refus" "1|o/r#9 (à relire) : pas d'action à lancer" \
+  "$("$bin" launch 9 >/dev/null; echo $?)|$("$bin" launch 9)"
+: > "$tmp/calls.log"
+"$bin" board --missed --launch --background >/dev/null
+check "board --missed --launch --background" "a-watch launch o/r#7 approved --at 2026-11-04T11:00:00Z --background" "$(cat "$tmp/calls.log")"
+check "--background sans --launch → erreur" 1 "$("$bin" board --background >/dev/null 2>&1; echo $?)"
+check "board -i hors terminal, sans herdr → erreur" "gh-watch: board -i : il faut un terminal (ou herdr)" "$("$bin" board -i 2>&1 </dev/null)"
+cat > "$tmp/fakebin/herdr" <<EOF
+#!/usr/bin/env bash
+echo "herdr \$*" >> "$tmp/herdr.log"
+case "\$1 \$2" in
+  "status server") echo "status: running" ;;
+  "pane split") echo '{"result": {"pane": {"pane_id": "w1:p2"}}}' ;;
+esac
+EOF
+chmod +x "$tmp/fakebin/herdr"
+out=$(HERDR_PANE_ID=w1:p1 "$bin" board o/r --missed -i 2>&1 </dev/null)
+check "board -i hors terminal, dans herdr → pane ouvert sous la session" \
+  "liste ouverte dans un pane herdr sous la session (w1:p2) : q pour la fermer" "$out"
+check "… qui relance la liste avec les mêmes options" 1 \
+  "$(grep -c "^herdr pane run w1:p2 exec sh -c '$bin board o/r --missed -i ||" "$tmp/herdr.log")"
+rm "$tmp/fakebin/herdr"
+check "board -i --json → erreur" 1 "$("$bin" board -i --json >/dev/null 2>&1; echo $?)"
+
 check "set board o off → dépôts écartés" "aucune PR ouverte qui te concerne (dépôts filtrés : gh-watch set board)" \
   "$("$bin" set board o off >/dev/null; "$bin" board --all)"
 check "board <dépôt> : jamais filtré" 1 "$("$bin" board o/r | grep -c '^o/r')"

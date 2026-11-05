@@ -34,7 +34,25 @@ posé par le setup.sh de son plugin (./install.sh plugin <plugin>) : gh-watch le
                                            traitée, manquée
   gh-watch board … --missed                seulement les manquées (pas vues, échec, ignorées,
                                            notifiées sans session), avec la commande pour
-                                           les lancer
+                                           les lancer (gh-watch launch)
+  gh-watch board … --missed --launch [--background]
+                                           lance toutes les manquées (comme gh-watch launch)
+  gh-watch board … --skipped               montre aussi les lignes écartées
+  gh-watch board … -i                      liste interactive (mêmes filtres) : ↑↓ ou z/s,
+                                           Entrée lancer, f lancer en fond, x écarter, X
+                                           jusqu'à la fermeture, u réintégrer, r rafraîchir,
+                                           q quitter ; sans terminal (session Claude) :
+                                           ouverte dans un pane herdr sous la session
+  gh-watch launch <owner/repo#n | n> [--background]
+                                           lance l'action proposée par le watcher qui gère
+                                           l'état (événement retenu comme traité) : herdr,
+                                           sinon (ou --background) analyse en fond jusqu'à ce
+                                           qu'il faille valider, puis notification
+  gh-watch skip <owner/repo#n | n> [--until-closed]
+                                           écarte la ligne jusqu'au prochain événement (ou
+                                           jusqu'à la fermeture de la PR) ; le watcher qui
+                                           gère son état ne la lancera pas non plus
+  gh-watch unskip <owner/repo#n | n>       la réintègre
   gh-watch set stale_days [<n> | default]  seuil du ⚠ en jours ouvrés (2 par défaut)
   gh-watch set board [<owner> | <owner/repo> | .] [on | off | default]
                                            dépôts pris par board --all (sans argument :
@@ -49,7 +67,7 @@ posé par le setup.sh de son plugin (./install.sh plugin <plugin>) : gh-watch le
 
 Config : ~/.config/claude-tools/gh-watch.json (GH_WATCH_CONFIG).
 """
-import argparse, json, os, re, shutil, subprocess, sys
+import argparse, json, os, re, shlex, shutil, subprocess, sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
 import watchlib as w  # noqa: E402
@@ -58,6 +76,9 @@ import board as b  # noqa: E402
 CFGDIR = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "claude-tools")
 WATCHERS = os.environ.get("GH_WATCH_DIR") or os.path.join(CFGDIR, "watchers.d")
 CONFIG = os.environ.get("GH_WATCH_CONFIG") or os.path.join(CFGDIR, "gh-watch.json")
+# Lignes écartées (gh-watch skip) : {"repo#n": {state, event, until_closed, when}}
+STATE = os.environ.get("GH_WATCH_STATE") or os.path.join(
+    os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "claude-tools", "gh-watch", "state.json")
 STALE_DAYS = 2
 APPROVALS = 2
 
@@ -214,16 +235,18 @@ def approvals_for(data):
 
 
 def actions(rows, data):
-    """Action proposée par ligne : le skill du watcher qui prend l'état en charge (ou le
-    propose, `suggest`, pour un état ou une alerte), sinon un texte."""
+    """Action proposée par ligne : l'événement du watcher qui prend l'état en charge
+    ({watcher, kind, command} : se lance par gh-watch launch, board -i), sinon le skill
+    qu'un watcher propose pour un état ou une alerte (`suggest` : {command}, à lancer soi-même),
+    sinon un texte."""
     handled, suggested = {}, {}
     for d in data:
         if d.get("error"):
             continue
         for state, kind in (d.get("board") or {}).items():
             handled.setdefault(state, (d["name"], kind, d["skill"][kind]))  # premier watcher déclaré
-        for k, v in (d.get("suggest") or {}).items():
-            suggested.setdefault(k, v)
+        for k, skill in (d.get("suggest") or {}).items():
+            suggested.setdefault(k, skill)
     for r in rows:
         if r["state"] in handled:
             name, kind, skill = handled[r["state"]]
@@ -267,8 +290,50 @@ def board_data(repo=None, fallback=False):
     login, items = b.fetch(repo, open_repos, active)
     stale = cfg.get("stale_days", STALE_DAYS)
     rows = b.watch(actions(b.build(login, items, approvals_for(data), stale), data), data)
+    skipped = apply_skips(rows, lambda r: same_repo(r, repo) if repo else (not active or active(r)))
     return {"login": login, "repo": repo, "fallback": fallback, "filtered": bool(active), "stale_days": stale,
-            "generated": w.iso(w.now()), "prs": rows}
+            "generated": w.iso(w.now()), "prs": rows, "skipped": skipped,
+            "scripts": {d["name"]: d["script"] for d in data if d.get("script")}}
+
+
+def same_repo(a, b_):
+    return a.lower() == (b_ or "").lower()
+
+
+def skip_key(r):
+    return f"{r['repo']}#{r['n']}".lower()
+
+
+def apply_skips(rows, in_scope):
+    """Marque `skipped` les lignes écartées (gh-watch skip) : jusqu'à la fermeture, ou tant
+    que ni l'état ni son événement n'ont changé. Oublie les écarts devenus caducs (PR
+    fermée, ou nouvel événement) parmi les dépôts couverts par ce passage. Retourne le
+    nombre de lignes écartées."""
+    st = w.load_json(STATE)
+    skips = st.get("skipped", {})
+    seen, n = set(), 0
+    for r in rows:
+        k = skip_key(r)
+        s = skips.get(k)
+        seen.add(k)
+        if not s:
+            r["skipped"] = False
+            continue
+        r["skipped"] = s.get("until_closed") or (s["state"] == r["state"] and s["event"] == event_of(r))
+        if r["skipped"]:
+            n += 1
+        else:
+            del skips[k]
+    for k in [k for k in skips if k not in seen and in_scope(k.split("#")[0])]:
+        del skips[k]
+    if skips != w.load_json(STATE).get("skipped", {}):
+        st["skipped"] = skips
+        w.save_json(STATE, st)
+    return n
+
+
+def event_of(r):
+    return r.get("event_at") or r.get("since")
 
 
 def age(days):
@@ -289,7 +354,8 @@ def cells(r):
     """[#n, état, âge, action, titre] d'une ligne du tableau."""
     a = r.get("action") or {}
     act = (a.get("command") or "").split(" ")[0] or a.get("text") or ""
-    return [f"#{r['n']}", r["short"] + "".join(f", {SHORT_ALERT[x]}" for x in r["alerts"]),
+    return [f"#{r['n']}", ("écartée : " if r.get("skipped") else "") + r["short"]
+            + "".join(f", {SHORT_ALERT[x]}" for x in r["alerts"]),
             age(r["age_days"]) + (" ⚠" if r["stale"] else ""), act, LEAD.sub("", r["title"])]
 
 
@@ -363,6 +429,79 @@ def show_board(d, full=False):
         print(f"+ {len(hidden)} autre(s) PR (en attente des autres, brouillons) : --full pour tout")
 
 
+def watch_cells(r):
+    """[#n, état, âge, mode, suivi, commande, titre] d'une ligne suivie par un watcher."""
+    x = r["watch"]
+    return [f"#{r['n']}", ("écartée : " if r.get("skipped") else "") + r["short"],
+            age(r["age_days"]) + (" ⚠" if r["stale"] else ""), x["mode"],
+            ("manquée : " if x["missed"] else "") + x["follow"], x["command"] or "", LEAD.sub("", r["title"])]
+
+
+def select_rows(d, args):
+    """Lignes de la liste interactive, avec les filtres de l'affichage : écartées
+    (--skipped), suivies (--auto) ou manquées (--missed), et pour --all sans --full ce sur
+    quoi j'ai à agir ; triées par dépôt (le plus de lignes à moi d'abord) puis comme le
+    tableau."""
+    rows = [r for r in d["prs"] if args.skipped or not r["skipped"]]
+    if args.auto or args.missed:
+        rows = [r for r in rows if r.get("watch") and r["watch"]["mode"] != "off"
+                and (r["watch"]["missed"] or not args.missed)]
+    elif not (d["repo"] or args.full):
+        rows = [r for r in rows if r["bucket"] == "me" or r["state"] == "mentioned"]
+    mine = {}
+    for r in rows:
+        mine[r["repo"]] = mine.get(r["repo"], 0) + (r["bucket"] == "me")
+    order = {repo: i for i, repo in enumerate(sorted(mine, key=lambda x: (-mine[x], x)))}
+    return sorted(rows, key=lambda r: order[r["repo"]])  # tri stable : l'ordre du tableau dans un dépôt
+
+
+def interactive(d, args, repo, fallback):
+    """gh-watch board -i : liste interactive (lib/tui.py)."""
+    import tui
+    state = {"d": d}
+
+    class Ops:
+        @staticmethod
+        def launch(r, background):
+            return launch_row(state["d"], r, background)
+
+        @staticmethod
+        def skip(r, until_closed):
+            return skip_row(state["d"], r, until_closed)
+
+        @staticmethod
+        def unskip(r):
+            return unskip_row(r)
+
+        @staticmethod
+        def refresh():
+            state["d"] = board_data(repo, fallback)
+            return select_rows(state["d"], args)
+    watching = args.auto or args.missed
+    scope = repo or ("tous les dépôts" + (" (hors d'un clone GitHub)" if fallback else ""))
+    title = (f"gh-watch board — {scope}" + (" — manquées" if args.missed else " — suivi" if args.auto else "")
+             + (f" — {d['skipped']} écartée(s)" if d["skipped"] and not args.skipped else ""))
+    rows = select_rows(d, args)
+    tui.run(rows, Ops, (lambda r: watch_cells(r)[:5] + watch_cells(r)[6:]) if watching else cells,
+            title, many_repos=not repo)
+
+
+def open_pane():
+    """board -i sans terminal (Bash d'une session Claude, skill /gh-watch:board -i) : ouvre
+    la liste dans un pane herdr sous celui de la session, qui se ferme en quittant la liste.
+    Retourne le message, None sans herdr."""
+    pane = os.environ.get("HERDR_PANE_ID")
+    if not pane or not w.herdr_running():
+        return None
+    new = w.herdr("pane", "split", pane, "--direction", "down", "--cwd", os.getcwd())["pane"]["pane_id"]
+    cmd = shlex.join([os.path.realpath(sys.argv[0]), *sys.argv[1:]])
+    # exec : le pane se ferme avec la liste ; une erreur reste lisible jusqu'à Entrée
+    keep = ' || { printf "\\n(Entrée pour fermer) "; read x; }'
+    w.run(["herdr", "pane", "run", new, "exec sh -c " + shlex.quote(cmd + keep)])
+    subprocess.run(["herdr", "pane", "focus", "--pane", pane, "--direction", "down"], capture_output=True)
+    return f"liste ouverte dans un pane herdr sous la session ({new}) : q pour la fermer"
+
+
 def show_watch(d, missed):
     """--auto / --missed : par dépôt, une ligne par PR suivie par un watcher —
     #n, état, âge, mode, suivi, commande (lancer si manquée, reprendre si prête), titre."""
@@ -374,12 +513,7 @@ def show_watch(d, missed):
         print(("aucune action manquée" if missed else "aucune PR suivie par un watcher en auto ou notify")
               + (f" sur {d['repo']}" if d["repo"] else ""))
         return
-    table = {}
-    for r in rows:
-        x = r["watch"]
-        table[id(r)] = [f"#{r['n']}", r["short"], age(r["age_days"]) + (" ⚠" if r["stale"] else ""),
-                        x["mode"], ("manquée : " if x["missed"] else "") + x["follow"], x["command"] or "",
-                        LEAD.sub("", r["title"])]
+    table = {id(r): watch_cells(r) for r in rows}
     widths = [max(len(c[i]) for c in table.values()) for i in range(6)]
     room = max(20, shutil.get_terminal_size((120, 20)).columns - 2 - sum(widths) - 2 * 6)
     for repo in sorted({r["repo"] for r in rows}):
@@ -390,6 +524,93 @@ def show_watch(d, missed):
                 c = table[id(r)]
                 title = c[6] if len(c[6]) <= room else c[6][:room - 1] + "…"
                 print("  " + "  ".join(v.ljust(wd) for v, wd in zip(c[:6], widths)) + "  " + title)
+
+
+def target(arg):
+    """« owner/repo#n », « #n » ou « n » (dépôt courant) → (dépôt, n)."""
+    m = re.fullmatch(r"(?:([\w.-]+/[\w.-]+))?#?(\d+)", arg)
+    if not m:
+        die(f"PR attendue : owner/repo#n ou n (dépôt courant), pas « {arg} »")
+    return (m.group(1) or current_repo() or die("dossier courant : pas un clone d'un dépôt GitHub")).lower(), int(m.group(2))
+
+
+def find_row(arg):
+    repo, n = target(arg)
+    try:
+        d = board_data(repo)
+    except RuntimeError as e:
+        die(str(e))
+    r = next((r for r in d["prs"] if r["n"] == n), None)
+    if not r:
+        die(f"{repo}#{n} : pas dans le tableau (PR fermée, ou qui ne me concerne pas)")
+    return d, r
+
+
+def launch_row(d, r, background=False):
+    """Lance l'action de la ligne par le watcher qui gère son état (événement retenu comme
+    traité). (réussi ?, message)."""
+    x = r.get("watch")
+    a = r.get("action") or {}
+    if not x:
+        hint = a.get("command") or a.get("text")
+        return False, (f"{r['repo']}#{r['n']} ({r['short']}) : pas d'action à lancer"
+                       + (f" ({hint})" if hint else ""))
+    watcher, kind, at = x["watcher"], x["kind"], r.get("event_at")
+    cmd = [d["scripts"][watcher], "launch", f"{r['repo']}#{r['n']}", kind]
+    if at:
+        cmd += ["--at", at]
+    if background:
+        cmd.append("--background")
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    return p.returncode == 0, (p.stdout or p.stderr).strip() or f"{r['repo']}#{r['n']} : code {p.returncode}"
+
+
+def skip_row(d, r, until_closed=False):
+    """Écarte la ligne (jusqu'au prochain événement, ou à la fermeture) ; le watcher qui
+    gère son état ne la lancera pas non plus. Retourne le message."""
+    key = skip_key(r)
+    st = w.load_json(STATE)
+    st.setdefault("skipped", {})[key] = {"state": r["state"], "event": event_of(r),
+                                         "until_closed": until_closed, "when": w.iso(w.now())}
+    w.save_json(STATE, st)
+    x = r.get("watch")
+    warn = ""
+    if x and r.get("event_at"):
+        p = subprocess.run([d["scripts"][x["watcher"]], "skip", f"{r['repo']}#{r['n']}", x["kind"],
+                            "--at", r["event_at"]], capture_output=True, text=True)
+        if p.returncode:
+            warn = f" ({x['watcher']} skip : {(p.stderr or p.stdout).strip()})"
+    r["skipped"] = True
+    return (f"{key} ({r['short']}) : écartée " + ("jusqu'à la fermeture de la PR" if until_closed
+                                                  else "jusqu'au prochain événement") + warn)
+
+
+def unskip_row(r):
+    """Réintègre la ligne. (réussi ?, message)."""
+    key = skip_key(r)
+    st = w.load_json(STATE)
+    if st.get("skipped", {}).pop(key, None) is None:
+        return False, f"{key} n'est pas écartée"
+    w.save_json(STATE, st)
+    r["skipped"] = False
+    return True, f"{key} : réintégrée" + (f" (pour la lancer : gh-watch launch {key})" if r.get("watch") else "")
+
+
+def cmd_launch(args):
+    d, r = find_row(args.target)
+    ok, msg = launch_row(d, r, args.background)
+    print(msg)
+    sys.exit(0 if ok else 1)
+
+
+def cmd_skip(args):
+    d, r = find_row(args.target)
+    if args.cmd == "unskip":
+        ok, msg = unskip_row(r)
+        if not ok:
+            die(msg)
+        return print(msg)
+    print(skip_row(d, r, args.until_closed))
 
 
 def show_active(cfg):
@@ -493,7 +714,18 @@ def main():
     fl = bo.add_mutually_exclusive_group()
     fl.add_argument("--auto", action="store_true")
     fl.add_argument("--missed", action="store_true")
+    bo.add_argument("--launch", action="store_true")
+    bo.add_argument("--background", action="store_true")
+    bo.add_argument("-i", "--interactive", action="store_true")
+    bo.add_argument("--skipped", action="store_true")
     bo.add_argument("--json", action="store_true")
+    la = sub.add_parser("launch")
+    la.add_argument("target")
+    la.add_argument("--background", action="store_true")
+    sk = sub.add_parser("skip")
+    sk.add_argument("target")
+    sk.add_argument("--until-closed", action="store_true")
+    sub.add_parser("unskip").add_argument("target")
     se = sub.add_parser("set")
     se.add_argument("key", choices=("stale_days", "others", "board"))
     se.add_argument("target", nargs="?")
@@ -501,19 +733,54 @@ def main():
     args = p.parse_args()
     if args.cmd == "set":
         return cmd_set(args)
+    if args.cmd == "launch":
+        return cmd_launch(args)
+    if args.cmd in ("skip", "unskip"):
+        return cmd_skip(args)
     if args.cmd == "board":
         if args.all and args.repo:
             die("board : un dépôt ou --all, pas les deux")
+        if args.launch and not args.missed:
+            die("board : --launch seulement avec --missed")
+        if args.background and not args.launch:
+            die("board : --background seulement avec --launch")
+        if args.interactive and (args.json or args.launch):
+            die("board : -i ne se combine ni avec --json ni avec --launch")
+        if args.interactive and not (sys.stdin.isatty() and sys.stdout.isatty()):
+            msg = open_pane()
+            if not msg:
+                die("board -i : il faut un terminal (ou herdr)")
+            return print(msg)
         repo = None if args.all else repo_arg(args.repo) if args.repo else current_repo()
+        fallback = not args.all and not args.repo and not repo
         try:
-            d = board_data(repo, fallback=not args.all and not args.repo and not repo)
+            d = board_data(repo, fallback)
         except RuntimeError as e:
             die(str(e))
+        if args.interactive:
+            return interactive(d, args, repo, fallback)
+        if not args.skipped:
+            d["prs"] = [r for r in d["prs"] if not r["skipped"]]
         if args.auto or args.missed:
             d["prs"] = [r for r in d["prs"] if r.get("watch") and r["watch"]["mode"] != "off"
                         and (r["watch"]["missed"] or not args.missed)]
-            return print(json.dumps(d, ensure_ascii=False)) if args.json else show_watch(d, args.missed)
-        return print(json.dumps(d, ensure_ascii=False)) if args.json else show_board(d, args.full)
+            if args.launch:
+                results = [launch_row(d, r, args.background) for r in d["prs"]]
+                for _, msg in results:
+                    print(msg)
+                if not results:
+                    print("aucune action manquée")
+                sys.exit(0 if all(ok for ok, _ in results) else 1)
+            if args.json:
+                return print(json.dumps(d, ensure_ascii=False))
+            show_watch(d, args.missed)
+        elif args.json:
+            return print(json.dumps(d, ensure_ascii=False))
+        else:
+            show_board(d, args.full)
+        if d["skipped"] and not args.skipped:
+            print(f"({d['skipped']} écartée(s) : --skipped pour les voir, gh-watch unskip <repo#n>)")
+        return
     if args.cmd == "list":
         rows = [{"name": n, "script": s} for n, s in watchers()]
         if args.json:

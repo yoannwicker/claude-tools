@@ -106,8 +106,10 @@ demander une déconnexion/reconnexion de session.
 - `/gh-watch:board [<owner/repo> | --all]` (ou `gh-watch board`) : le point sur mes PR
   ouvertes et les relectures qu'on attend de moi, sur le dépôt courant ou tous (`--all` :
   seulement ce sur quoi j'ai à agir, dans les dépôts activés par `gh-watch set board`) —
-  depuis quand, action proposée ; `--missed` : les actions que les watchers ont manquées
-  (plugin `gh-watch`).
+  depuis quand, action proposée ; `--missed` : les actions que les watchers ont manquées,
+  à lancer ou écarter (`gh-watch launch`, `gh-watch skip`) ; `gh-watch board -i` : la même
+  liste, interactive, pour lancer (en fond au choix) ou écarter ligne par ligne
+  (`/gh-watch:board -i` : dans un pane herdr, sinon par questions) (plugin `gh-watch`).
 - `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des
   agents (AgentsView), rangé dans `docs/analyses-sessions/` pour ce dépôt ;
   `/session-analysis:session` : bilan de la session en cours (plugin `session-analysis`).
@@ -136,7 +138,7 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     d'aguiddir/claude-config), intellij/, profiles/ (bin/claude-profile, shell/claude-profile.sh),
                     git-nav/ (skills /pr, /br, /worktree, branch-cleanup, hook merge-watch, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
                     gh-watch/ (lib/watchlib.py commun aux watchers, bin/gh-watch et skill
-                    /gh-watch:status pour les superviser, lib/board.py et skill
+                    /gh-watch:status pour les superviser, lib/board.py, lib/tui.py et skill
                     /gh-watch:board pour le point sur les PR),
                     git-tidy/ (skills /git-tidy:commits, :pr-sync, :ready et :approved-auto,
                     bin/tidy-watch, timer systemd tidy-watch),

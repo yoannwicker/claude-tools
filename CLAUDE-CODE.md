@@ -643,10 +643,11 @@ reprise au clic, notifications, timer systemd, commandes communes) — leur supe
 ouvertes qui me concernent (`gh-watch board`, `/gh-watch:board`). Dépendance déclarée de
 `review` et `git-tidy` : installé avec eux.
 
-**Fichiers** : `plugins/gh-watch/` (`lib/watchlib.py`, `lib/board.py`, `bin/gh-watch`,
+**Fichiers** : `plugins/gh-watch/` (`lib/watchlib.py`, `lib/board.py`, `lib/tui.py`, `bin/gh-watch`,
 `skills/{status,board}/SKILL.md`, `tests/{gh-watch.test.sh,board.test.py}`, `setup.sh`) ;
-hors du plugin, le lien `~/.local/bin/gh-watch` posé par `setup.sh`, et la config
-`~/.config/claude-tools/gh-watch.json` (réglages de `board`, écrite par `gh-watch set`). Les watchers se déclarent dans
+hors du plugin, le lien `~/.local/bin/gh-watch` posé par `setup.sh`, la config
+`~/.config/claude-tools/gh-watch.json` (réglages de `board`, écrite par `gh-watch set`) et
+l'état `~/.local/state/claude-tools/gh-watch/state.json` (lignes écartées). Les watchers se déclarent dans
 `~/.config/claude-tools/watchers.d/<nom>` (lien vers leur script, posé par le `setup.sh` de
 leur plugin). **Activé dans** : tous les profils (avec `review` ou `git-tidy`).
 
@@ -698,9 +699,9 @@ Chaque watcher donne son état par `<watcher> status --json` (`watchlib.status_d
 
 #### Point sur les PR : `board`
 
-`gh-watch board [<owner/repo> | --all] [--full | --auto | --missed] [--json]`, et
-`/gh-watch:board [<owner/repo> | --all] [--full | --auto | --missed]` dans Claude (mêmes données en tableaux ;
-lecture seule). Sans argument : le dépôt courant, ou tous hors d'un clone GitHub (signalé).
+`gh-watch board [<owner/repo> | --all] [--full | --auto | --missed [--launch
+[--background]]] [--skipped] [--json | -i]`, et `/gh-watch:board` avec les mêmes options dans Claude (mêmes données en
+tableaux ; lecture seule, sauf les lignes choisies avec `--missed`). Sans argument : le dépôt courant, ou tous hors d'un clone GitHub (signalé).
 Ne lit que l'état actuel de GitHub, jamais les notifications : une demande de revue que je
 me fais moi-même y apparaît.
 
@@ -731,11 +732,45 @@ en `auto` ou `notify` : à relire, redemandée, retours pour `review-watch`, app
 `tidy-watch`), avec leur mode et leur suivi — session herdr ouverte, analyse en cours ou
 prête à reprendre (avec la commande `resume`), lancée, notifiée, traitée, au prochain
 passage (événement plus récent que l'intervalle du watcher + 5 min). `--missed` ne garde
-que les **manquées**, avec la commande pour les lancer (`<watcher> launch <repo#n>
-<événement>`) : événement jamais vu par le watcher (date traitée antérieure, ex. une
+que les **manquées**, avec la commande pour les lancer (`gh-watch launch <repo#n>`) : événement jamais vu par le watcher (date traitée antérieure, ex. une
 revue que je me demande moi-même, sans notification), lancement ou analyse en échec,
 ignorée (déjà là à l'activation), notifiée sans session lancée depuis. Le watcher expose
 pour cela ses dates traitées dans `status --json` (`handled`).
+
+Agir sur une ligne :
+
+- `gh-watch launch <owner/repo#n | n> [--background]` : lance la PR par le watcher qui
+  gère son état (`<watcher> launch <repo#n> <événement> --at <date>` : herdr, sinon
+  analyse en fond), et retient l'événement comme traité, comme `poll` ; un lancement à
+  la main est noté dans l'historique (`lancé`, « à la main »). `--background` : analyse
+  en fond même si herdr tourne (`claude -p /<skill> <n> --prepare`, jusqu'à ce qu'il
+  faille valider, puis notification dont le clic reprend la session). Une ligne dont
+  aucun watcher ne gère l'état n'a rien à lancer : son action proposée (ex.
+  `/git-tidy:pr-sync` pour une PR en retard) se lance à la main. `board --missed --launch
+  [--background]` : toutes les manquées.
+- `gh-watch skip <owner/repo#n | n> [--until-closed]` : écarte la ligne du tableau
+  jusqu'au prochain événement sur cet état (nouvelle demande, nouvelle review…), ou
+  jusqu'à la fermeture de la PR. Si un watcher gère l'état, `<watcher> skip <repo#n>
+  <événement> --at <date>` retient l'événement (historique `refusé`) : `poll` ne la
+  lancera pas non plus. Les lignes écartées sont comptées en bas du tableau, montrées
+  avec `--skipped` ; `gh-watch unskip` les réintègre (sans relancer : `gh-watch launch`).
+  Gardé dans `~/.local/state/claude-tools/gh-watch/state.json` (`GH_WATCH_STATE`), oublié
+  quand la PR est fermée ou qu'un nouvel événement arrive.
+- `/gh-watch:board --missed` : une question par ligne manquée — lancer, écarter, écarter
+  jusqu'à la fermeture, plus tard (rien d'enregistré) ; `--launch` : tout sans demander.
+- `gh-watch board … -i` : **liste interactive** dans le terminal (curses, `lib/tui.py`),
+  avec les mêmes filtres (dépôt, `--all`, `--full`, `--auto`, `--missed`, `--skipped`),
+  regroupée par dépôt puis « À toi » / « En attente des autres » / « Le reste », une ligne
+  par PR. Touches : `↑`/`↓` ou `z`/`s` naviguer, `Entrée` lancer, `f` lancer en fond,
+  `x` écarter, `X` écarter jusqu'à la fermeture, `u` réintégrer, `r` rafraîchir (nouvel
+  appel GitHub), `q`/`Échap` quitter. Le résultat s'affiche en bas et la ligne est
+  annotée (lancée, en fond, écartée). Refusé avec `--json`. Sans terminal (lancé par
+  une session Claude) : ouverte dans un pane herdr sous celui de la session
+  (`HERDR_PANE_ID`), qui se ferme en quittant la liste ; sans herdr, refusé.
+- `/gh-watch:board … -i` : la liste interactive depuis Claude — dans un pane herdr sous
+  la session ; sans herdr, le tableau puis une question par ligne sur laquelle agir (à
+  moi, mentionnée, ou les lignes de `--auto`/`--missed`) : lancer (en fond, notification),
+  écarter, écarter jusqu'à la fermeture, plus tard.
 
 Dépôts pris par `--all` (et hors d'un clone) : `gh-watch set board <owner | owner/repo | .>
 on | off | default` (sans argument : les réglages). Rien d'activé : tous les dépôts sauf
@@ -1528,8 +1563,11 @@ dont le clic lance la session ; défaut des dépôts non listés) ou `off` (rien
   `~/.config/systemd/user/review-watch.timer.d/interval.conf` (retiré si on revient à 5 ;
   timer relancé s'il tourne).
 
-**Lancement** (`review-watch launch <owner/repo#n | n> [review|feedback]`, appelé aussi par
-le mode auto et par le clic d'une notification). Clone du dépôt : `path` de la config,
+**Lancement** (`review-watch launch <owner/repo#n | n> [review|feedback] [--at <date>]
+[--background]`, appelé aussi par le mode auto, par le clic d'une notification et par
+[`gh-watch launch`](#gh-watch) ; `--background` : analyse en fond même si herdr tourne ;
+`--at` : date de l'événement, retenue comme traitée ; `review-watch skip … --at` écarte un
+événement). Clone du dépôt : `path` de la config,
 sinon cherché dans les espaces de travail de `cl` et retenu.
 
 - **herdr tourne** (`herdr status server`) : worktree de la PR sous

@@ -31,7 +31,13 @@ Mécanique commune (lancement, notifications, timer) : lib/watchlib.py du plugin
   review-watch interval [<minutes>]            fréquence du scan (5 par défaut), appliquée au timer
                                                (sans argument : affiche et applique la config)
   review-watch poll [--dry-run]                un passage
-  review-watch launch <owner/repo#n | n> [review|feedback]
+  review-watch launch <owner/repo#n | n> [review|feedback] [--at <date>] [--background]
+                                               (--at : date de l'événement, alors retenu
+                                               comme traité ; gh-watch launch la donne ;
+                                               --background : analyse en fond même si
+                                               herdr tourne)
+  review-watch skip <owner/repo#n | n> review|feedback --at <date>
+                                               écarter cet événement (gh-watch skip)
   review-watch resume [<owner/repo#n> [review|feedback]]   session préparée en fond
 """
 import json, os, sys
