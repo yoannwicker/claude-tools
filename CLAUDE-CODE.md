@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:status` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:auto-status` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -639,12 +639,12 @@ ajoute des alias.
 `review`, [`tidy-watch`](#git-tidy) du plugin `git-tidy`) — la mécanique qu'ils partagent
 (config et état, clone et worktree, lancement d'une session Claude dans herdr ou en fond
 reprise au clic, notifications, timer systemd, commandes communes) — leur supervision
-(`gh-watch status` en terminal, `/gh-watch:status` dans Claude) et le point sur les PR
+(`gh-watch status` en terminal, `/gh-watch:auto-status` dans Claude) et le point sur les PR
 ouvertes qui me concernent (`gh-watch board`, `/gh-watch:board`). Dépendance déclarée de
 `review` et `git-tidy` : installé avec eux.
 
 **Fichiers** : `plugins/gh-watch/` (`lib/watchlib.py`, `lib/board.py`, `lib/tui.py`, `bin/gh-watch`,
-`skills/{status,board}/SKILL.md`, `tests/{gh-watch.test.sh,board.test.py}`, `setup.sh`) ;
+`skills/{auto-status,board}/SKILL.md`, `tests/{gh-watch.test.sh,board.test.py}`, `setup.sh`) ;
 hors du plugin, le lien `~/.local/bin/gh-watch` posé par `setup.sh`, la config
 `~/.config/claude-tools/gh-watch.json` (réglages de `board`, écrite par `gh-watch set`) et
 l'état `~/.local/state/claude-tools/gh-watch/state.json` (lignes écartées). Les watchers se déclarent dans
@@ -690,10 +690,11 @@ Les watchers et la commande `gh-watch` ne tournent que depuis un clone (liens po
   maintenant (`<watcher> poll --dry-run`). `--json` : la même chose pour un programme.
 - `gh-watch list [--json]` : les watchers déclarés.
 - `gh-watch board` : le point sur les PR, voir [plus bas](#point-sur-les-pr--board).
-- `/gh-watch:status [--dry-run] [--since <D>]` : la même vue dans Claude, en tableaux, avec
-  les déclenchements depuis `D` (24 h par défaut) et ce qui cloche en fin de réponse
-  (timer arrêté, analyse ou déclenchement en échec, session prête oubliée). Lecture
-  seule.
+- `/gh-watch:auto-status [--history] [--since <D>] [--dry-run]` : la même vue dans Claude,
+  en tableaux, et ce qui cloche en fin de réponse (timer arrêté, analyse ou déclenchement
+  en échec depuis `D`, session prête oubliée). L'historique des déclenchements n'est
+  affiché qu'avec `--history` (ou `--since`, qui l'implique ; `D` : 24 h par défaut).
+  Lecture seule.
 
 Chaque watcher donne son état par `<watcher> status --json` (`watchlib.status_data`).
 
@@ -1552,7 +1553,7 @@ dont le clic lance la session ; défaut des dépôts non listés) ou `off` (rien
 - En terminal : `review-watch auto <owner/repo|.> on|off [review|feedback]`,
   `add <repo> [--review M] [--feedback M] [--path <clone>]`, `remove <repo>`,
   `default [--review M] [--feedback M]`, `repos`, `status` (`--json` : pour
-  [`gh-watch`](#gh-watch), qui supervise tous les watchers : `gh-watch status`, `/gh-watch:status`).
+  [`gh-watch`](#gh-watch), qui supervise tous les watchers : `gh-watch status`, `/gh-watch:auto-status`).
 - `review-watch enable` : enregistre d'abord ce qui est déjà en attente, sans rien lancer
   (listé, avec la commande `launch` pour le faire), puis active le timer ; `disable`
   l'arrête. `poll --dry-run` montre ce qu'un passage ferait.

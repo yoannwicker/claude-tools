@@ -6,7 +6,7 @@ links=(                                                  # <chemin dans le plugi
   "bin/tidy-watch              ~/.local/bin/tidy-watch"
   "systemd/tidy-watch.service  ~/.config/systemd/user/tidy-watch.service"
   "systemd/tidy-watch.timer    ~/.config/systemd/user/tidy-watch.timer"
-  # déclaration auprès de gh-watch (supervision : gh-watch status, /gh-watch:status)
+  # déclaration auprès de gh-watch (supervision : gh-watch status, /gh-watch:auto-status)
   "bin/tidy-watch              ~/.config/claude-tools/watchers.d/tidy-watch"
 )
 on_install() {

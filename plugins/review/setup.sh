@@ -6,7 +6,7 @@ links=(                                                  # <chemin dans le plugi
   "bin/review-watch              ~/.local/bin/review-watch"
   "systemd/review-watch.service  ~/.config/systemd/user/review-watch.service"
   "systemd/review-watch.timer    ~/.config/systemd/user/review-watch.timer"
-  # déclaration auprès de gh-watch (supervision : gh-watch status, /gh-watch:status)
+  # déclaration auprès de gh-watch (supervision : gh-watch status, /gh-watch:auto-status)
   "bin/review-watch              ~/.config/claude-tools/watchers.d/review-watch"
 )
 on_install() {

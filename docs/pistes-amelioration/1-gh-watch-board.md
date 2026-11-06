@@ -136,7 +136,7 @@ si l'arborescence change).
    de gh-watch) : à la fin du premier `poll` de la journée (verrou du watcher relâché),
    watchlib lance en détaché `gh-watch board --missed --json` ; s'il y a des lignes, **une**
    notification « N actions manquées » dont le clic ouvre un terminal sur
-   `/gh-watch:board --missed`. `gh-watch status` / `/gh-watch:status` : dernier rattrapage
+   `/gh-watch:board --missed`. `gh-watch status` / `/gh-watch:auto-status` : dernier rattrapage
    et manquées qui attendent depuis plus d'un jour (« ce qui cloche »).
 6. **JIRA, dans le skill seulement** (MCP Atlassian) : statut du ticket lié (clé dans la
    branche, le titre ou la description, comme `pr-sync`) pour `prepared` et une colonne
