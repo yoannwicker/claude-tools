@@ -3,10 +3,10 @@
 
 Un événement, interrogé par `poll` (timer systemd utilisateur, toutes les 5 min par défaut :
 `interval` de la config) :
-  approved  une de mes PR ouvertes, hors brouillon, a au moins `approvals` approbations (2
-            par défaut ; dernier avis de chaque relecteur autre que moi), aucun changement
-            demandé, et aucun fil de review en attente de moi (non résolu, dernier message
-            d'un autre) → /git-tidy:ready <n>
+  approved  une de mes PR ouvertes est à l'état « approved » de gh-watch board (même
+            calcul) : hors brouillon, au moins `approvals` approbations (2 par défaut ;
+            dernier avis de chaque relecteur autre que moi), aucun changement demandé, aucun
+            fil ni message de review en attente de moi → /git-tidy:ready <n>
 
 Mode par dépôt (config ~/.config/claude-tools/git-tidy.json, partagée avec les réglages de
 /git-tidy:ready) :
@@ -44,16 +44,10 @@ import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
                                 "gh-watch", "lib"))
 import watchlib as w  # noqa: E402
+import board as b  # noqa: E402
 
 APPROVALS = 2
 SETTINGS = {"validation_status": "En validation", "test_env": None}  # réglages de /git-tidy:ready
-
-MINE_QUERY = """query($q: String!) {
-  search(query: $q, type: ISSUE, first: 50) { nodes { ... on PullRequest {
-    number title url isDraft repository { nameWithOwner }
-    latestOpinionatedReviews(first: 30) { nodes { author { login } state submittedAt } }
-    reviewThreads(first: 100) { nodes { isResolved
-      comments(last: 1) { nodes { author { login } } } } } } } } }"""
 
 
 def approvals(cfg, repo):
@@ -61,38 +55,28 @@ def approvals(cfg, repo):
 
 
 def approved_events(cfg, state, delay):
-    """Mes PR ouvertes, hors brouillon, avec au moins `approvals` approbations d'autres que
-    moi (dernier avis de chacun) et aucun changement demandé : ([(repo, n, titre, url, date
-    de la N-ième approbation)], [PR en attente de mes réponses]). Cette date ne bouge pas
-    avec une approbation de plus ni avec un push : seule une nouvelle série d'approbations
-    (après qu'elles ont été écartées) relance. Une approbation trop récente (< delay s)
-    attend le passage suivant ; un fil non résolu dont le dernier message n'est pas de moi
-    aussi (retours pas encore traités)."""
-    login = w.me(state)
-    nodes = w.graphql(MINE_QUERY, q=f"is:pr is:open author:{login} archived:false")["search"]["nodes"]
+    """Mes PR à l'état « approved » de gh-watch board (board.watched : même calcul que le
+    tableau) — hors brouillon, au moins `approvals` approbations d'autres que moi (dernier
+    avis de chacun, robots exclus), aucun changement demandé, aucun retour en attente de
+    moi : ([(repo, n, titre, url, date de la N-ième approbation)], [PR approuvées mais
+    dont des retours attendent ma réponse : (repo, n, titre, raison)]). Cette date ne bouge
+    pas avec une approbation de plus ni avec un push : seule une nouvelle série
+    d'approbations (après qu'elles ont été écartées) relance. Une review trop récente
+    (< delay s) attend le passage suivant."""
+    login, prs = b.watched(lambda repo: approvals(cfg, repo))
+    state["me"] = login
     events, waiting = [], []
-    for pr in nodes:
-        if not pr or pr.get("isDraft"):
-            continue
+    for pr, c in prs:
         repo, n = pr["repository"]["nameWithOwner"], pr["number"]
-        latest = [r for r in (pr.get("latestOpinionatedReviews") or {}).get("nodes", [])
-                  if r and r.get("author") and r["author"]["login"] != login]
-        if any(r["state"] == "CHANGES_REQUESTED" for r in latest):
+        if c["state"] == "feedback" and not c["changes"] and c["approvals"] >= approvals(cfg, repo):
+            why = [f"{c['threads_on_me']} fil(s) de review"] if c["threads_on_me"] else []
+            why += [f"{c['messages']} message(s) de review"] if c["messages"] else []
+            waiting.append((repo, n, pr["title"], " et ".join(why)))
             continue
-        ok = sorted(r["submittedAt"] for r in latest if r["state"] == "APPROVED" and r.get("submittedAt"))
-        need = approvals(cfg, repo)
-        if len(ok) < need:
+        at = c["event_at"]
+        if c["state"] != "approved" or state["approved"].get(f"{repo}#{n}", "") >= at:
             continue
-        at = ok[need - 1]
-        if (w.now() - w.parse(ok[-1])).total_seconds() < delay:
-            continue
-        if state["approved"].get(f"{repo}#{n}", "") >= at:
-            continue
-        pending = [t for t in (pr.get("reviewThreads") or {}).get("nodes", [])
-                   if t and not t["isResolved"] and any(
-                       (c.get("author") or {}).get("login") != login for c in t["comments"]["nodes"])]
-        if pending:
-            waiting.append((repo, n, pr["title"], len(pending)))
+        if (w.now() - w.parse(c["latest_at"] or at)).total_seconds() < delay:
             continue
         events.append((repo, n, pr["title"], pr["url"], at))
     return events, waiting
@@ -101,10 +85,10 @@ def approved_events(cfg, state, delay):
 def events(cfg, state, since, delay, dry_run=False, seed=False):
     found, waiting = approved_events(cfg, state, delay)
     out = []
-    for repo, n, title, k in waiting:
-        out.append(f"{repo}#{n} (approved) : {k} fil(s) de review en attente de réponse, attend le passage suivant")
+    for repo, n, title, why in waiting:
+        out.append(f"{repo}#{n} (approved) : {why} en attente de réponse, attend le passage suivant")
         if not dry_run and not seed and w.mode(cfg, repo, "approved") != "off":
-            w.record(state, "approved", repo, n, "en attente", f"{k} fil(s) de review en attente de ta réponse", title)
+            w.record(state, "approved", repo, n, "en attente", f"{why} en attente de ta réponse", title)
     return [("approved", *e) for e in found], out
 
 
