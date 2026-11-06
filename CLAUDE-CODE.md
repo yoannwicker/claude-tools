@@ -692,8 +692,9 @@ Les watchers et la commande `gh-watch` ne tournent que depuis un clone (liens po
 - `gh-watch board` : le point sur les PR, voir [plus bas](#point-sur-les-pr--board).
 - `/gh-watch:auto-status [--history] [--since <D>] [--dry-run]` : la même vue dans Claude,
   en tableaux, et ce qui cloche en fin de réponse (timer arrêté, analyse ou déclenchement
-  en échec depuis `D`, session prête oubliée). L'historique des déclenchements n'est
-  affiché qu'avec `--history` (ou `--since`, qui l'implique ; `D` : 24 h par défaut).
+  en échec depuis `D`, session prête oubliée). L'historique des déclenchements et les
+  sessions herdr fermées ne sont affichés qu'avec `--history` (ou `--since`, qui
+  l'implique ; `D` : 24 h par défaut).
   Lecture seule.
 
 Chaque watcher donne son état par `<watcher> status --json` (`watchlib.status_data`).
