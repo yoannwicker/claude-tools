@@ -14,8 +14,7 @@ Lecture seule : rien n'est lancé, activé ni repris.
 (`./install.sh plugin gh-watch` depuis claude-tools, ou avec `review` / `git-tidy` qui en
 dépendent) et s'arrêter.
 
-Historique et sessions herdr fermées affichés seulement avec `--history` (ou `--since`,
-qui l'implique).
+Historique affiché seulement avec `--history` (ou `--since`, qui l'implique).
 
 1. `gh-watch status --json --since <D>` (`D` : celui de l'argument, sinon `24h` ; avec
    `--dry-run` si l'argument le demande ; l'historique sert aussi à « ce qui cloche », même
@@ -27,8 +26,7 @@ qui l'implique).
 3. Par watcher, ses dépôts : un tableau `dépôt` + une colonne par événement (`kinds`) avec
    le mode, plus les réglages en plus s'il y en a (`approvals`, `validation_status`,
    `test_env`) ; puis la ligne « dépôts non listés » (`default`).
-4. Les sessions, s'il y en a (sans `--history`, les sessions herdr `fermée` sont omises ;
-   aucune restante : pas de section) : clé (`dépôt#n:événement`), titre, herdr ouverte/fermée ou
+4. Les sessions, s'il y en a : clé (`dépôt#n:événement`), titre, herdr ouverte/fermée ou
    analyse en fond (`running`, `ready`, `failed`, `resumed`), lancée quand (`launched`) et
    pour quel événement GitHub (`event_at`) ; pour `ready`/`failed`, la commande `resume` à
    lancer ; pour `failed`, le chemin du journal.

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Tests du classement de gh-watch board : python3 plugins/gh-watch/tests/board.test.py
 PR fictives (nœuds GraphQL), sans réseau."""
-import datetime as dt, importlib.machinery, importlib.util, os, sys, unittest
+import datetime as dt, os, sys, unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "lib"))
 import board as b  # noqa: E402
 import tui  # noqa: E402
@@ -112,37 +111,6 @@ class Mine(unittest.TestCase):
         c = state(pr(ci="FAILURE", mergeable="CONFLICTING", behind=3))
         self.assertEqual(c["alerts"], ["ci", "conflict", "behind"])
         self.assertEqual(state(pr(ci="SUCCESS"))["alerts"], [])
-
-
-    def test_message_to_handle_even_with_approval(self):
-        c = state(pr(latest=[review("bob", "APPROVED", "2026-11-04T10:00:00Z")],
-                     reviews=[dict(review("bob", "APPROVED", "2026-11-04T10:00:00Z"), body="Renomme la méthode ?")]))
-        self.assertEqual((c["state"], c["messages"], c["event_at"]), ("feedback", 1, "2026-11-04T10:00:00Z"))
-        self.assertIn("message de bob à traiter", c["detail"])
-
-    def test_trivial_message_is_not_feedback(self):
-        for body in ("LGTM 👍", "ça me va !", "Thanks, good job", "", "ok."):
-            c = state(pr(latest=[review("bob", "APPROVED", "2026-11-04T10:00:00Z")],
-                         reviews=[dict(review("bob", "APPROVED", "2026-11-04T10:00:00Z"), body=body)]), need=1)
-            self.assertEqual(c["state"], "approved", body)
-        self.assertFalse(b.trivial("LGTM ?"))
-
-    def test_message_answered_by_me_or_superseded(self):
-        msg = dict(review("bob", "COMMENTED", "2026-11-04T10:00:00Z"), body="Pourquoi ce choix")
-        later = [review(ME, "COMMENTED", "2026-11-04T11:00:00Z")]
-        self.assertEqual(state(pr(reviews=[msg] + later))["messages"], 0)
-        p = pr(reviews=[msg])
-        p["comments"] = {"nodes": [{"author": {"login": ME}, "createdAt": "2026-11-04T11:00:00Z"}]}
-        self.assertEqual(state(p)["messages"], 0)
-        approve = review("bob", "APPROVED", "2026-11-04T12:00:00Z")
-        self.assertEqual(state(pr(reviews=[msg, approve]))["messages"], 0)
-        reply = dict(review("bob", "COMMENTED", "2026-11-04T12:00:00Z"), body="")  # réponse dans un fil
-        self.assertEqual(state(pr(reviews=[msg, reply]))["messages"], 1)
-
-    def test_feedback_event_counts_bot_reviews(self):
-        c = state(pr(reviews=[review("copilot", "COMMENTED", "2026-11-04T10:00:00Z", bot=True)],
-                     threads=[thread("copilot", "copilot", "2026-11-04T10:00:00Z")]))
-        self.assertEqual((c["state"], c["event_at"]), ("feedback", "2026-11-04T10:00:00Z"))
 
 
 class Others(unittest.TestCase):
@@ -278,49 +246,6 @@ class Follow(unittest.TestCase):
 
     def test_state_without_watcher(self):
         self.assertIsNone(b.watch([{**row(), "state": "draft"}], [watcher()], NOW)[0]["watch"])
-
-
-def load(path, name):
-    loader = importlib.machinery.SourceFileLoader(name, os.path.join(ROOT, path))
-    mod = importlib.util.module_from_spec(importlib.util.spec_from_loader(name, loader))
-    loader.exec_module(mod)
-    return mod
-
-
-class SameAsPoll(unittest.TestCase):
-    """Le tableau (build) et le poll des watchers (feedback_events, approved_events) donnent
-    les mêmes événements, à la même date."""
-
-    def test_board_and_watchers_agree(self):
-        t = "2026-11-04T10:00:00Z"
-        prs = [pr(n=1, reviews=[review("bob", "COMMENTED", t)], threads=[thread("bob", "bob", t)]),
-               pr(n=2, latest=[review("bob", "APPROVED", t), review("eve", "APPROVED", "2026-11-04T12:00:00Z")],
-                  reviews=[review("bob", "APPROVED", t), review("eve", "APPROVED", "2026-11-04T12:00:00Z")]),
-               pr(n=3, latest=[review("bob", "APPROVED", t)],
-                  reviews=[dict(review("bob", "APPROVED", t), body="Ajoute un test pour le cas vide")]),
-               pr(n=4, latest=[review("bob", "APPROVED", t), review("eve", "APPROVED", t)],
-                  reviews=[dict(review("bob", "APPROVED", t), body="LGTM 👍")]),
-               pr(n=5, latest=[review("bob", "CHANGES_REQUESTED", t)], reviews=[review("bob", "CHANGES_REQUESTED", t)]),
-               pr(n=6, draft=True, reviews=[review("bob", "COMMENTED", t)], threads=[thread("bob", "bob", t)]),
-               pr(n=7, latest=[review("bob", "APPROVED", t), review("eve", "APPROVED", t)],
-                  reviews=[review("bob", "APPROVED", t)], threads=[thread("bob", "bob", t)])]
-        old = b.gql
-        b.gql = lambda q, v: {"viewer": {"login": ME}, "search": {"nodes": prs}}
-        try:
-            rw = load("plugins/review/bin/review-watch", "review_watch")
-            tw = load("plugins/git-tidy/bin/tidy-watch", "tidy_watch")
-            feedback = rw.feedback_events({"feedback": {}}, 300)
-            approved, waiting = tw.approved_events({}, {"approved": {}}, 300)
-        finally:
-            b.gql = old
-        rows = b.build(ME, [(p, {"mine"}) for p in prs], lambda repo: 2, 2)
-        board = lambda s: sorted((r["n"], r["event_at"]) for r in rows if r["state"] == s)
-        self.assertEqual(sorted((n, at) for _, n, _, _, at, todo, _ in feedback if todo), board("feedback"))
-        self.assertEqual(sorted((n, at) for _, n, _, _, at in approved), board("approved"))
-        self.assertEqual(board("feedback"), [(1, t), (3, t), (5, t), (7, t)])
-        self.assertEqual(board("approved"), [(2, "2026-11-04T12:00:00Z"), (4, t)])
-        self.assertEqual([x[1] for x in waiting], [7])  # approuvée, mais un fil attend ma réponse
-        self.assertNotIn(6, [x[1] for x in feedback])  # brouillon
 
 
 class Tui(unittest.TestCase):

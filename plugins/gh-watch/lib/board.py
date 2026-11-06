@@ -7,11 +7,8 @@ détail de ces PR par `nodes(ids:)`. Le classement (`classify`) est pur : il ne 
 nœud GraphQL, ce qui le rend testable sans réseau.
 
 Ne lit que l'état actuel de GitHub, jamais les notifications.
-
-Les watchers (review-watch : feedback, tidy-watch : approved) tirent leurs événements de
-ce même classement (`watched`), pour que le tableau et leur `poll` ne divergent jamais.
 """
-import concurrent.futures, json, re, subprocess, urllib.parse
+import concurrent.futures, json, subprocess, urllib.parse
 
 import watchlib as w
 
@@ -47,8 +44,7 @@ FRAGMENT = """fragment pr on PullRequest {
       __typename ... on User { login } ... on Team { slug } } }
     ... on ReadyForReviewEvent { createdAt } } }
   latestOpinionatedReviews(first: 30) { nodes { author { __typename login } state submittedAt } }
-  reviews(last: 50) { nodes { author { __typename login } state submittedAt body } }
-  comments(last: 30) { nodes { author { login } createdAt } }
+  reviews(last: 50) { nodes { author { __typename login } state submittedAt } }
   reviewThreads(first: 100) { nodes { isResolved
     first: comments(first: 1) { nodes { author { __typename login } createdAt } }
     last: comments(last: 1) { nodes { author { __typename login } createdAt } } } }
@@ -107,21 +103,6 @@ def fetch(repo=None, open_repos=(), active=None):
     return data["viewer"]["login"], [(n, cats[n["id"]]) for n in nodes]
 
 
-def watched(approvals, limit=50):
-    """Mes PR ouvertes classées, pour les watchers : (login, [(nœud PR, classify)]).
-    Une seule requête (recherche et détail ensemble), sans `behind_by` (un appel REST par PR
-    à chaque passage). approvals(dépôt) : approbations attendues."""
-    data = gql("query($q: String!) { viewer { login }\n"
-               f"  search(query: $q, type: ISSUE, first: {int(limit)}) {{ nodes {{ ...pr }} }} }}\n" + FRAGMENT,
-               {"q": "is:pr is:open archived:false author:@me"})
-    login = data["viewer"]["login"]
-    out = []
-    for pr in (data.get("search") or {}).get("nodes", []):
-        if pr and pr.get("id"):
-            out.append((pr, classify(pr, login, {"mine"}, approvals(pr["repository"]["nameWithOwner"]))))
-    return login, out
-
-
 def behind_by(pr):
     """Commits de la base absents de la PR (None si GitHub ne répond pas)."""
     base = urllib.parse.quote(pr["baseRefName"], safe="")
@@ -160,41 +141,6 @@ def _threads(pr):
     return out
 
 
-# Message de review qui ne demande rien : mots d'approbation seulement (le reste — ponctuation,
-# emoji — est retiré). Dans le doute, le message est à traiter.
-TRIVIAL = set("""lgtm ok okay oki merci thanks thank you thx ty nice good great job work well done
-    bien très tres top parfait super bravo cool ship it approved approve approuvé approuvée go pour
-    moi c est bon ça ca me va looks to all fine nickel 👍 🚀 🎉 ✅ 💯 👌 ❤️""".split())
-
-
-def trivial(body):
-    """Vrai si le message d'une review ne demande ni traitement ni réponse (« LGTM 👍 »)."""
-    words = re.findall(r"\w+|[^\w\s]", (body or "").lower())
-    return all(x in TRIVIAL or not x.isalnum() and x not in "?" for x in words)
-
-
-def _messages(pr, login, reviews):
-    """Reviews d'humains dont le message demande une réponse, encore sans suite : ni
-    commentaire ou review de moi après, ni avis plus récent (approbation, changements
-    demandés, autre message) du même relecteur. reviews : [nœud review] des autres."""
-    mine = [x["submittedAt"] for x in (pr.get("reviews") or {}).get("nodes", [])
-            if x and x.get("submittedAt") and _login(x.get("author")) == login]
-    mine += [c["createdAt"] for c in (pr.get("comments") or {}).get("nodes", [])
-             if c and c.get("createdAt") and _login(c.get("author")) == login]
-    last_me = max(mine, default="")
-    out = []
-    for x in reviews:
-        if not _human(x.get("author")) or trivial(x.get("body")) or x["submittedAt"] <= last_me:
-            continue
-        who = _login(x["author"])
-        if any(y is not x and _login(y.get("author")) == who and y["submittedAt"] > x["submittedAt"]
-               and (y["state"] in ("APPROVED", "CHANGES_REQUESTED") or not trivial(y.get("body")))
-               for y in reviews):
-            continue
-        out.append(x)
-    return out
-
-
 def _n(k, word):
     return f"{k} {word}" + ("s" if k > 1 else "")
 
@@ -214,12 +160,8 @@ def _alerts(pr):
 def classify(pr, login, cats, approvals=2):
     """État d'une PR : {state, short, detail, since, event_at, alerts, mine, bucket} (short :
     libellé court pour le tableau ; bucket : qui doit agir, voir BUCKETS). `event_at` : date
-    de l'événement au sens des watchers (feedback : dernière review d'un autre, robots
-    compris ; approved : N-ième approbation ; review : dernière demande qui me vise), None
-    sinon. Mes PR ont aussi, pour les watchers : approvals (nombre), changes (changements
-    demandés), threads_on_me (fils en attente de moi), messages (messages de review à
-    traiter), latest_at et latest_review (date et état de la dernière review d'un autre),
-    feedback_at (état feedback : date du retour le plus récent)."""
+    de l'événement au sens des watchers (feedback : dernière review d'un autre ; approved :
+    N-ième approbation ; review : dernière demande qui me vise), None sinon."""
     mine = _login(pr.get("author")) == login
     r = (classify_mine if mine else classify_other)(pr, login, cats, approvals)
     r.update(mine=mine, alerts=_alerts(pr) if mine else [])
@@ -238,48 +180,27 @@ def classify_mine(pr, login, cats, need):
               if x and _human(x.get("author")) and _login(x["author"]) != login]
     changes = [x for x in latest if x["state"] == "CHANGES_REQUESTED"]
     ok = sorted(x["submittedAt"] for x in latest if x["state"] == "APPROVED" and x.get("submittedAt"))
-    # Reviews des autres, robots compris : l'événement des watchers (dernière review d'un autre)
-    reviews = [x for x in (pr.get("reviews") or {}).get("nodes", [])
-               if x and x.get("submittedAt") and x["state"] != "PENDING"
-               and x.get("author") and _login(x["author"]) != login]
-    others = [x["submittedAt"] for x in reviews if _human(x.get("author"))]
-    last = max(reviews, key=lambda x: x["submittedAt"], default=None)
-    latest_at = last and last["submittedAt"]
+    others = [x["submittedAt"] for x in (pr.get("reviews") or {}).get("nodes", [])
+              if x and x.get("submittedAt") and x["state"] != "PENDING"
+              and _human(x.get("author")) and _login(x["author"]) != login]
     threads = _threads(pr)
     on_me = [t for t in threads if t[1] and t[1] != login]
-    messages = _messages(pr, login, reviews)
-    r = classify_mine_state(pr, login, need, latest, changes, ok, others, threads, on_me, messages)
-    # Pour les watchers : de quoi décider sans refaire le calcul
-    r.update(approvals=len(ok), changes=bool(changes), threads_on_me=len(on_me), messages=len(messages),
-             latest_at=latest_at, latest_review=last and last["state"])
-    if r["state"] == "feedback":
-        r["event_at"] = latest_at
-    return r
-
-
-def classify_mine_state(pr, login, need, latest, changes, ok, others, threads, on_me, messages):
     on_them = [t for t in threads if t[1] == login and t[0] and t[0] != login]
     requested = [x for x in (_reviewer(n.get("requestedReviewer"))
                              for n in (pr.get("reviewRequests") or {}).get("nodes", []) if n) if x]
     count = f"{len(ok)}/{need} approbation(s)"
     if pr.get("isDraft"):
         return {"state": "draft", "short": "brouillon", "detail": count if ok else "", "since": pr["createdAt"]}
-    if changes or on_me or messages:
+    if changes or on_me:
         parts = [f"{len(on_me)} fil(s) à traiter"] if on_me else []
         if changes:
             parts.append("changements demandés par " + ", ".join(_login(x["author"]) for x in changes))
-        if messages:
-            parts.append("message de " + ", ".join(sorted({_login(x["author"]) for x in messages})) + " à traiter")
-        since = min([x["submittedAt"] for x in changes + messages if x.get("submittedAt")]
-                    + [t[2] for t in on_me if t[2]] or [pr["createdAt"]])
+        since = min([x["submittedAt"] for x in changes if x.get("submittedAt")] + [t[2] for t in on_me if t[2]]
+                    or [pr["createdAt"]])
         short = "retours (" + ", ".join(([_n(len(on_me), "fil")] if on_me else [])
-                                        + (["changements demandés"] if changes else [])
-                                        + ([_n(len(messages), "message")] if messages else [])) + ")"
-        # feedback_at : retour le plus récent (pour savoir si une nouvelle review en apporte)
-        recent = max([x["submittedAt"] for x in changes + messages if x.get("submittedAt")]
-                     + [t[2] for t in on_me if t[2]], default=None)
+                                        + (["changements demandés"] if changes else [])) + ")"
         return {"state": "feedback", "short": short, "detail": " ; ".join(parts + [count]), "since": since,
-                "feedback_at": recent}
+                "event_at": max(others) if others else None}
     if len(ok) >= need:
         return {"state": "approved", "short": f"approuvée {len(ok)}/{need}", "detail": count, "since": ok[need - 1], "event_at": ok[need - 1]}
     if on_them:

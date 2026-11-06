@@ -1,6 +1,6 @@
 # gh-watch : tableau de bord des PR (`board`), actions manquées et rattrapage
 
-- **Statut** : en cours (étapes 1 à 4 faites, liste interactive comprise)
+- **Statut** : en cours (étapes 1 à 3 faites, liste interactive comprise)
 - **Origine** : idée (2026-11-05), fusion de
   [review : faire le point sur mes PR](2-review-point-mes-pr.md),
   [gh-watch : vue des PR en cours](3-gh-watch-vue-pr.md),
@@ -45,9 +45,9 @@ Le tableau ne lit que l'état actuel de GitHub, jamais les notifications.
 | `draft` | brouillon | création | — |
 | `unrequested` (à faire relire) | aucun relecteur demandé ni aucune review | passage en prêt | demander des relecteurs |
 | `in_review` | relecteurs demandés, pas de review des autres à traiter | plus ancienne demande en attente (et qui) | relancer |
-| `feedback` (retours à traiter) | changements demandés, fil non résolu dont le dernier message n'est pas de moi, ou message de review qui demande une réponse (étape 4) | premier retour sans réponse | `/review:feedback` |
+| `feedback` (retours à traiter) | changements demandés, ou fil non résolu dont le dernier message n'est pas de moi | premier retour sans réponse | `/review:feedback` |
 | `waiting_reviewer` | fils non résolus, dernier message de moi | ma dernière réponse | relancer |
-| `approved` (à préparer) | ≥ `approvals` approbations, aucun changement demandé, aucun retour en attente de moi | N-ième approbation | `/git-tidy:ready` |
+| `approved` (à préparer) | ≥ `approvals` approbations, aucun changement demandé, aucun fil en attente de moi | N-ième approbation | `/git-tidy:ready` |
 | `prepared` (en validation) | `approved` et déjà traitée par `tidy-watch` depuis (ou statut JIRA de validation, étape 6) | traitement | — |
 
 Alertes cumulables avec l'état : CI en échec, en retard sur sa base (`behind` →
@@ -179,15 +179,6 @@ si l'arborescence change).
 - `/gh-watch:board -i` lance aussi la liste : le Bash de Claude n'a pas de terminal, donc
   pane herdr sous la session (fermé en quittant la liste) ; sans herdr, une question par
   ligne dans Claude, comme `--missed` mais sur tout ce qui est à moi (2026-11-05).
-
-- Étape 4 : un message de review (corps, approbation comprise) qui demande un traitement
-  met la PR en `feedback`, et `review-watch` lance `/review:feedback` ; une simple
-  approbation, ou un message qui ne demande rien (« LGTM 👍 », liste de mots d'approbation,
-  dans le doute à traiter), donne une notification seulement. Le message est traité quand
-  je commente ou fais une review après, ou que le relecteur donne un avis plus récent.
-  L'événement `feedback` compte les reviews des robots (comme avant), les approbations non.
-  Une approbation de plus sur des retours déjà vus : notification, pas de nouvelle session.
-  Brouillon : `review-watch` attend qu'il soit prêt (2026-11-06).
 
 ## À trancher
 
