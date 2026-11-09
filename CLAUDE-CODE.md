@@ -748,8 +748,10 @@ agir :
   approuvée (au moins `approvals` approbations, aucun changement demandé ni retour en
   attente de moi), à faire relire (aucun relecteur en attente), à relire
   ou redemandée (relecture demandée à moi ou à une de mes équipes : « via @équipe » ;
-  redemandée : après une review de moi), réponse de l'auteur sur une PR que j'ai relue, et
-  mes PR en attente des autres mais avec CI en échec ou en conflit.
+  redemandée : après une review de moi), PR que j'ai relue où l'auteur a bougé — réponse
+  dans un de mes fils, commentaire de la PR après mon dernier passage, ou fil où j'ai le
+  dernier mot mais devenu obsolète (code modifié depuis : « code modifié (N fils
+  obsolètes) ») —, et mes PR en attente des autres mais avec CI en échec ou en conflit.
 - **En attente des autres** — mes PR en relecture (qui est attendu) ou en attente du
   relecteur (fils où j'ai répondu en dernier), les PR des autres que j'ai relues (fils en
   attente de l'auteur, approuvée par moi…).

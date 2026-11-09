@@ -59,7 +59,7 @@ Alertes cumulables avec l'état : CI en échec, en retard sur sa base (`behind` 
 |---|---|---|---|
 | `to_review` | `review-requested:@me` (moi ou une de mes équipes : « via @équipe »), jamais relue | dernière demande qui me vise | `/review:pr` |
 | `re_requested` | `review-requested:@me` et une review de moi avant la dernière demande (GitHub retire le relecteur à sa review : réapparaître, c'est être redemandé, par le bouton ou à la main) | dernière demande | `/review:pr` |
-| `reviewed` | `reviewed-by:@me`, plus demandé : en attente de l'auteur, ou « l'auteur a répondu (N fils) » | ma review / sa réponse | — |
+| `reviewed` | `reviewed-by:@me`, plus demandé : en attente de l'auteur, ou l'auteur a bougé (« À toi ») : réponse dans un de mes fils, commentaire de la PR après mon dernier passage, ou fil de moi devenu obsolète (« code modifié ») | ma review / sa réponse / son dernier commit | — |
 | `mentioned` | `mentions:@me`, sans demande | mention | — |
 | `open_unrequested` | seulement si `others = open` pour le dépôt : PR ouverte d'un autre, hors brouillon, sans toutes ses approbations, pas relue par moi | création | — |
 

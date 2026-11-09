@@ -48,11 +48,11 @@ FRAGMENT = """fragment pr on PullRequest {
     ... on ReadyForReviewEvent { createdAt } } }
   latestOpinionatedReviews(first: 30) { nodes { author { __typename login } state submittedAt } }
   reviews(last: 50) { nodes { author { __typename login } state submittedAt body } }
-  comments(last: 30) { nodes { author { login } createdAt } }
-  reviewThreads(first: 100) { nodes { isResolved
+  comments(last: 30) { nodes { author { __typename login } createdAt } }
+  reviewThreads(first: 100) { nodes { isResolved isOutdated
     first: comments(first: 1) { nodes { author { __typename login } createdAt } }
     last: comments(last: 1) { nodes { author { __typename login } createdAt } } } }
-  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+  commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }
 }"""
 
 
@@ -150,13 +150,15 @@ def _reviewer(r):
 
 
 def _threads(pr):
-    """Fils non résolus : [(auteur du premier message, du dernier, date du dernier)]."""
+    """Fils non résolus : [(auteur du premier message, du dernier, date du dernier, obsolète)]
+    (obsolète : le code commenté a changé depuis)."""
     out = []
     for t in (pr.get("reviewThreads") or {}).get("nodes", []):
         if not t or t.get("isResolved"):
             continue
         f, l = (t.get("first") or {}).get("nodes") or [{}], (t.get("last") or {}).get("nodes") or [{}]
-        out.append((_login(f[0].get("author")), _login(l[0].get("author")), l[0].get("createdAt")))
+        out.append((_login(f[0].get("author")), _login(l[0].get("author")), l[0].get("createdAt"),
+                    bool(t.get("isOutdated"))))
     return out
 
 
@@ -332,10 +334,26 @@ def classify_other(pr, login, cats, need):
     if "reviewed" in cats and mine:
         threads = [t for t in _threads(pr) if t[0] == login]
         answered = [t for t in threads if t[1] and t[1] != login]
-        if answered:
-            return {"state": "reviewed", "short": f"réponse de l'auteur ({_n(len(answered), 'fil')})",
-                    "answered": True, "since": max(t[2] for t in answered if t[2]),
-                    "detail": f"de {author} ; l'auteur a répondu ({len(answered)} fil(s))"}
+        # Fils où j'ai le dernier mot mais dont le code a changé : l'auteur les a traités sans répondre
+        outdated = [t for t in threads if t[1] == login and t[3]]
+        # Réponse de l'auteur hors fil : commentaire de la PR après ma dernière review ou mon dernier commentaire
+        last_me = max(mine + [c["createdAt"] for c in (pr.get("comments") or {}).get("nodes", [])
+                              if c and c.get("createdAt") and _login(c.get("author")) == login])
+        comments = [c["createdAt"] for c in (pr.get("comments") or {}).get("nodes", [])
+                    if c and c.get("createdAt") and _login(c.get("author")) == author and c["createdAt"] > last_me]
+        if answered or outdated or comments:
+            pushed = ((((pr.get("commits") or {}).get("nodes") or [{}])[0].get("commit") or {})
+                      .get("committedDate"))
+            dates = [t[2] for t in answered if t[2]] + comments + ([pushed or last_me] if outdated else [])
+            what = ([_n(len(answered), "fil")] if answered else []) + (
+                [_n(len(comments), "commentaire")] if comments else [])
+            stale = _n(len(outdated), "fil") + (" obsolètes" if len(outdated) > 1 else " obsolète")
+            short = (f"réponse de l'auteur ({', '.join(what)})" + (f" + {stale}" if outdated else "")
+                     if what else f"code modifié ({stale})")
+            detail = ([f"l'auteur a répondu ({', '.join(what)})"] if what else []) + (
+                [f"code modifié sous {stale}"] if outdated else [])
+            return {"state": "reviewed", "short": short, "answered": True, "since": max(dates),
+                    "detail": f"de {author} ; " + " ; ".join(detail)}
         if threads:
             return {"state": "reviewed", "short": f"attend l'auteur ({_n(len(threads), 'fil')})", "since": mine[-1],
                     "detail": f"de {author} ; {len(threads)} fil(s) en attente de l'auteur"}

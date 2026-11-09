@@ -19,8 +19,8 @@ def review(login, state, at, bot=False):
     return {"author": user(login, bot), "state": state, "submittedAt": at}
 
 
-def thread(first, last, at, resolved=False):
-    return {"isResolved": resolved,
+def thread(first, last, at, resolved=False, outdated=False):
+    return {"isResolved": resolved, "isOutdated": outdated,
             "first": {"nodes": [{"author": user(first), "createdAt": at}]},
             "last": {"nodes": [{"author": user(last), "createdAt": at}]}}
 
@@ -169,8 +169,27 @@ class Others(unittest.TestCase):
                      threads=[thread(ME, "alice", "2026-11-04T08:00:00Z"), thread(ME, ME, "2026-11-03T08:00:00Z")]),
                   {"reviewed"})
         self.assertEqual(c["state"], "reviewed")
-        self.assertIn("l'auteur a répondu (1 fil(s))", c["detail"])
+        self.assertIn("l'auteur a répondu (1 fil)", c["detail"])
         self.assertEqual((c["short"], c["bucket"]), ("réponse de l'auteur (1 fil)", "me"))
+
+    def test_reviewed_outdated_threads(self):
+        c = state(pr(author="alice", reviews=[review(ME, "COMMENTED", "2026-11-03T08:00:00Z")],
+                     threads=[thread(ME, ME, "2026-11-03T08:00:00Z", outdated=True),
+                              thread(ME, ME, "2026-11-03T08:00:00Z", outdated=True),
+                              thread(ME, ME, "2026-11-03T08:00:00Z")]), {"reviewed"})
+        self.assertEqual((c["short"], c["bucket"]), ("code modifié (2 fils obsolètes)", "me"))
+        self.assertIn("code modifié sous 2 fils obsolètes", c["detail"])
+
+    def test_reviewed_author_comment_and_outdated(self):
+        p = pr(author="alice", reviews=[review(ME, "COMMENTED", "2026-11-03T08:00:00Z")],
+               threads=[thread(ME, ME, "2026-11-03T08:00:00Z", outdated=True)])
+        p["comments"] = {"nodes": [{"author": user("alice"), "createdAt": "2026-11-02T09:00:00Z"},
+                                   {"author": user("alice"), "createdAt": "2026-11-04T09:00:00Z"}]}
+        c = state(p, {"reviewed"})
+        self.assertEqual((c["short"], c["bucket"]), ("réponse de l'auteur (1 commentaire) + 1 fil obsolète", "me"))
+        p["comments"]["nodes"].append({"author": user(ME), "createdAt": "2026-11-05T09:00:00Z"})
+        p["reviewThreads"]["nodes"] = []
+        self.assertEqual(state(p, {"reviewed"})["bucket"], "others")  # j'ai déjà répondu
 
     def test_reviewed_approved(self):
         c = state(pr(author="alice", reviews=[review(ME, "APPROVED", "2026-11-03T08:00:00Z")],
