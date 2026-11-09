@@ -1067,7 +1067,7 @@ puis `*`.
   propose `tidy-watch enable`. Sans `tidy-watch` dans le `PATH` : dit d'installer le plugin
   et s'arrête.
 - En terminal : `tidy-watch auto <owner/repo|owner/*|*|.> on|off`, `add <cible>
-  [--on-pr-approved M] [--path <clone>]`, `remove <cible>`,
+  [--on-pr-approved M] [--path <clone> | --path <dossier>/*]`, `remove <cible>`,
   `approvals <repo|*|.> [<n>|default]`, `set <repo|*|.> validation_status|test_env
   [<valeur>|default]`, `repos [--json]`, `status`, `enable` (enregistre d'abord ce qui est
   déjà là, sans rien lancer) / `disable`, `poll [--dry-run]`, `interval [<minutes>]`
@@ -1085,7 +1085,7 @@ Le profil lancé (réglage `claude`) doit activer le plugin `git-tidy`.
 
 Config : section `watcher` de `~/.config/claude-tools/git-tidy.json` (le reste du fichier :
 réglages de `/git-tidy:ready`, dont `approvals`, `approvals '*'` écrivant `default`) :
-`{"watcher": {"repos": {"*": {"on_pr_approved": "off"},
+`{"watcher": {"repos": {"*": {"on_pr_approved": "off", "path": "~/workspace/*"},
 "owner/repo": {"on_pr_approved": "auto", "path": "…"}}, "interval": 5, "feedback_delay":
 300, "claude": "claude", "terminal": null}}`. Clone : comme pour
 [`review-watch`](#review). Une ancienne config (réglages du watcher au premier niveau,
@@ -1638,7 +1638,7 @@ auto : `review-watch add <repo> --on-review-requested notify`.
   Si la surveillance est arrêtée, le skill propose `review-watch enable`.
 - En terminal : `review-watch auto <owner/repo|owner/*|*|.> on|off [review_requested|feedback_received]`,
   `add <owner/repo|owner/*|*|.> [--on-review-requested M] [--on-feedback-received M]
-  [--path <clone>]` (sans mode ni `--path` : auto pour les deux),
+  [--path <clone> | --path <dossier>/*]` (sans mode ni `--path` : auto pour les deux),
   `remove <cible>`, `repos`, `status` (`--json` : pour
   [`gh-watch`](#gh-watch), qui supervise tous les watchers : `gh-watch status`, `/gh-watch:auto-status`).
 - `review-watch enable` : enregistre d'abord ce qui est déjà en attente, sans rien lancer
@@ -1655,9 +1655,11 @@ auto : `review-watch add <repo> --on-review-requested notify`.
 [--background]`, appelé aussi par le mode auto, par le clic d'une notification et par
 [`gh-watch launch`](#gh-watch) ; `--background` : analyse en fond même si herdr tourne ;
 `--at` : date de l'événement, retenue comme traitée ; `review-watch skip … --at` écarte un
-événement). Clone du dépôt : `path` de la config, sinon celui déjà trouvé, sinon cherché
-dans les espaces de travail de `cl` et retenu ; introuvable : notification « Clone
-introuvable ». `auto … off` qui retire l'entrée d'un dépôt garde son clone en mémoire.
+événement). Clone du dépôt : `path` du dépôt (sans étoile : le clone), sinon celui déjà
+trouvé, sinon cherché dans le dossier du `path` en `dossier/*` de l'entrée la plus précise
+qui en a un (dépôt, `owner/*`, `*`), puis dans les espaces de travail de `cl`, et retenu ;
+introuvable : notification « Clone introuvable ». `auto … off` qui retire l'entrée d'un
+dépôt garde son clone en mémoire.
 
 - **herdr tourne** (`herdr status server`) : worktree de la PR sous
   `~/.herdr/worktrees/<dépôt>/`. Pour une revue, branche `agent/review-<n>-<titre>` sur la
@@ -1693,8 +1695,8 @@ introuvable ». `auto … off` qui retire l'entrée d'un dépôt garde son clone
   utilisé doit activer le plugin `review` (profil de référence, `vidal` ; pas `lean`).
 
 Config : section `watcher` de `~/.config/claude-tools/review.json` (un fichier par plugin ; le
-reste est libre pour les skills) : `{"watcher": {"repos": {"*": {"on_review_requested": "off"},
-"owner/*": {…}, "owner/repo": {"on_review_requested": "auto",
+reste est libre pour les skills) : `{"watcher": {"repos": {"*": {"on_review_requested": "off",
+"path": "~/workspace/*"}, "owner/*": {…}, "owner/repo": {"on_review_requested": "auto",
 "on_feedback_received": "notify", "path": "…"}}, "interval": 5, "feedback_delay": 300,
 "claude": "claude", "terminal": null}}`. Les noms de dépôt ne tiennent pas compte de la
 casse. Une ancienne config (`review-watch.json` : `review`, `feedback`, `default`) est

@@ -26,8 +26,9 @@ Mécanique commune avec review-watch : lib/watchlib.py du plugin gh-watch.
                                              (owner/* : tous les dépôts du propriétaire,
                                              * : tous les dépôts ; off : retour au
                                              niveau au-dessus — dépôt → owner/* → * → off)
-  tidy-watch add <owner/repo|owner/*|*|.> [--on-pr-approved M] [--path <clone>]
-                                             (sans mode ni --path : auto)
+  tidy-watch add <owner/repo|owner/*|*|.> [--on-pr-approved M] [--path <clone> | --path <dossier>/*]
+                                             (sans mode ni --path : auto ; dossier/* : où
+                                             chercher les clones, avant les espaces de cl)
   tidy-watch remove <owner/repo|owner/*|*|.>
   tidy-watch approvals <owner/repo|*|.> [<n> | default]  approbations attendues (* : 2 par défaut)
   tidy-watch set <owner/repo|*|.> validation_status|test_env [<valeur> | default]

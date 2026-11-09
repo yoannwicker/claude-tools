@@ -230,7 +230,25 @@ check "auto * off feedback_received → off (rien au-dessus)" "auto off" \
   "$("$bin" status --json | jq -r '.default | "\(.review_requested) \(.feedback_received)"')"
 check "cible invalide refusée" 1 "$("$bin" auto o on 2>&1 | grep -c 'owner/\*')"
 
-# 12. Ancienne config (review-watch.json) et ancien état : convertis au premier lancement
+# 12. Où trouver le clone : path du dépôt (le clone), sinon « dossier/* » de l'entrée la plus
+# précise (dépôt, owner/*, *), puis les espaces de travail de cl
+mkclone() { git init -q "$1" && git -C "$1" remote add origin "git@github.com:$2.git"; }
+mkdir -p "$tmp/ws" "$tmp/vide" "$tmp/cl-ws" "$XDG_CONFIG_HOME/cl"
+mkclone "$tmp/ws/s" o/s; mkclone "$tmp/cl-ws/t" o/t
+echo "$tmp/cl-ws" > "$XDG_CONFIG_HOME/cl/workspaces"
+"$bin" add '*' --path "$tmp/ws/*" >/dev/null
+check "add * --path dossier/* → gardé tel quel" "$tmp/ws/*" "$(jq -r '.watcher.repos["*"].path' "$cfgf")"
+check "add owner/* --path sans étoile → refusé" 1 "$("$bin" add 'o/*' --path "$tmp/ws" >/dev/null 2>&1; echo $?)"
+dir_of() { jq -r --arg k "$1" '.sessions[$k].dir' "$XDG_STATE_HOME/claude-tools/review-watch/state.json"; }
+"$bin" launch o/s#5 review_requested --background >/dev/null
+check "clone trouvé dans le dossier/* de *" "$tmp/ws/s" "$(dir_of 'o/s#5:review_requested')"
+"$bin" add 'o/*' --path "$tmp/vide/*" >/dev/null
+"$bin" launch o/t#6 review_requested --background >/dev/null
+check "rien dans le dossier/* de o/* → espaces de travail de cl" "$tmp/cl-ws/t" "$(dir_of 'o/t#6:review_requested')"
+check "repos : clones des dossiers/* aussi" "$tmp/ws/s" "$("$bin" repos --json | jq -r '.[] | select(.repo == "o/s") | .path')"
+check "clone introuvable → message" 1 "$("$bin" launch o/u#7 review_requested --background | grep -c 'clone introuvable')"
+
+# 13. Ancienne config (review-watch.json) et ancien état : convertis au premier lancement
 export XDG_CONFIG_HOME=$tmp/config2 XDG_STATE_HOME=$tmp/state2
 mkdir -p "$XDG_CONFIG_HOME/claude-tools" "$XDG_STATE_HOME/claude-tools/review-watch"
 echo '{"repos": {"o/r": {"review": "auto", "feedback": "notify", "path": "/x"}}, "default": {"review": "off"}, "interval": 7}' \

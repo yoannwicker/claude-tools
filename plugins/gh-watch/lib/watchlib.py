@@ -343,13 +343,31 @@ def workspaces():
     return dirs or [os.path.join(HOME, d) for d in sorted(os.listdir(HOME)) if d.startswith("workspace")]
 
 
+def is_glob(path):
+    return path.rstrip("/").endswith("/*")
+
+
+def search_dirs(cfg, repo):
+    """Dossiers où chercher le clone : le `path` en « dossier/* » de l'entrée la plus précise
+    qui en a un (dépôt, owner/*, *), puis les espaces de travail de `cl`."""
+    dirs = []
+    for k in repo_keys(repo):
+        p = repo_cfg(cfg, k).get("path")
+        if p and is_glob(p):
+            dirs.append(os.path.expanduser(p.rstrip("/")[:-2]))
+            break
+    return dirs + [d for d in workspaces() if d not in dirs]
+
+
 def clone_path(cfg, state, repo):
-    """Clone du dépôt : `path` de la config, sinon celui déjà trouvé, sinon cherché (et
-    retenu) dans les espaces de travail de `cl` (~/workspace* à défaut)."""
-    for p in (repo_cfg(cfg, repo).get("path"), state["clones"].get(repo.lower())):
+    """Clone du dépôt : `path` du dépôt (sans étoile : le clone), sinon celui déjà trouvé,
+    sinon cherché (et retenu) dans le dossier d'un `path` en « dossier/* » (dépôt, owner/*,
+    *), puis dans les espaces de travail de `cl` (~/workspace* à défaut)."""
+    own = repo_cfg(cfg, repo).get("path")
+    for p in ((own if own and not is_glob(own) else None), state["clones"].get(repo.lower())):
         if p and os.path.isdir(os.path.expanduser(p)):
             return os.path.expanduser(p)
-    for ws in workspaces():
+    for ws in search_dirs(cfg, repo):
         if not os.path.isdir(ws):
             continue
         for d in sorted(os.listdir(ws)):
@@ -896,12 +914,15 @@ def cmd_status(cfg, state, as_json=False):
         return print(json.dumps(status_data(cfg, state), ensure_ascii=False))
     print(f"surveillance : {timer_state()} ({S.timer}, toutes les {interval(cfg)} min) ;"
           f" dernier passage : {state.get('since', 'jamais')}")
-    print(f"* (tous les dépôts) : {modes_line(cfg, '*')}")
+    star = repo_cfg(cfg, "*").get("path")
+    print(f"* (tous les dépôts) : {modes_line(cfg, '*')}" + (f"  clones cherchés dans {star}" if star else ""))
     for repo, r in sorted(cfg.get("repos", {}).items()):
         if repo == "*" or not watched_entry(r):
             continue  # réglages sans surveillance (ex. d'un skill)
-        where = (f"(tous les dépôts de {repo[:-2]})" if repo.endswith("/*")
-                 else r.get("path") or state["clones"].get(repo.lower()) or "(clone cherché au besoin)")
+        if repo.endswith("/*"):
+            where = f"(tous les dépôts de {repo[:-2]})" + (f", clones cherchés dans {r['path']}" if r.get("path") else "")
+        else:
+            where = r.get("path") or state["clones"].get(repo.lower()) or "(clone cherché au besoin)"
         print(f"  {repo}  {modes_line(cfg, repo)}  {where}")
     sessions = state["sessions"]
     if sessions:
@@ -920,8 +941,9 @@ def remember_path(r, arg):
 
 
 def cmd_add(cfg, state, args):
-    """add <repo|owner/*|*|.> [--on-<événement> M…] [--path <clone>] : sans mode ni chemin,
-    auto pour tous les événements ; --path : owner/repo seulement."""
+    """add <repo|owner/*|*|.> [--on-<événement> M…] [--path P] : sans mode ni chemin, auto
+    pour tous les événements. P : le clone (owner/repo seulement), ou « dossier/* » où le
+    chercher."""
     repo = target_arg(args.repo)
     r = cfg.setdefault("repos", {}).setdefault(repo, {})
     modes = {k: getattr(args, ckey(k)) for k in S.kinds if getattr(args, ckey(k))}
@@ -930,12 +952,18 @@ def cmd_add(cfg, state, args):
     for kind, m in modes.items():
         r[ckey(kind)] = m
     if args.path:
-        if "/" not in repo or repo.endswith("/*"):
-            die(f"{repo} : --path seulement pour un dépôt (owner/repo)")
-        p = os.path.abspath(os.path.expanduser(args.path))
-        if remote_repo(p) != repo.lower():
-            die(f"{p} : pas un clone de {repo}")
-        r["path"] = p
+        if is_glob(args.path):
+            d = os.path.abspath(os.path.expanduser(args.path.rstrip("/")[:-2]))
+            if not os.path.isdir(d):
+                die(f"{d} : dossier introuvable")
+            r["path"] = os.path.join(d, "*")
+        elif "/" not in repo or repo.endswith("/*"):
+            die(f"{repo} : --path attend « dossier/* » (où chercher les clones)")
+        else:
+            p = os.path.abspath(os.path.expanduser(args.path))
+            if remote_repo(p) != repo.lower():
+                die(f"{p} : pas un clone de {repo}")
+            r["path"] = p
     if "/" in repo and not repo.endswith("/*"):
         remember_path(r, args.repo)
     save_config(cfg)
@@ -947,7 +975,9 @@ def cmd_add(cfg, state, args):
 def local_repos(cfg, state):
     """Dépôts GitHub connus : ceux de la config, plus les clones des espaces de travail."""
     found = {}
-    for ws in workspaces():
+    globs = [os.path.expanduser(r["path"].rstrip("/")[:-2]) for r in cfg.get("repos", {}).values()
+             if r.get("path") and is_glob(r["path"])]
+    for ws in dict.fromkeys(globs + workspaces()):
         if not os.path.isdir(ws):
             continue
         for d in sorted(os.listdir(ws)):
@@ -967,9 +997,10 @@ def local_repos(cfg, state):
 
 
 def prune_repo(cfg, repo):
-    """Dépôt retiré de la config quand il n'y reste que le chemin de son clone."""
+    """Dépôt retiré de la config quand il n'y reste que le chemin de son clone (un
+    « dossier/* » où chercher reste)."""
     r = cfg.get("repos", {}).get(repo, {})
-    if not set(r) - {"path"}:
+    if not set(r) - {"path"} and not is_glob(r.get("path") or ""):
         cfg.get("repos", {}).pop(repo, None)
 
 
@@ -989,7 +1020,7 @@ def cmd_auto(cfg, args):
         remember_path(r, args.repo)
     path = r.get("path")
     prune_repo(cfg, repo)
-    if path and repo not in cfg.get("repos", {}):
+    if path and not is_glob(path) and repo not in cfg.get("repos", {}):
         with State() as state:  # entrée retirée : son clone reste connu (gh-watch launch)
             state["clones"].setdefault(repo.lower(), path)
     save_config(cfg)

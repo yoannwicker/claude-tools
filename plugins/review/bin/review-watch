@@ -33,8 +33,10 @@ Mécanique commune (lancement, notifications, timer) : lib/watchlib.py du plugin
                                                * : tous les dépôts ; off : retour au
                                                niveau au-dessus — dépôt → owner/* → * → off)
   review-watch add <owner/repo|owner/*|*|.> [--on-review-requested M]
-                   [--on-feedback-received M] [--path <clone>]
-                                               (sans mode ni --path : auto pour les deux)
+                   [--on-feedback-received M] [--path <clone> | --path <dossier>/*]
+                                               (sans mode ni --path : auto pour les deux ;
+                                               dossier/* : où chercher les clones, avant
+                                               les espaces de travail de cl)
   review-watch remove <owner/repo|owner/*|*|.>
   review-watch enable | disable                timer systemd (enable : état initial d'abord)
   review-watch interval [<minutes>]            fréquence du scan (5 par défaut), appliquée au timer
