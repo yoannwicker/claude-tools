@@ -113,7 +113,7 @@ export GH_FAKE_LOG=$tmp/gh.log
 out=$(COLUMNS=100 "$bin" board)
 check "board : dépôt courant, à toi" "o/r — 2 à toi| À toi" "$(head -2 <<<"$out" | paste -sd'|')"
 check "board : approuvée → skill du watcher qui la prend en charge" 1 \
-  "$(grep -cE '^  #7  approuvée 2/2, en retard  [0-9]+ (min|h|j) +/git-tidy:ready  Ma PR$' <<<"$out")"
+  "$(grep -cE '^  #7  approuvée 2/2, en retard  [0-9]+ (min|h|j)( ⚠)? +/git-tidy:ready  Ma PR$' <<<"$out")"
 check "board : relecture demandée, aucun watcher pour elle → pas d'action" 1 \
   "$(grep -cE '^  #9  à relire +[0-9]+ (h|j) ⚠ +Sa PR$' <<<"$out")"
 out=$("$bin" board --all)
