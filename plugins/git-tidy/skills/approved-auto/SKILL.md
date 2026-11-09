@@ -1,7 +1,7 @@
 ---
 name: approved-auto
 description: Mode auto des PR approuvées — lancer d'office /git-tidy:ready (commits au propre, rebase, description et ticket, puis ticket JIRA passé en validation et message Slack pour le testeur) quand une de mes PR a ses approbations (2 par défaut) — à activer ou désactiver sur le dépôt courant (on/off) ou en choisissant parmi les dépôts connus ; approbations, statut JIRA et environnement de test réglables par dépôt
-argument-hint: "[on | off | interval <minutes> | approvals <n|default> | status <statut|default> | env <texte|default>]"
+argument-hint: "[on | off | interval <minutes> | approvals <n|default> | status <statut|default> | env <texte|default> | ready <statuts|default>]"
 disable-model-invocation: true
 allowed-tools: Bash(tidy-watch:*), Bash(command -v tidy-watch)
 ---
@@ -38,14 +38,17 @@ Approbations attendues sur le dépôt courant : `tidy-watch approvals . [<n> | d
 (`default` : revenir à la valeur commune, 2 sauf `tidy-watch default --approvals <n>` ;
 sans valeur : affiche). Afficher la sortie en une ligne.
 
-## Avec `status [<statut> | default]` ou `env [<texte> | default]`
+## Avec `status [<statut> | default]`, `env [<texte> | default]` ou `ready [<statuts> | default]`
 
-Réglages de `/git-tidy:ready` pour le dépôt courant :
+Réglages de `/git-tidy:ready` (et de la colonne JIRA de `/gh-watch:board`) pour le dépôt
+courant :
 - `status` → `tidy-watch set . validation_status [<statut> | default]` : statut JIRA où passe
   le ticket une fois la PR approuvée (`En validation` par défaut) ;
 - `env` → `tidy-watch set . test_env [<texte> | default]` : environnement de test cité dans
   le message Slack (texte ou URL ; `{pr}`, `{branch}`, `{ticket}` remplacés ; sans réglage :
-  déploiements GitHub de la branche, sinon demandé).
+  déploiements GitHub de la branche, sinon demandé) ;
+- `ready` → `tidy-watch set . jira_ready [<statuts> | default]` : statuts JIRA qui comptent
+  comme « validé » (séparés par des virgules ; ✓ dans la colonne JIRA de `/gh-watch:board`).
 
 Sans valeur, la commande affiche le réglage et sa provenance. Afficher la sortie en une
 ligne.
@@ -67,7 +70,7 @@ par défaut) et garde les autres réglages du dépôt. Afficher la sortie en une
 3. Pour chaque dépôt dont l'état change : `tidy-watch auto <repo> on|off`.
 4. Récapitulatif : `tidy-watch status` et, pour les dépôts en auto, `validation_status` et
    `test_env` (de `repos --json`) ; rappeler `/git-tidy:approved-auto approvals <n>`,
-   `status <statut>` et `env <texte>` pour les régler.
+   `status <statut>`, `env <texte>` et `ready <statuts>` pour les régler.
 
 ## Dans les deux cas
 

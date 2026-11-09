@@ -25,8 +25,11 @@ Mécanique commune avec review-watch : lib/watchlib.py du plugin gh-watch.
   tidy-watch remove <owner/repo|.>
   tidy-watch default [--approved M] [--approvals N]   dépôts non listés (off ; 2)
   tidy-watch approvals <owner/repo|.> [<n> | default]  approbations attendues
-  tidy-watch set <owner/repo|.> validation_status|test_env [<valeur> | default]
-                                             réglages de /git-tidy:ready (sans valeur : affiche)
+  tidy-watch set <owner/repo|.> validation_status|test_env|jira_ready [<valeur> | default]
+                                             réglages de /git-tidy:ready et de la colonne
+                                             JIRA de /gh-watch:board (jira_ready : statuts
+                                             « validé », séparés par des virgules ; sans
+                                             valeur : affiche)
   tidy-watch enable | disable                timer systemd (enable : état initial d'abord)
   tidy-watch interval [<minutes>]            fréquence du scan (5 par défaut), appliquée au timer
   tidy-watch poll [--dry-run]                un passage
@@ -47,7 +50,9 @@ import watchlib as w  # noqa: E402
 import board as b  # noqa: E402
 
 APPROVALS = 2
-SETTINGS = {"validation_status": "En validation", "test_env": None}  # réglages de /git-tidy:ready
+# Réglages de /git-tidy:ready, et de la colonne JIRA de /gh-watch:board (jira_ready : statuts
+# « validé », séparés par des virgules)
+SETTINGS = {"validation_status": "En validation", "test_env": None, "jira_ready": None}
 
 
 def approvals(cfg, repo):

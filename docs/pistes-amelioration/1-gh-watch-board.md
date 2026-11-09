@@ -1,6 +1,7 @@
 # gh-watch : tableau de bord des PR (`board`), actions manquées et rattrapage
 
-- **Statut** : en cours (étapes 1 à 5 faites, liste interactive comprise)
+- **Statut** : faite (étapes 1 à 6, liste interactive comprise ; dernière : commit
+  « ✨ Show each of my PRs' JIRA ticket and status in /gh-watch:board »)
 - **Origine** : idée (2026-11-05), fusion de
   [review : faire le point sur mes PR](2-review-point-mes-pr.md),
   [gh-watch : vue des PR en cours](3-gh-watch-vue-pr.md),
@@ -197,6 +198,14 @@ si l'arborescence change).
   s'il échoue (l'erreur s'affiche dans `gh-watch status`). « Ce qui cloche » ne refait pas
   d'appel GitHub : les manquées du dernier rattrapage, recalculées avec le suivi actuel
   des watchers (2026-11-09).
+
+- Étape 6 : colonne JIRA pour mes PR seulement, dans les tableaux principaux (pas dans
+  `--auto`/`--missed`) ; un seul `searchJiraIssuesUsingJql` pour toutes les clés ; la clé
+  est prise sans demander (la première trouvée). Statuts « validé » : `jira_ready` dans
+  `git-tidy.json`, non réglé par défaut (pas de ✓ tant qu'il ne l'est pas), réglable par
+  `tidy-watch set` / `/git-tidy:approved-auto ready` comme `validation_status`. Ticket au
+  statut `validation_status` : la PR approuvée s'affiche « en validation » (`prepared`)
+  (2026-11-09).
 
 ## À trancher
 

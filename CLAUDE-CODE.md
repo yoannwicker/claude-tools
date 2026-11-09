@@ -739,6 +739,17 @@ tableaux ; lecture seule, sauf les lignes choisies avec `--missed`). Sans argume
 Ne lit que l'état actuel de GitHub, jamais les notifications : une demande de revue que je
 me fais moi-même y apparaît.
 
+**Colonne JIRA** (`/gh-watch:board` seulement, rien dans `gh-watch`) : pour mes PR
+affichées, la clé du ticket lié (`[A-Z][A-Z0-9]+-\d+` dans le titre, sinon la branche puis
+la description, comme `/git-tidy:pr-sync`, sans demander) et son statut, lus par un seul
+`searchJiraIssuesUsingJql` du MCP Atlassian (Rovo ou MCP) ; ✓ si le statut compte comme
+« validé » (`jira_ready` du dépôt dans `git-tidy.json`, statuts séparés par des virgules,
+non réglé par défaut : `tidy-watch set <repo> jira_ready …` ou
+`/git-tidy:approved-auto ready …`). Une PR approuvée dont le ticket est déjà au statut
+`validation_status` s'affiche « en validation », sans action (état `prepared`). Sans MCP
+Atlassian, ou en erreur : pas de colonne, sans message. Le merge après validation reste à
+faire à la main.
+
 Fait pour tenir sur un écran : une ligne par PR, à la largeur du terminal
 (`#n  état  âge  action  titre`, gitmoji de tête retiré, titre coupé), rangée selon qui doit
 agir :
@@ -1008,8 +1019,9 @@ l'historique sort dans sa forme finale, sans `fixup!` restant.
 - Réglages par dépôt, `~/.config/claude-tools/git-tidy.json` :
   `{"default": {"validation_status": "En validation"}, "repos": {"owner/repo":
   {"approvals": 2, "reviewers": ["login", "org/équipe"], "validation_status": "…",
-  "test_env": "https://recette/{branch}"}}}` (la clé du dépôt l'emporte sur `default` ;
-  même fichier que la config de `tidy-watch`).
+  "test_env": "https://recette/{branch}", "jira_ready": "Validé, Prêt à livrer"}}}` (la
+  clé du dépôt l'emporte sur `default` ; même fichier que la config de `tidy-watch` ;
+  `jira_ready` : statuts « validé » de la colonne JIRA de [`/gh-watch:board`](#gh-watch)).
 - Mêmes accords que les deux skills (plan, rebase, push, publication), plus la demande de
   relecture et le passage en validation ; finit par un résumé : commits réécrits, rebase,
   sauvegardes, push, relecteurs demandés, tickets passés, liens publiés, message Slack.
@@ -1040,19 +1052,20 @@ relance.
 **Modes**, par dépôt : `auto` (session lancée), `notify` (notification, dont le clic lance
 la session) ou `off` (rien ; défaut des dépôts non listés).
 
-- `/git-tidy:approved-auto [on|off|interval <min>|approvals <n|default>|status <statut|default>|env <texte|default>]` :
+- `/git-tidy:approved-auto [on|off|interval <min>|approvals <n|default>|status <statut|default>|env <texte|default>|ready <statuts|default>]` :
   avec `on`/`off`, le dépôt courant (`tidy-watch auto . on|off` ; `off` le remet au mode
   des dépôts non listés et garde ses autres réglages) ; sans argument, choix parmi les
   dépôts connus (ceux de la config et les clones GitHub des espaces de travail de
   [`cl`](TOOLS.md#lanceur-cl), actifs en premier), puis récapitulatif. `approvals` :
   approbations attendues ; `status` : statut JIRA de validation (`validation_status`,
   `En validation` par défaut) ; `env` : environnement de test du message Slack
-  (`test_env`) ; sans valeur, affiche le réglage et sa provenance. Surveillance arrêtée :
+  (`test_env`) ; `ready` : statuts JIRA « validé » (`jira_ready`, colonne JIRA de
+  `/gh-watch:board`) ; sans valeur, affiche le réglage et sa provenance. Surveillance arrêtée :
   propose `tidy-watch enable`. Sans `tidy-watch` dans le `PATH` : dit d'installer le plugin
   et s'arrête.
 - En terminal : `tidy-watch auto <owner/repo|.> on|off`, `add <repo> [--approved M]
   [--path <clone>]`, `remove <repo>`, `default [--approved M] [--approvals N]`,
-  `approvals <repo|.> [<n>|default]`, `set <repo|.> validation_status|test_env
+  `approvals <repo|.> [<n>|default]`, `set <repo|.> validation_status|test_env|jira_ready
   [<valeur>|default]`, `repos [--json]`, `status`, `enable` (enregistre d'abord ce qui est
   déjà là, sans rien lancer) / `disable`, `poll [--dry-run]`, `interval [<minutes>]`
   (drop-in `~/.config/systemd/user/tidy-watch.timer.d/interval.conf`), `launch`, `resume`.

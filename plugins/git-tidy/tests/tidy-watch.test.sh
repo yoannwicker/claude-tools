@@ -124,6 +124,10 @@ check "repos --json : approvals et réglages" "3 Recette https://recette/{branch
   "$("$bin" repos --json | jq -r '.[0] | "\(.approvals) \(.validation_status) \(.test_env)"')"
 check "set sans valeur : réglage et provenance" "o/r : validation_status = Recette (dépôt)" \
   "$(cd "$tmp/clone" && "$bin" set . validation_status)"
+check "set jira_ready : statuts « validé » (colonne JIRA de /gh-watch:board)" "o/r : jira_ready = Validé, Prêt à livrer (dépôt)" \
+  "$(cd "$tmp/clone" && "$bin" set . jira_ready "Validé, Prêt à livrer")"
+check "jira_ready non réglé par défaut" "o/r : jira_ready = (non réglé) (défaut)" \
+  "$(cd "$tmp/clone" && "$bin" set . jira_ready default >/dev/null && "$bin" set . jira_ready)"
 (cd "$tmp/clone" && "$bin" approvals . default >/dev/null && "$bin" set . validation_status default >/dev/null)
 check "default → valeur par défaut" "o/r : validation_status = En validation (défaut)|2" \
   "$(cd "$tmp/clone" && "$bin" set . validation_status)|$("$bin" repos --json | jq -r '.[0].approvals')"
