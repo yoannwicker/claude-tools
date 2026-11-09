@@ -168,7 +168,7 @@ class Others(unittest.TestCase):
         c = state(pr(author="alice", reviews=[review(ME, "COMMENTED", "2026-11-03T08:00:00Z")],
                      threads=[thread(ME, "alice", "2026-11-04T08:00:00Z"), thread(ME, ME, "2026-11-03T08:00:00Z")]),
                   {"reviewed"})
-        self.assertEqual(c["state"], "reviewed")
+        self.assertEqual(c["state"], "answered")
         self.assertIn("l'auteur a répondu (1 fil)", c["detail"])
         self.assertEqual((c["short"], c["bucket"]), ("réponse de l'auteur (1 fil)", "me"))
 
@@ -177,7 +177,8 @@ class Others(unittest.TestCase):
                      threads=[thread(ME, ME, "2026-11-03T08:00:00Z", outdated=True),
                               thread(ME, ME, "2026-11-03T08:00:00Z", outdated=True),
                               thread(ME, ME, "2026-11-03T08:00:00Z")]), {"reviewed"})
-        self.assertEqual((c["short"], c["bucket"]), ("code modifié (2 fils obsolètes)", "me"))
+        self.assertEqual((c["state"], c["short"], c["bucket"]), ("answered", "code modifié (2 fils obsolètes)", "me"))
+        self.assertEqual(c["event_at"], c["since"])
         self.assertIn("code modifié sous 2 fils obsolètes", c["detail"])
 
     def test_reviewed_author_comment_and_outdated(self):

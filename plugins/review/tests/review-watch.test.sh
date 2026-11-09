@@ -191,4 +191,8 @@ rm -f "$tmp/notifs"
 HERDR_PROMPT_RC=1 "$bin" poll >/dev/null
 check "agent en attente d'une réponse → notification critique" "occupée, message non envoyé critical" "$(body)"
 
+# 10. L'auteur d'une PR que j'ai relue a réagi (answered) : pris en charge pour le rattrapage
+# de gh-watch (événement review), jamais cherché par poll
+check "answered → review, pour gh-watch board" review "$("$bin" status --json | jq -r .board.answered)"
+
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

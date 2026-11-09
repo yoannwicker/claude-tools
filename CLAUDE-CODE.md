@@ -751,7 +751,7 @@ agir :
   redemandée : après une review de moi), PR que j'ai relue où l'auteur a bougé — réponse
   dans un de mes fils, commentaire de la PR après mon dernier passage, ou fil où j'ai le
   dernier mot mais devenu obsolète (code modifié depuis : « code modifié (N fils
-  obsolètes) ») —, et mes PR en attente des autres mais avec CI en échec ou en conflit.
+  obsolètes) ») — (état `answered`), et mes PR en attente des autres mais avec CI en échec ou en conflit.
 - **En attente des autres** — mes PR en relecture (qui est attendu) ou en attente du
   relecteur (fils où j'ai répondu en dernier), les PR des autres que j'ai relues (fils en
   attente de l'auteur, approuvée par moi…).
@@ -830,9 +830,9 @@ n'est jamais filtré.
 Chaque ligne dit depuis quand (dernière demande, premier retour sans réponse, N-ième
 approbation…), avec ⚠ quand quelqu'un attend une action depuis plus de `stale_days` jours
 ouvrés (2 par défaut, week-ends exclus ; pas sur un brouillon, une mention ou une PR
-relue), et l'action proposée : le skill du watcher qui
+relue en attente de l'auteur), et l'action proposée : le skill du watcher qui
 prend l'état en charge (`board` de `watchlib.configure` : `review-watch` pour à relire,
-redemandée et retours ; `tidy-watch` pour approuvée), celui qu'un watcher propose pour un
+redemandée, relue où l'auteur a réagi (`/review:pr`) et retours ; `tidy-watch` pour approuvée), celui qu'un watcher propose pour un
 état ou une alerte (`suggest` : `/git-tidy:pr-sync` pour une PR en retard), sinon un texte
 (relancer, demander une relecture). Le `--json` donne aussi le libellé long (`detail`) et
 qui doit agir (`bucket`). Watcher absent : l'état s'affiche sans action. Seuil
@@ -1519,6 +1519,13 @@ review par PR, de bas en haut de la pile, dont le corps cite les autres PR du lo
 constat de croisement est posté sur la PR de sa ligne en citant l'autre côté, et la review
 de l'autre PR y renvoie. Le ménage final couvre les worktrees et branches de chaque PR.
 
+**Reprise** d'une PR déjà relue (lancée par `review-watch` quand l'auteur a réagi, ou
+redemandée) : l'agent ne rapporte que ce qui a changé depuis le commit de ma dernière
+review, et la validation commence par mes fils non résolus — réponse de l'auteur ou code
+modifié, avec pour chacun **résoudre**, **répondre** (texte tel qu'il sera posté) ou
+**laisser**. Après validation, réponses (`addPullRequestReviewThreadReply`) et
+résolutions (`resolveReviewThread`) sont faites en plus de la review des nouveaux points.
+
 `review-post <pr> <review.json> [--replace-pending] [--dry-run]` (`bin/`, dans le PATH de
 l'outil Bash) évite les deux échecs vus en publiant par `gh api` (constat 2 de
 [l'analyse du 23/10](docs/analyses-sessions/2026-10-23.md)) :
@@ -1584,7 +1591,11 @@ Rien n'est posté ni répondu sans validation dans la session lancée.
   `notifications`, lues comprises, depuis le passage précédent). La date de la demande vient
   de la timeline de la PR (dernier `ReviewRequestedEvent` pour moi ou une équipe) : une
   nouvelle demande (re-request) relance, une revue de ma part postée depuis la demande
-  l'écarte ;
+  l'écarte. L'auteur d'une PR que j'ai relue a réagi (état `answered` de
+  [`gh-watch board`](#gh-watch) : réponse dans un de mes fils, commentaire de la PR après
+  mon dernier passage, fil de moi devenu obsolète) : même événement, mais **par le
+  rattrapage seulement** (`gh-watch board --missed`, `/gh-watch:board-auto`), jamais
+  cherché par `poll` ;
 - **feedback** : review d'un autre que moi (robots compris) sur une de mes PR ouvertes,
   plus récente que la dernière traitée, classée par [`gh-watch board`](#gh-watch) (même
   calcul, `board.watched`). Elle lance `/review:feedback` si la PR a des retours à traiter

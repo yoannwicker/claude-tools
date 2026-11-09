@@ -20,15 +20,17 @@ MINE = (("feedback", "retours à traiter"), ("approved", "approuvée, à prépar
         ("unrequested", "à faire relire"), ("in_review", "en relecture"),
         ("waiting_reviewer", "en attente du relecteur"), ("draft", "brouillon"))
 OTHERS = (("re_requested", "relecture redemandée"), ("to_review", "à relire"),
-          ("reviewed", "relue"), ("mentioned", "mentionné"),
+          ("answered", "relue, l'auteur a réagi"), ("reviewed", "relue"), ("mentioned", "mentionné"),
           ("open_unrequested", "ouvertes, sans demande"))
 LABEL = dict(MINE + OTHERS)
 ALERTS = {"ci": "CI en échec", "conflict": "conflit", "behind": "en retard sur sa base"}
 # États où une attente trop longue est signalée (⚠) : ceux où quelqu'un attend une action
-STALE = {"feedback", "approved", "unrequested", "in_review", "waiting_reviewer", "to_review", "re_requested"}
+STALE = {"feedback", "approved", "unrequested", "in_review", "waiting_reviewer", "to_review", "re_requested",
+         "answered"}
 # Qui doit agir : moi (me), les autres (others), personne pour l'instant (rest)
 BUCKETS = (("me", "À toi"), ("others", "En attente des autres"), ("rest", "Le reste"))
 BUCKET = {"feedback": "me", "approved": "me", "unrequested": "me", "to_review": "me", "re_requested": "me",
+          "answered": "me",
           "in_review": "others", "waiting_reviewer": "others", "reviewed": "others",
           "draft": "rest", "mentioned": "rest", "open_unrequested": "rest"}
 # Action proposée quand aucun watcher ne prend l'état en charge
@@ -227,9 +229,7 @@ def classify(pr, login, cats, approvals=2):
     r.update(mine=mine, alerts=_alerts(pr) if mine else [])
     r.setdefault("event_at", None)
     bucket = BUCKET[r["state"]]
-    if r.pop("answered", False):
-        bucket = "me"  # l'auteur m'a répondu
-    elif mine and bucket == "others" and {"ci", "conflict"} & set(r["alerts"]):
+    if mine and bucket == "others" and {"ci", "conflict"} & set(r["alerts"]):
         bucket = "me"  # CI en échec ou conflit : à moi de corriger
     r["bucket"] = bucket
     return r
@@ -352,7 +352,7 @@ def classify_other(pr, login, cats, need):
                      if what else f"code modifié ({stale})")
             detail = ([f"l'auteur a répondu ({', '.join(what)})"] if what else []) + (
                 [f"code modifié sous {stale}"] if outdated else [])
-            return {"state": "reviewed", "short": short, "answered": True, "since": max(dates),
+            return {"state": "answered", "short": short, "since": max(dates), "event_at": max(dates),
                     "detail": f"de {author} ; " + " ; ".join(detail)}
         if threads:
             return {"state": "reviewed", "short": f"attend l'auteur ({_n(len(threads), 'fil')})", "since": mine[-1],

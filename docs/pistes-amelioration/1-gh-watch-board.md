@@ -28,7 +28,7 @@ automatique.
 | Plugin | Apporte |
 |---|---|
 | `gh-watch` | le calcul (`lib/board.py`), `gh-watch board`, `gh-watch launch`, `/gh-watch:board`, `/gh-watch:board-auto`, l'état des lignes écartées hors watcher |
-| `review` (`review-watch`) | déclare les états qu'il prend en charge : `to_review`, `re_requested` → événement `review` (`/review:pr`) ; `feedback` → événement `feedback` (`/review:feedback`) |
+| `review` (`review-watch`) | déclare les états qu'il prend en charge : `to_review`, `re_requested`, `answered` → événement `review` (`/review:pr`) ; `feedback` → événement `feedback` (`/review:feedback`) |
 | `git-tidy` (`tidy-watch`) | déclare `approved` → événement `approved` (`/git-tidy:ready`) ; le seuil `approvals` par dépôt (déjà exposé par `status --json`) ; l'action suggérée `/git-tidy:pr-sync` pour `behind` (sans événement) ; plus tard, les statuts JIRA reconnus |
 
 Plugin absent : l'état s'affiche quand même, sans action ni suivi (seuil d'approbations : 2).
@@ -59,7 +59,8 @@ Alertes cumulables avec l'état : CI en échec, en retard sur sa base (`behind` 
 |---|---|---|---|
 | `to_review` | `review-requested:@me` (moi ou une de mes équipes : « via @équipe »), jamais relue | dernière demande qui me vise | `/review:pr` |
 | `re_requested` | `review-requested:@me` et une review de moi avant la dernière demande (GitHub retire le relecteur à sa review : réapparaître, c'est être redemandé, par le bouton ou à la main) | dernière demande | `/review:pr` |
-| `reviewed` | `reviewed-by:@me`, plus demandé : en attente de l'auteur, ou l'auteur a bougé (« À toi ») : réponse dans un de mes fils, commentaire de la PR après mon dernier passage, ou fil de moi devenu obsolète (« code modifié ») | ma review / sa réponse / son dernier commit | — |
+| `answered` | `reviewed-by:@me`, plus demandé, l'auteur a réagi : réponse dans un de mes fils, commentaire de la PR après mon dernier passage, ou fil de moi devenu obsolète (« code modifié ») | sa réponse / son dernier commit | `/review:pr` (reprise) |
+| `reviewed` | `reviewed-by:@me`, plus demandé, en attente de l'auteur | ma review | — |
 | `mentioned` | `mentions:@me`, sans demande | mention | — |
 | `open_unrequested` | seulement si `others = open` pour le dépôt : PR ouverte d'un autre, hors brouillon, sans toutes ses approbations, pas relue par moi | création | — |
 

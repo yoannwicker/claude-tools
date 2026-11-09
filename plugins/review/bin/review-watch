@@ -42,6 +42,11 @@ Mécanique commune (lancement, notifications, timer) : lib/watchlib.py du plugin
   review-watch skip <owner/repo#n | n> review|feedback --at <date>
                                                écarter cet événement (gh-watch skip)
   review-watch resume [<owner/repo#n> [review|feedback]]   session préparée en fond
+
+Pris en charge seulement par le rattrapage (gh-watch board --missed, /gh-watch:board-auto),
+jamais par `poll` : l'état « answered » de gh-watch board (l'auteur d'une PR que j'ai relue
+a réagi : réponse dans un de mes fils, commentaire de la PR, fil de moi devenu obsolète),
+sous l'événement review → /review:pr <n> (reprise de la relecture).
 """
 import json, os, sys
 
@@ -155,15 +160,16 @@ w.configure(
     announce={"review": "Revue demandée", "feedback": "Nouveaux retours"},
     # Message à une session déjà ouverte sur la PR : elle ne voit pas seule ce qui arrive ensuite
     tell={
-        "review": "review-watch : review redemandée sur la PR #{n}{when}. La PR a pu changer "
-                  "depuis ta relecture : regarde les nouveaux commits avant de poster.",
+        "review": "review-watch : review redemandée sur la PR #{n}{when}, ou l'auteur a réagi à "
+                  "tes retours. La PR a pu changer depuis ta relecture : regarde les nouveaux "
+                  "commits et les réponses dans tes fils avant de poster.",
         "feedback": "review-watch : nouveaux retours sur la PR #{n}{when}. Relis les fils non "
                     "résolus (requête de l'étape 2 de /review:feedback) et prends en compte ceux "
                     "qui ne sont pas dans ton analyse avant de répondre ou de relancer les relecteurs.",
     },
     guess_kind=guess_kind, worktrees="review-worktrees", detached=("review",),
-    # États du tableau de gh-watch board pris en charge
-    board={"to_review": "review", "re_requested": "review", "feedback": "feedback"},
+    # États du tableau de gh-watch board pris en charge (answered : par le rattrapage seulement)
+    board={"to_review": "review", "re_requested": "review", "answered": "review", "feedback": "feedback"},
 )
 
 if __name__ == "__main__":

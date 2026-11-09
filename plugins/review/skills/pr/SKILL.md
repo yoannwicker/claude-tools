@@ -3,7 +3,7 @@ name: pr
 description: Relire la PR d'un collègue — ou plusieurs PR liées ensemble (pile de PR, même sujet), avec la cohérence entre elles — avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub (COMMENT) par PR, et enfin supprimer les worktrees et branches créés pour la revue s'il y en a
 argument-hint: "<numéro… | recherche> [--refacto \"<piste>\"] [--prepare]"
 disable-model-invocation: true
-allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree
+allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree
 ---
 
 Arguments : `$ARGUMENTS`
@@ -41,6 +41,24 @@ validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalem
 - Ne pas se placer sur les PR : le diff et l'API suffisent.
 - `--refacto "<piste>"` : piste de refactoring à faire évaluer par l'agent ; dans un lot,
   pour la PR qu'elle concerne (demander si ce n'est pas clair).
+- **Reprise** (PR que j'ai déjà relue : une review de moi dans `gh pr view <n> --json
+  reviews`) : c'est une relecture de suivi — lancée par `review-watch` quand l'auteur a
+  réagi (réponse dans un de mes fils, commentaire de la PR, fil devenu obsolète), ou
+  redemandée. Relever, pour l'étape 3 :
+  - **mes fils non résolus** — `gh repo view --json owner,name`, puis :
+
+    ```
+    gh api graphql -f query='query($owner: String!, $repo: String!, $n: Int!) {
+      repository(owner: $owner, name: $repo) { pullRequest(number: $n) {
+        reviewThreads(first: 100) { nodes { id isResolved isOutdated path line originalLine
+          comments(first: 50) { nodes { author { login } body url createdAt } } } }
+        comments(last: 30) { nodes { author { login } body url createdAt } } } } }' \
+      -F owner=<owner> -F repo=<repo> -F n=<n>
+    ```
+
+    garder les fils `isResolved: false` dont le premier message est de moi ;
+  - **les commentaires de l'auteur** sur la PR postés après ma dernière review ;
+  - **le commit de ma dernière review** (`reviews[].commit.oid`) : ce qui a changé depuis.
 - Le ticket : lire `${CLAUDE_SKILL_DIR}/../../ticket.md` et le suivre pour chaque PR
   (`headRefName`, titre et description de la PR, messages de ses commits) ; un ticket
   commun n'est lu qu'une fois.
@@ -48,7 +66,10 @@ validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalem
 ## 2. La revue
 
 Lancer l'agent `review:reviewer` (outil Agent) avec : « PR #<n> », `headRefOid`, la piste
-`--refacto` s'il y en a une, le ticket s'il y en a un. Il rend du JSON.
+`--refacto` s'il y en a une, le ticket s'il y en a un. Il rend du JSON. Reprise : lui
+donner aussi le commit de ma dernière review (« déjà relue à <oid> : ne rapporter que ce
+qui a changé depuis, et ce que je n'avais pas vu de bloquant ») et mes fils non résolus
+(pour ne pas les redire).
 
 Lot : un agent par PR (« PR #<n> du lot », plus le lot : numéro, titre, `headRefOid`,
 base et relation de chaque PR) et un agent pour **le croisement** (« croisement du lot »,
@@ -82,7 +103,17 @@ conseil ; les constats de croisement à la fin (`#83 ↔ #84`). Leur commentaire
 sur la PR de leur ligne et cite l'autre côté (`#84`, `chemin:ligne`) ; le corps de la
 review de l'autre PR y renvoie en une ligne.
 
-Rien de retenu : le dire et s'arrêter (rien n'est posté).
+**Reprise : mes fils**, avant les nouveaux points, un tableau d'un fil par ligne : le
+fil (`chemin:ligne`, mon retour en quelques mots), ce qui s'est passé (réponse de
+l'auteur résumée, code modifié — lire la ligne à `headRefOid` et dire si le retour est
+traité —, ou rien), et l'action proposée : **résoudre** (traité, ou réponse qui me
+convainc), **répondre** (texte tel qu'il sera posté : désaccord argumenté, précision,
+« corrigé ailleurs ? »), ou **laisser** (rien de neuf). Les commentaires de l'auteur hors
+fil : y répondre dans le corps de la review s'ils m'attendent. Valider fil par fil comme
+les points (`validation.md`).
+
+Rien de retenu (ni nouveau point, ni action sur mes fils) : le dire et s'arrêter (rien
+n'est posté).
 
 ## 4. La publication
 
@@ -100,7 +131,19 @@ review par PR qui a des points gardés (lot : de bas en haut de la pile) :
 - Code 3 (une review en attente à moi existe déjà) : le dire avec son lien et demander
   (`AskUserQuestion`, header « En attente ») : **La garder, ne rien poster** / **La
   supprimer et poster** (`--replace-pending`).
-- Fin : l'URL de chaque review, le nombre de commentaires inline et passés dans le corps.
+- Reprise, mes fils validés : après la review (ou sans review s'il n'y a pas de nouveau
+  point), pour chaque fil **répondre** :
+
+  ```
+  gh api graphql -f query='mutation($id: ID!, $body: String!) {
+    addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $id, body: $body }) { comment { url } } }' \
+    -F id=<thread id> -f body=<texte>
+  ```
+
+  et pour chaque fil **résoudre** (je suis le relecteur : c'est à moi de le faire) :
+  `gh api graphql -f query='mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }' -F id=<thread id>`.
+- Fin : l'URL de chaque review, le nombre de commentaires inline et passés dans le corps ;
+  reprise : les fils répondus et résolus.
 
 ## 5. Le ménage (seulement si un worktree ou une branche a été créé pour la revue)
 
