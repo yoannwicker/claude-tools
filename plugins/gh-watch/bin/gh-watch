@@ -32,9 +32,11 @@ posé par le setup.sh de son plugin (./install.sh plugin <plugin>) : gh-watch le
                                            gère l'état, avec leur suivi : session ouverte,
                                            analyse en cours ou prête, lancée, notifiée,
                                            traitée, manquée
-  gh-watch board … --missed                seulement les manquées (pas vues, échec, ignorées,
-                                           notifiées sans session), avec la commande pour
-                                           les lancer (gh-watch launch)
+  gh-watch board … --missed                seulement les manquées d'un dépôt en auto (pas
+                                           vues, échec, ignorées, notifiées sans session),
+                                           avec la commande pour les lancer (gh-watch
+                                           launch) ; sur tous les dépôts, seulement ceux
+                                           d'un watcher en auto (pas le filtre set board)
   gh-watch board … --missed --launch [--background]
                                            lance toutes les manquées (comme gh-watch launch)
   gh-watch board … --skipped               montre aussi les lignes écartées
@@ -340,16 +342,33 @@ def active_for(cfg):
     return active
 
 
-def board_data(repo=None, fallback=False):
+def auto_for(data):
+    """Dépôts où au moins un watcher est en auto (par le dépôt, son propriétaire owner/*, ou
+    `default` : alors tous, None) : ceux de board --missed sur tous les dépôts, à la place
+    du filtre `set board` (seul le mode auto a des manquées)."""
+    ok = [d for d in data if not d.get("error")]
+    if any(m == "auto" for d in ok for m in (d.get("default") or {}).values()):
+        return None
+
+    def active(name):
+        return any(b.repo_entry(d.get("repos", []), name).get(k) == "auto"
+                   for d in ok for k in d.get("kinds", []))
+    return active
+
+
+def board_data(repo=None, fallback=False, missed=False):
+    """missed (--missed) : sur tous les dépôts, seulement ceux d'un watcher en auto
+    (auto_for)."""
     cfg = w.load_json(CONFIG)
     data = collect(False)
     open_repos = [k.lower() for k, v in cfg.get("repos", {}).items() if v.get("others") == "open"]
-    active = None if repo else active_for(cfg)
+    active = None if repo else auto_for(data) if missed else active_for(cfg)
     login, items = b.fetch(repo, open_repos, active)
     stale = cfg.get("stale_days", STALE_DAYS)
     rows = b.watch(actions(b.build(login, items, approvals_for(data), stale), data), data)
     skipped = apply_skips(rows, lambda r: same_repo(r, repo) if repo else (not active or active(r)))
-    return {"login": login, "repo": repo, "fallback": fallback, "filtered": bool(active), "stale_days": stale,
+    return {"login": login, "repo": repo, "fallback": fallback, "filtered": bool(active) and not missed,
+            "stale_days": stale,
             "generated": w.iso(w.now()), "prs": rows, "skipped": skipped,
             "scripts": {d["name"]: d["script"] for d in data if d.get("script")}}
 
@@ -535,7 +554,7 @@ def interactive(d, args, repo, fallback):
 
         @staticmethod
         def refresh():
-            state["d"] = board_data(repo, fallback)
+            state["d"] = board_data(repo, fallback, args.missed)
             return select_rows(state["d"], args)
     watching = args.auto or args.missed
     scope = repo or ("tous les dépôts" + (" (hors d'un clone GitHub)" if fallback else ""))
@@ -828,7 +847,7 @@ def main():
         repo = None if args.all else repo_arg(args.repo) if args.repo else current_repo()
         fallback = not args.all and not args.repo and not repo
         try:
-            d = board_data(repo, fallback)
+            d = board_data(repo, fallback, args.missed)
         except RuntimeError as e:
             die(str(e))
         if args.interactive:

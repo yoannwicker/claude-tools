@@ -464,7 +464,8 @@ def repo_entry(entries, repo):
 
 def follow(r, d, kind, now):
     """Suivi d'une ligne par le watcher `d` qui gère son état sous `kind` : {watcher, kind,
-    mode, handled, follow, missed, command}. Manquée : dépôt en auto ou notify, et rien de
+    mode, handled, follow, missed, command}. Manquée : dépôt en auto (en notify, la
+    notification du watcher suffit), et rien de
     ce que le watcher a fait ne couvre l'événement — pas vue (date traitée antérieure),
     échec, ignorée (déjà là à l'activation, mode off à l'époque), notifiée sans session
     lancée depuis — ni session en cours (herdr ouverte, analyse en cours ou prête)."""
@@ -482,7 +483,7 @@ def follow(r, d, kind, now):
            "missed": False, "command": None}
 
     def done(text, missed=False, command=None):
-        out.update(follow=text, missed=missed, command=command)
+        out.update(follow=text, missed=missed and mode == "auto", command=command)
         return out
 
     launch = f"gh-watch launch {repo}#{n}"

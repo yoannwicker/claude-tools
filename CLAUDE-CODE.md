@@ -719,7 +719,7 @@ y penser.
   watcher relâché, `watchlib` retient la journée dans `catchup.json` (sous verrou : l'autre
   watcher ne le relance pas le même jour) et lance en détaché `<watcher> _catchup` :
   `gh-watch board --all --missed --json` (le `bin/gh-watch` du plugin, le `PATH` du timer
-  n'ayant pas `~/.local/bin`). Résultat retenu (fin, nombre, lignes, erreur) ; s'il y a des
+  n'ayant pas `~/.local/bin`), limité aux dépôts où un watcher est en `auto`. Résultat retenu (fin, nombre, lignes, erreur) ; s'il y a des
   lignes, **une** notification « N actions manquées » (les 4 premières dans le texte).
 - Son clic (`<watcher> _catchup_open`) ouvre `gh-watch board --all --missed -i` : dans un
   nouveau workspace herdr (« manquées ») s'il tourne, sinon dans un terminal (`terminal` de
@@ -786,10 +786,14 @@ en `auto` ou `notify` : à relire, redemandée, retours pour `review-watch`, app
 `tidy-watch`), avec leur mode et leur suivi — session herdr ouverte, analyse en cours ou
 prête à reprendre (avec la commande `resume`), lancée, notifiée, traitée, au prochain
 passage (événement plus récent que l'intervalle du watcher + 5 min). `--missed` ne garde
-que les **manquées**, avec la commande pour les lancer (`gh-watch launch <repo#n>`) : événement jamais vu par le watcher (date traitée antérieure, ex. une
+que les **manquées** — seulement en mode `auto` : en `notify`, la notification du watcher
+suffit —, avec la commande pour les lancer (`gh-watch launch <repo#n>`) : événement jamais vu par le watcher (date traitée antérieure, ex. une
 revue que je me demande moi-même, sans notification), lancement ou analyse en échec,
 ignorée (déjà là à l'activation), notifiée sans session lancée depuis. Le watcher expose
-pour cela ses dates traitées dans `status --json` (`handled`).
+pour cela ses dates traitées dans `status --json` (`handled`). Sur tous les dépôts (`--all`, ou
+hors d'un clone), `--missed` ne cherche que dans les dépôts où un watcher est en `auto`
+(par le dépôt, son propriétaire `owner/*`, ou `default` : alors tous), à la place du filtre
+`gh-watch set board`.
 
 Agir sur une ligne :
 

@@ -292,6 +292,11 @@ class Follow(unittest.TestCase):
         w["repos"] = []
         self.assertEqual(b.watch([row()], [w], NOW)[0]["watch"]["mode"], "notify")
 
+    def test_notify_mode_never_missed(self):
+        f = self.follow(mode="notify", history=[hist("notifié")], handled={"o/r#5": EV})
+        self.assertEqual((f["mode"], f["missed"]), ("notify", False))
+        self.assertFalse(self.follow(mode="notify")["missed"])  # pas vue non plus
+
     def test_failure_ignored_notified_are_missed(self):
         for action, text in (("échec", "échec"), ("ignoré", "ignorée"), ("notifié", "notifiée")):
             f = self.follow(handled={"o/r#5": EV}, history=[hist(action)])

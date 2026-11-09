@@ -142,6 +142,17 @@ check "board --missed : approuvée jamais vue → commande de lancement" 1 \
   "$("$bin" board --missed | grep -c 'auto  manquée : pas vue  gh-watch launch o/r#7')"
 check "board --missed --json : suivi" "a-watch approved auto true" \
   "$("$bin" board --missed --json | jq -r '.prs[0].watch | "\(.watcher) \(.kind) \(.mode) \(.missed)"')"
+"$bin" set board autre on >/dev/null
+check "board --all : filtre set board (o/r non activé)" 0 "$("$bin" board --all | grep -c '#7')"
+check "board --all --missed : dépôts des watchers en auto, pas le filtre set board" 1 \
+  "$("$bin" board --all --missed | grep -c 'manquée : pas vue  gh-watch launch o/r#7')"
+"$bin" set board autre default >/dev/null
+sed -i 's/"repo": "o\/r", "approved": "auto"/"repo": "o\/r", "approved": "notify"/; s/"default": {"approved": "off"}/"default": {"approved": "notify"}/' "$tmp/a-watch" "$tmp/b-watch"
+check "board --all --missed : dépôts en notify (même par défaut) → écartés" "aucune action manquée" \
+  "$("$bin" board --all --missed)"
+check "board --missed sur un dépôt en notify : notifiée, pas manquée" "notify false" \
+  "$("$bin" board o/r --auto --json | jq -r '.prs[0].watch | "\(.mode) \(.missed)"')"
+sed -i 's/"repo": "o\/r", "approved": "notify"/"repo": "o\/r", "approved": "auto"/; s/"default": {"approved": "notify"}/"default": {"approved": "off"}/' "$tmp/a-watch" "$tmp/b-watch"
 check "board --auto et --missed ensemble → erreur" 2 "$("$bin" board --auto --missed >/dev/null 2>&1; echo $?)"
 # --- launch, skip, unskip ---
 : > "$tmp/calls.log"
