@@ -56,13 +56,17 @@ appr() {
     done
     specs+=("${head%d}#$([[ $head == *d ]] && echo true || echo false)#$out#$thread")
   done
-  jq -n '{data: {search: {nodes: [$ARGS.positional[] | split("#") as [$n, $d, $r, $t]
-    | {number: ($n | tonumber), title: "Ma PR \($n)", url: "m\($n)", isDraft: ($d == "true"),
-       repository: {nameWithOwner: "o/r"},
-       latestOpinionatedReviews: {nodes: ($r | split(";") | map(select(. != "") | split("|")
-         | {author: {login: .[0]}, state: .[1], submittedAt: .[2]}))},
-       reviewThreads: {nodes: (if $t == "" then [] else
-         [{isResolved: false, comments: {nodes: [{author: {login: $t}}]}}] end)}}]}}}' \
+  # nœuds de gh-watch board (board.watched)
+  jq -n '{data: {viewer: {login: "moi"}, search: {nodes: [$ARGS.positional[] | split("#") as [$n, $d, $r, $t]
+    | ($r | split(";") | map(select(. != "") | split("|")
+        | {author: {__typename: "User", login: .[0]}, state: .[1], submittedAt: .[2], body: ""})) as $revs
+    | {id: "o/r#\($n)", number: ($n | tonumber), title: "Ma PR \($n)", url: "m\($n)", isDraft: ($d == "true"),
+       createdAt: "2026-01-01T00:00:00Z", author: {login: "moi"}, repository: {nameWithOwner: "o/r"},
+       reviewRequests: {nodes: []}, timelineItems: {nodes: []}, comments: {nodes: []}, commits: {nodes: []},
+       latestOpinionatedReviews: {nodes: $revs}, reviews: {nodes: $revs},
+       reviewThreads: {nodes: (if $t == "" then [] else [{isResolved: false,
+         first: {nodes: [{author: {login: "b"}, createdAt: "2026-01-01T00:00:00Z"}]},
+         last: {nodes: [{author: {login: $t}, createdAt: "2026-01-01T00:00:00Z"}]}}] end)}}]}}}' \
     --args "${specs[@]}"
 }
 

@@ -5,8 +5,11 @@ Deux événements, interrogés par `poll` (timer systemd utilisateur, toutes les
 défaut : `interval` de la config) :
   review    une revue m'est demandée sur la PR d'un autre (notification `review_requested`,
             date de la demande lue dans la timeline de la PR) → /review:pr <n>
-  feedback  quelqu'un d'autre a fait une review sur une de mes PR ouvertes (avec des
-            commentaires, ou des changements demandés) → /review:feedback <n>
+  feedback  une de mes PR ouvertes a des retours à traiter — état « feedback » de gh-watch
+            board : changements demandés, fil non résolu dont le dernier message n'est pas
+            de moi, ou message de review qui demande une réponse — depuis la dernière
+            review traitée → /review:feedback <n>. Une review qui n'en laisse pas
+            (approbation sans message, « LGTM ») : simple notification.
 
 Mode par dépôt et par événement (config ~/.config/claude-tools/review-watch.json) :
   auto     la session est lancée : herdr (worktree + pane) s'il tourne, sinon analyse en
@@ -46,6 +49,7 @@ import json, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
                                 "gh-watch", "lib"))
 import watchlib as w  # noqa: E402
+import board as b  # noqa: E402
 
 PR_QUERY = """query($o: String!, $r: String!, $n: Int!, $me: String!) {
   repository(owner: $o, name: $r) { pullRequest(number: $n) {
@@ -54,12 +58,6 @@ PR_QUERY = """query($o: String!, $r: String!, $n: Int!, $me: String!) {
       ... on ReviewRequestedEvent { createdAt requestedReviewer {
         __typename ... on User { login } ... on Team { slug } } } } }
     reviews(last: 20, author: $me) { nodes { state submittedAt } } } } }"""
-
-MINE_QUERY = """query($q: String!) {
-  search(query: $q, type: ISSUE, first: 50) { nodes { ... on PullRequest {
-    number title url headRefName repository { nameWithOwner }
-    reviews(last: 30) { nodes { author { login } state submittedAt body
-      comments { totalCount } } } } } } }"""
 
 
 def pr_info(repo, n, login):
@@ -98,28 +96,28 @@ def review_events(state, since):
 
 
 def feedback_events(state, delay):
-    """Mes PR ouvertes avec une review d'un autre depuis la dernière traitée :
-    [(repo, n, titre, url, date de la dernière review, à traiter ?)]. Une review trop
-    récente (< delay s) attend le passage suivant : le relecteur n'a peut-être pas fini."""
-    login = w.me(state)
-    nodes = w.graphql(MINE_QUERY, q=f"is:pr is:open author:{login} archived:false")["search"]["nodes"]
+    """Mes PR ouvertes avec une review d'un autre depuis la dernière traitée, classées par
+    gh-watch board (board.watched : même calcul que le tableau) : [(repo, n, titre, url,
+    date de la dernière review, à traiter ?, état de cette review)] — à traiter : état
+    « feedback » avec des retours arrivés depuis la dernière review traitée ; un brouillon
+    attend d'être prêt. Une review
+    trop récente (< delay s) attend le passage suivant : le relecteur n'a peut-être pas fini."""
+    login, prs = b.watched(lambda repo: 1)  # le seuil d'approbations ne change pas « feedback »
+    state["me"] = login
     events = []
-    for pr in nodes:
-        if not pr:
-            continue
-        repo, n = pr["repository"]["nameWithOwner"], pr["number"]
+    for pr, c in prs:
+        repo, n, latest = pr["repository"]["nameWithOwner"], pr["number"], c.get("latest_at")
+        if c["state"] == "draft":
+            continue  # brouillon : ses retours attendent qu'elle soit prête (la date n'est pas retenue)
         last = state["feedback"].get(f"{repo}#{n}", "")
-        new = [r for r in pr["reviews"]["nodes"]
-               if r.get("submittedAt") and r["state"] != "PENDING" and r.get("author")
-               and r["author"]["login"] != login and r["submittedAt"] > last]
-        if not new:
+        if not latest or latest <= last:
             continue
-        latest = max(r["submittedAt"] for r in new)
         if (w.now() - w.parse(latest)).total_seconds() < delay:
             continue
-        actionable = any(r["comments"]["totalCount"] or (r.get("body") or "").strip()
-                         or r["state"] == "CHANGES_REQUESTED" for r in new)
-        events.append((repo, n, pr["title"], pr["url"], latest, actionable))
+        # À traiter : des retours arrivés depuis la dernière review traitée (pas seulement
+        # une approbation de plus sur des retours déjà vus)
+        new = c["state"] == "feedback" and (c.get("feedback_at") or latest) > last
+        events.append((repo, n, pr["title"], pr["url"], latest, new, c["latest_review"]))
     return events
 
 
@@ -127,14 +125,17 @@ def events(cfg, state, since, delay, dry_run=False, seed=False):
     todo = [("review", repo, n, title, url, at)
             for repo, n, title, url, at in review_events(state, since - w.dt.timedelta(minutes=2))]
     out = []
-    for repo, n, title, url, at, actionable in feedback_events(state, delay):
+    for repo, n, title, url, at, actionable, review in feedback_events(state, delay):
         if actionable or seed or w.mode(cfg, repo, "feedback") == "off":
             todo.append(("feedback", repo, n, title, url, at))
             continue
-        out.append(f"{repo}#{n} (feedback, {w.mode(cfg, repo, 'feedback')}) : approuvée sans commentaire")
+        # Review sans retour à traiter (approbation, « LGTM ») : pas de session, une notification
+        what = "approuvée" if review == "APPROVED" else "review"
+        out.append(f"{repo}#{n} (feedback, {w.mode(cfg, repo, 'feedback')}) : {what} sans retour à traiter")
         if not dry_run:
-            w.notify(f"PR approuvée : {repo}#{n}", title, ["xdg-open", url])
-            w.record(state, "feedback", repo, n, "notifié", "PR approuvée sans commentaire", title, at)
+            w.notify(f"PR approuvée : {repo}#{n}" if review == "APPROVED" else f"Nouvelle review : {repo}#{n}",
+                     f"{title}\nrien à traiter", ["xdg-open", url])
+            w.record(state, "feedback", repo, n, "notifié", f"{what} sans retour à traiter", title, at)
             state["feedback"][f"{repo}#{n}"] = at
     return todo, out
 

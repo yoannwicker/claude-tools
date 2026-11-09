@@ -654,7 +654,8 @@ leur plugin). **Activé dans** : tous les profils (avec `review` ou `git-tidy`).
 **Prérequis** : `python3` ; systemd utilisateur (`systemctl --user list-timers -o json`,
 systemd ≥ 248) pour le prochain passage ; `gh` authentifié pour `board`. Tests :
 `bash plugins/gh-watch/tests/gh-watch.test.sh` (faux watchers, faux `gh`, rien n'est lancé)
-et `python3 plugins/gh-watch/tests/board.test.py` (classement des PR, sans réseau).
+et `python3 plugins/gh-watch/tests/board.test.py` (classement des PR, et mêmes événements
+que le `poll` de `review-watch` et `tidy-watch`, sans réseau).
 
 #### Installation hors de ce dépôt
 
@@ -711,9 +712,10 @@ Fait pour tenir sur un écran : une ligne par PR, à la largeur du terminal
 (`#n  état  âge  action  titre`, gitmoji de tête retiré, titre coupé), rangée selon qui doit
 agir :
 
-- **À toi** — retours à traiter (changements demandés, ou fil non résolu dont le dernier
-  message n'est pas de moi), approuvée (au moins `approvals` approbations, aucun changement
-  demandé ni fil en attente de moi), à faire relire (aucun relecteur en attente), à relire
+- **À toi** — retours à traiter (changements demandés, fil non résolu dont le dernier
+  message n'est pas de moi, ou message de review qui demande une réponse — voir plus bas),
+  approuvée (au moins `approvals` approbations, aucun changement demandé ni retour en
+  attente de moi), à faire relire (aucun relecteur en attente), à relire
   ou redemandée (relecture demandée à moi ou à une de mes équipes : « via @équipe » ;
   redemandée : après une review de moi), réponse de l'auteur sur une PR que j'ai relue, et
   mes PR en attente des autres mais avec CI en échec ou en conflit.
@@ -723,6 +725,17 @@ agir :
 - **Le reste**, en une ligne : brouillons, mentions, et `sans demande` pour les dépôts
   réglés en `others = open` (PR d'un autre, hors brouillon, sans toutes ses approbations,
   pas relue par moi).
+
+Message de review à traiter : le corps d'une review d'un humain (approbation comprise),
+sauf s'il ne contient que des mots d'approbation (`LGTM`, `ok`, `merci`, `ça me va`, emoji…
+liste `TRIVIAL` de `lib/board.py` ; dans le doute, à traiter) ; traité dès que je commente
+ou fais une review après, ou que le relecteur donne un avis plus récent (approbation,
+changements demandés, autre message).
+
+**Un seul calcul** : `review-watch` (événement `feedback`) et `tidy-watch` (`approved`)
+tirent leurs événements de ce même classement (`board.watched`, une requête sur mes PR),
+à la même date (feedback : dernière review d'un autre, robots compris ; approved : N-ième
+approbation) : le tableau et leur `poll` ne divergent pas.
 
 Alertes sur mes PR, à la suite de l'état : CI ✗, conflit, en retard (sur sa base,
 comparaison par l'API REST). Avec `--all` : seulement ce sur quoi j'ai à agir (ce qui est
@@ -982,12 +995,13 @@ dépôt : la PR étant approuvée, `ready` va jusqu'au passage du ticket en vali
 message Slack. Rien n'est réécrit, poussé ni publié sans validation dans la session lancée.
 
 **Événement** `approved`, cherché par `tidy-watch poll` (timer systemd utilisateur
-`tidy-watch.timer`, toutes les 5 min par défaut) : une de mes PR ouvertes (recherche
-GraphQL), hors brouillon, a au moins `approvals` approbations (2 par défaut, réglable par
-dépôt), d'après le dernier avis de chaque relecteur autre que moi
-(`latestOpinionatedReviews`), et aucun changement demandé. Prise `feedback_delay` (300 s)
-après la dernière approbation. Elle attend tant qu'un fil de review est en attente de ma
-réponse (non résolu, dernier message d'un autre), le temps que les retours soient traités.
+`tidy-watch.timer`, toutes les 5 min par défaut) : une de mes PR ouvertes est à l'état
+« approuvée » de [`gh-watch board`](#gh-watch) (même calcul, `board.watched`) : hors
+brouillon, au moins `approvals` approbations (2 par défaut, réglable par dépôt), d'après le
+dernier avis de chaque relecteur humain autre que moi (`latestOpinionatedReviews`), et
+aucun changement demandé. Prise `feedback_delay` (300 s) après la dernière review reçue.
+Elle attend tant qu'un retour est en attente de ma réponse (fil non résolu dont le dernier
+message est d'un autre, ou message de review à traiter), le temps qu'il soit traité.
 La date retenue est celle de la N-ième approbation : une approbation de plus ou un push ne
 relancent pas ; une nouvelle série d'approbations (après qu'elles ont été écartées)
 relance.
@@ -1538,10 +1552,15 @@ Rien n'est posté ni répondu sans validation dans la session lancée.
   de la timeline de la PR (dernier `ReviewRequestedEvent` pour moi ou une équipe) : une
   nouvelle demande (re-request) relance, une revue de ma part postée depuis la demande
   l'écarte ;
-- **feedback** : review d'un autre que moi sur une de mes PR ouvertes (recherche GraphQL),
-  plus récente que la dernière traitée. Elle n'est prise que 5 min après la dernière review
-  reçue (`feedback_delay` en secondes dans la config), le temps que le relecteur finisse. Une
-  approbation sans commentaire donne une simple notification.
+- **feedback** : review d'un autre que moi (robots compris) sur une de mes PR ouvertes,
+  plus récente que la dernière traitée, classée par [`gh-watch board`](#gh-watch) (même
+  calcul, `board.watched`). Elle lance `/review:feedback` si la PR a des retours à traiter
+  arrivés depuis (changements demandés, fil non résolu dont le dernier message n'est pas de
+  moi, message de review qui demande une réponse, même avec une approbation) ; sinon
+  (approbation sans message ou « LGTM 👍 », approbation de plus sur des retours déjà vus),
+  une simple notification. Elle n'est prise que 5 min après la dernière review reçue
+  (`feedback_delay` en secondes dans la config), le temps que le relecteur finisse. Un
+  brouillon attend d'être prêt.
 
 **Modes**, par dépôt et par événement : `auto` (session lancée), `notify` (notification,
 dont le clic lance la session ; défaut des dépôts non listés) ou `off` (rien).

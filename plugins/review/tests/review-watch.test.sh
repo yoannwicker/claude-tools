@@ -17,8 +17,8 @@ cat > "$tmp/fakebin/gh" <<'EOF'
 case "$1 $2" in
   "api user") echo '{"login": "moi"}' ;;
   "api notifications"*) cat "$FAKE/notifs.json" ;;
-  "api graphql")
-    if [[ "$*" == *"search(query"* ]]; then cat "$FAKE/mine.json"
+  "api graphql")  # mes PR : board.watched (requête sur l'entrée standard)
+    if [ "${3:-}" = --input ]; then cat "$FAKE/mine.json"
     else n=$(sed -n 's/.*n=\([0-9]*\).*/\1/p' <<<"$*"); cat "$FAKE/pr-$n.json"; fi ;;
   "pr view")
     if [[ "$*" == *"--json author"* ]]; then echo '{"author": {"login": "autre"}}'
@@ -65,12 +65,20 @@ pr() { # pr <n> <demandée il y a> [ma review il y a]
       reviews: {nodes: (if $mine == "" then [] else [{state: "COMMENTED", submittedAt: $mine}] end)}}}}}' \
     > "$tmp/pr-$1.json"
 }
-mine() { # mine <n>:<il y a>:<état>:<nb commentaires> …
-  jq -n '{data: {search: {nodes: [$ARGS.positional[] | split("|") | {number: (.[0] | tonumber),
-    title: "Ma PR", url: "m", headRefName: "feat-x", repository: {nameWithOwner: "o/r"},
-    reviews: {nodes: [{author: {login: "relecteur"}, state: .[2], submittedAt: .[1], body: "",
-      comments: {totalCount: (.[3] | tonumber)}}]}}]}}}' \
-    --args $(for a in "$@"; do IFS=: read -r n t s c <<<"$a"; printf '%s|%s|%s|%s ' "$n" "$(ago "$t")" "$s" "$c"; done)
+mine() { # mine <n>:<il y a>:<état>:<fils non résolus du relecteur>[:<message>] … (nœuds de gh-watch board)
+  local a n t s c m specs=()
+  for a in "$@"; do IFS=: read -r n t s c m <<<"$a"; specs+=("$n|$(ago "$t")|$s|$c|$m"); done
+  jq -n '{data: {viewer: {login: "moi"}, search: {nodes: [$ARGS.positional[] | split("|") as [$n, $at, $s, $c, $m]
+    | {id: "o/r#\($n)", number: ($n | tonumber), title: "Ma PR", url: "m", isDraft: false, createdAt: $at,
+       author: {login: "moi"}, repository: {nameWithOwner: "o/r"}, headRefName: "feat-x",
+       reviewRequests: {nodes: []}, timelineItems: {nodes: []}, comments: {nodes: []},
+       latestOpinionatedReviews: {nodes: (if $s == "COMMENTED" then [] else
+         [{author: {__typename: "User", login: "relecteur"}, state: $s, submittedAt: $at}] end)},
+       reviews: {nodes: [{author: {__typename: "User", login: "relecteur"}, state: $s, submittedAt: $at, body: $m}]},
+       reviewThreads: {nodes: [range($c | tonumber) | {isResolved: false,
+         first: {nodes: [{author: {login: "relecteur"}, createdAt: $at}]},
+         last: {nodes: [{author: {login: "relecteur"}, createdAt: $at}]}}]},
+       commits: {nodes: []}}]}}}' --args "${specs[@]}"
 }
 notifs() { [ -f "$tmp/notifs" ] && jq -r .title "$tmp/notifs" | paste -sd'|' || echo; }
 
@@ -128,15 +136,32 @@ rm -f "$tmp/notifs" "$tmp/claude-calls"
 mine "9:10 minutes:COMMENTED:2" "10:10 minutes:APPROVED:0" > "$tmp/mine.json"
 "$bin" poll >/dev/null
 check "approuvée → notification, rien lancé" "PR approuvée : o/r#10|" "$(notifs)|$(cat "$tmp/claude-calls" 2>/dev/null)"
-check "historique : notifié, approuvée sans commentaire" "notifié PR approuvée sans commentaire" \
+check "historique : notifié, approuvée sans retour" "notifié approuvée sans retour à traiter" \
   "$(jq -r '[.history[] | select(.key == "o/r#10:feedback")][-1] | "\(.action) \(.detail)"' \
      "$XDG_STATE_HOME/claude-tools/review-watch/state.json")"
+
+# 6b. Même calcul que gh-watch board : un message à traiter lance, « LGTM 👍 » non ;
+# une approbation de plus sur des retours déjà vus : simple notification
+rm -f "$tmp/notifs" "$tmp/claude-calls"
+mine "12:10 minutes:APPROVED:0:Approuvée, mais renomme la méthode stp" "13:10 minutes:APPROVED:0:LGTM 👍" > "$tmp/mine.json"
+"$bin" poll >/dev/null
+for _ in $(seq 50); do [ -s "$tmp/claude-calls" ] && break; sleep 0.1; done
+check "approbation avec un message à traiter → /review:feedback" "-p /review:feedback 12 --prepare" \
+  "$(cut -d' ' -f2-5 "$tmp/claude-calls")"
+check "approbation « LGTM 👍 » → notification seulement" 1 "$(grep -c 'PR approuvée : o/r#13' <(notifs | tr '|' '\n'))"
+rm -f "$tmp/notifs" "$tmp/claude-calls"
+mine "9:10 minutes:COMMENTED:2" > "$tmp/mine.json"  # retours de 9 déjà traités (5.)
+jq --arg at "$(ago '8 minutes')" '.data.search.nodes[0].reviews.nodes += [{author: {__typename: "User", login: "autre"},
+  state: "APPROVED", submittedAt: $at, body: ""}]' "$tmp/mine.json" > "$tmp/m" && mv "$tmp/m" "$tmp/mine.json"
+"$bin" poll >/dev/null
+check "approbation sur des retours déjà vus → notification, rien lancé" "PR approuvée : o/r#9|" \
+  "$(notifs)|$(cat "$tmp/claude-calls" 2>/dev/null)"
 
 # 7. off : retour au mode par défaut ; mode off : ignoré
 (cd "$tmp/clone" && "$bin" auto . off review >/dev/null && "$bin" auto . off feedback >/dev/null)
 check "auto off → dépôt retiré de la config" null "$(jq -c '.repos["o/r"]' "$XDG_CONFIG_HOME/claude-tools/review-watch.json")"
 "$bin" add o/r --review off >/dev/null
-rm -f "$tmp/notifs"; notif 11; pr 11 "1 minute"; echo '{"data":{"search":{"nodes":[]}}}' > "$tmp/mine.json"
+rm -f "$tmp/notifs"; notif 11; pr 11 "1 minute"; mine > "$tmp/mine.json"
 check "mode off → ignoré" "ignoré|" "$("$bin" poll | sed 's/.*: //')|$(notifs)"
 check "repos --json" "o/r off notify" "$("$bin" repos --json | jq -r '.[0] | "\(.repo) \(.review) \(.feedback)"')"
 
