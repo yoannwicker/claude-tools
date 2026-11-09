@@ -89,8 +89,9 @@ reprendre `pr-sync` sur cette PR à partir de son étape 2 (rebase).
 Après `pr-sync` (même s'il n'a rien publié), sauf PR fermée ou mergée :
 `gh pr view <n> --json isDraft,author,reviewRequests,latestReviews,reviewDecision`.
 
-**Réglages du dépôt** (`<réglages>`) : `~/.config/claude-tools/git-tidy.json` (partagé avec
-`tidy-watch`), `{"default": {…}, "repos": {"<owner/repo>": {…}}}` (dépôt en minuscules ;
+**Réglages du dépôt** (`<réglages>`) : `~/.config/claude-tools/git-tidy.json`, `{"default":
+{…}, "repos": {"<owner/repo>": {…}}}` (la section `watcher` est celle de `tidy-watch`, à
+ignorer ici ; dépôt en minuscules ;
 une clé du dépôt l'emporte sur `default`) — `approvals` (approbations attendues, `<N>`, 2
 par défaut), `reviewers` (liste de relecteurs), `validation_status` (statut
 JIRA de l'étape 5, `En validation` par défaut), `test_env` (environnement de test de
@@ -129,7 +130,8 @@ collaborateur) : le dire, sans réessayer d'autres noms.
 
 Sans liste pour ce dépôt, proposer de retenir les relecteurs choisis comme liste
 (`AskUserQuestion`, header « Liste » : **Retenir pour <owner/repo>** / **Non**) ; accord →
-écrire `repos.<owner/repo>.reviewers` dans `git-tidy.json` en gardant le reste du fichier.
+écrire `repos.<owner/repo>.reviewers` dans `git-tidy.json` en gardant le reste du fichier
+(dont la section `watcher`).
 Pour la modifier ensuite : éditer ce fichier.
 
 ## 5. Passage en validation

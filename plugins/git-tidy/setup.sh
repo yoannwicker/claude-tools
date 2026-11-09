@@ -24,7 +24,7 @@ on_remove() {
 }
 on_status() {
   local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/claude-tools/git-tidy.json"
-  if [ -f "$cfg" ] && grep -q '"approved": *"\(auto\|notify\)"' "$cfg" && command -v systemctl >/dev/null 2>&1 \
+  if [ -f "$cfg" ] && grep -q '"on_pr_approved": *"\(auto\|notify\)"' "$cfg" && command -v systemctl >/dev/null 2>&1 \
      && ! systemctl --user is-active --quiet tidy-watch.timer 2>/dev/null; then
     note "tidy-watch configuré mais arrêté : tidy-watch enable"
   fi

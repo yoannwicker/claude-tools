@@ -3,19 +3,20 @@
 
 Un événement, interrogé par `poll` (timer systemd utilisateur, toutes les 5 min par défaut :
 `interval` de la config) :
-  approved  une de mes PR ouvertes est à l'état « approved » de gh-watch board (même
-            calcul) : hors brouillon, au moins `approvals` approbations (2 par défaut ;
-            dernier avis de chaque relecteur autre que moi), aucun changement demandé, aucun
-            fil ni message de review en attente de moi → /git-tidy:ready <n>
+  pr_approved  une de mes PR ouvertes est à l'état « approved » de gh-watch board (même
+               calcul) : hors brouillon, au moins `approvals` approbations (2 par défaut ;
+               dernier avis de chaque relecteur autre que moi), aucun changement demandé,
+               aucun fil ni message de review en attente de moi → /git-tidy:ready <n>
 
-Mode par dépôt (config ~/.config/claude-tools/git-tidy.json, partagée avec les réglages de
-/git-tidy:ready ; le réglage du dépôt l'emporte sur celui de son propriétaire, owner/*,
-puis sur `default`) :
+Mode par dépôt, clé on_pr_approved (section `watcher` de ~/.config/claude-tools/git-tidy.json,
+`watcher.repos` : le dépôt l'emporte sur son propriétaire, owner/*, qui l'emporte sur * ; rien
+de réglé : off). Approbations attendues et réglages de /git-tidy:ready : hors de `watcher`,
+dans le même fichier, lus aussi par les skills de git-tidy.
   auto     la session est lancée : herdr (worktree + pane) s'il tourne, sinon analyse en
            fond (claude -p … --prepare) puis notification, dont le clic reprend la session
            dans un terminal pour la validation
   notify   notification seulement ; son clic lance la session comme en auto
-  off      rien (défaut des dépôts non listés)
+  off      rien (défaut)
 Rien n'est réécrit, poussé ni publié sans validation dans la session.
 Mécanique commune avec review-watch : lib/watchlib.py du plugin gh-watch.
 
@@ -23,22 +24,22 @@ Mécanique commune avec review-watch : lib/watchlib.py du plugin gh-watch.
   tidy-watch repos [--json]                  dépôts configurés et clones GitHub trouvés
   tidy-watch auto <owner/repo|owner/*|*|.> on|off
                                              (owner/* : tous les dépôts du propriétaire,
-                                             * : dépôts non listés ; off : retour au
-                                             niveau au-dessus — dépôt → owner/* → *)
-  tidy-watch add <owner/repo|.> [--approved M] [--path <clone>]
-  tidy-watch remove <owner/repo|.>
-  tidy-watch default [--approved M] [--approvals N]   dépôts non listés (off ; 2)
-  tidy-watch approvals <owner/repo|.> [<n> | default]  approbations attendues
-  tidy-watch set <owner/repo|.> validation_status|test_env [<valeur> | default]
+                                             * : tous les dépôts ; off : retour au
+                                             niveau au-dessus — dépôt → owner/* → * → off)
+  tidy-watch add <owner/repo|owner/*|*|.> [--on-pr-approved M] [--path <clone>]
+                                             (sans mode ni --path : auto)
+  tidy-watch remove <owner/repo|owner/*|*|.>
+  tidy-watch approvals <owner/repo|*|.> [<n> | default]  approbations attendues (* : 2 par défaut)
+  tidy-watch set <owner/repo|*|.> validation_status|test_env [<valeur> | default]
                                              réglages de /git-tidy:ready (sans valeur : affiche)
   tidy-watch enable | disable                timer systemd (enable : état initial d'abord)
   tidy-watch interval [<minutes>]            fréquence du scan (5 par défaut), appliquée au timer
   tidy-watch poll [--dry-run]                un passage
-  tidy-watch launch <owner/repo#n | n> [approved] [--at <date>] [--background]
+  tidy-watch launch <owner/repo#n | n> [pr_approved] [--at <date>] [--background]
                                              (--at : date de l'événement, alors retenu
                                              comme traité ; --background : analyse en fond
                                              même si herdr tourne)
-  tidy-watch skip <owner/repo#n | n> approved --at <date>
+  tidy-watch skip <owner/repo#n | n> pr_approved --at <date>
                                              écarter cet événement (gh-watch skip)
   tidy-watch resume [<owner/repo#n>]         session préparée en fond
 """
@@ -54,8 +55,19 @@ APPROVALS = 2
 SETTINGS = {"validation_status": "En validation", "test_env": None}  # réglages de /git-tidy:ready
 
 
+def settings_path():
+    """git-tidy.json : approbations et réglages de /git-tidy:ready, lus aussi par les skills
+    ({"default": {…}, "repos": {…}}, hors de la section `watcher`)."""
+    return w.S.config
+
+
+def settings():
+    return w.load_json(settings_path())
+
+
 def approvals(cfg, repo):
-    return int(w.setting(cfg, repo, "approvals", APPROVALS))
+    """cfg : config du watcher, non utilisée (approbations dans git-tidy.json)."""
+    return int(w.setting(settings(), repo, "approvals", APPROVALS))
 
 
 def approved_events(cfg, state, delay):
@@ -78,7 +90,7 @@ def approved_events(cfg, state, delay):
             waiting.append((repo, n, pr["title"], " et ".join(why)))
             continue
         at = c["event_at"]
-        if c["state"] != "approved" or state["approved"].get(f"{repo}#{n}", "") >= at:
+        if c["state"] != "approved" or state["pr_approved"].get(f"{repo}#{n}", "") >= at:
             continue
         if (w.now() - w.parse(c["latest_at"] or at)).total_seconds() < delay:
             continue
@@ -90,10 +102,10 @@ def events(cfg, state, since, delay, dry_run=False, seed=False):
     found, waiting = approved_events(cfg, state, delay)
     out = []
     for repo, n, title, why in waiting:
-        out.append(f"{repo}#{n} (approved) : {why} en attente de réponse, attend le passage suivant")
-        if not dry_run and not seed and w.mode(cfg, repo, "approved") != "off":
-            w.record(state, "approved", repo, n, "en attente", f"{why} en attente de ta réponse", title)
-    return [("approved", *e) for e in found], out
+        out.append(f"{repo}#{n} (pr_approved) : {why} en attente de réponse, attend le passage suivant")
+        if not dry_run and not seed and w.mode(cfg, repo, "pr_approved") != "off":
+            w.record(state, "pr_approved", repo, n, "en attente", f"{why} en attente de ta réponse", title)
+    return [("pr_approved", *e) for e in found], out
 
 
 def repo_extra(cfg, repo):
@@ -101,12 +113,25 @@ def repo_extra(cfg, repo):
 
 
 def extra(cfg, repo):
+    st = settings()
     return {"approvals": approvals(cfg, repo),
-            **{k: w.setting(cfg, repo, k, d) for k, d in SETTINGS.items()}}
+            **{k: w.setting(st, repo, k, d) for k, d in SETTINGS.items()}}
 
 
-def extend(sub, default):
-    default.add_argument("--approvals", type=int)
+def entry(st, repo):
+    """Réglages de git-tidy.json à modifier : `default` pour « * » (format lu par les skills),
+    sinon l'entrée du dépôt."""
+    return st.setdefault("default", {}) if repo == "*" else st.setdefault("repos", {}).setdefault(repo, {})
+
+
+def drop(st, repo, key):
+    e = entry(st, repo)
+    e.pop(key, None)
+    if not e:
+        (st if repo == "*" else st["repos"]).pop("default" if repo == "*" else repo, None)
+
+
+def extend(sub):
     ap = sub.add_parser("approvals")
     ap.add_argument("repo")
     ap.add_argument("n", nargs="?")
@@ -117,41 +142,31 @@ def extend(sub, default):
 
 
 def handle(cfg, args):
-    if args.cmd == "default":
-        if args.approvals is None:
-            return False
-        if args.approvals < 1:
-            w.die("nombre d'approbations attendu (1 au moins)")
-        cfg.setdefault("default", {})["approvals"] = args.approvals
-        return True
     if args.cmd == "approvals":
-        repo = w.repo_arg(args.repo)
+        repo = w.target_arg(args.repo)
         if args.n is not None:
-            r = cfg.setdefault("repos", {}).setdefault(repo, {})
+            st = settings()
             if args.n == "default":
-                r.pop("approvals", None)
-                w.prune_repo(cfg, repo)
+                drop(st, repo, "approvals")
             elif not args.n.isdigit() or int(args.n) < 1:
                 w.die("nombre d'approbations attendu (1 au moins), ou default")
             else:
-                r["approvals"] = int(args.n)
-                w.remember_path(r, args.repo)
-            w.save_json(w.S.config, cfg)
+                entry(st, repo)["approvals"] = int(args.n)
+            w.save_json(settings_path(), st)
         print(f"{repo} : {approvals(cfg, repo)} approbation(s) avant /git-tidy:ready"
-              f" (approved={w.mode(cfg, repo, 'approved')})")
+              f" (on_pr_approved={w.mode(cfg, repo, 'pr_approved')})")
         return True
     if args.cmd == "set":
-        repo = w.repo_arg(args.repo)
+        repo = w.target_arg(args.repo)
+        st = settings()
         if args.value is not None:
-            r = cfg.setdefault("repos", {}).setdefault(repo, {})
             if args.value == "default":
-                r.pop(args.key, None)
-                w.prune_repo(cfg, repo)
+                drop(st, repo, args.key)
             else:
-                r[args.key] = args.value
-            w.save_json(w.S.config, cfg)
-        own = w.repo_cfg(cfg, repo).get(args.key)
-        dflt = cfg.get("default", {}).get(args.key)
+                entry(st, repo)[args.key] = args.value
+            w.save_json(settings_path(), st)
+        own = None if repo == "*" else w.repo_cfg(st, repo).get(args.key)
+        dflt = st.get("default", {}).get(args.key)
         value = own if own is not None else dflt if dflt is not None else SETTINGS[args.key]
         source = "dépôt" if own is not None else "default" if dflt is not None else "défaut"
         print(f"{repo} : {args.key} = {value if value is not None else '(non réglé)'} ({source})")
@@ -161,20 +176,20 @@ def handle(cfg, args):
 
 w.configure(
     name="tidy-watch", env="TIDY_WATCH", self_path=__file__, config="git-tidy.json",
+    legacy={"config": "git-tidy.json", "kinds": {"approved": "pr_approved"}},
     worktrees="tidy-worktrees",
-    kinds=("approved",),
-    skill={"approved": "git-tidy:ready"},
-    label={"approved": "préparation au merge"},
-    tab={"approved": "merge"},
-    defaults={"approved": "off"},
-    announce={"approved": "PR approuvée, prête pour le merge"},
+    kinds=("pr_approved",),
+    skill={"pr_approved": "git-tidy:ready"},
+    label={"pr_approved": "préparation au merge"},
+    tab={"pr_approved": "merge"},
+    announce={"pr_approved": "PR approuvée, prête pour le merge"},
     # Message à une session déjà ouverte sur la PR : elle ne voit pas seule ce qui arrive ensuite
-    tell={"approved": "tidy-watch : nouvelle activité sur la PR #{n}{when} (approbations). "
+    tell={"pr_approved": "tidy-watch : nouvelle activité sur la PR #{n}{when} (approbations). "
                       "Revérifie l'état de la PR avant de continuer."},
-    guess_kind=lambda state, repo, n: "approved",
+    guess_kind=lambda state, repo, n: "pr_approved",
     repo_extra=repo_extra, extra=extra,
     # États du tableau de gh-watch board : pris en charge, ou seulement proposés
-    board={"approved": "approved"}, suggest={"behind": "git-tidy:pr-sync"},
+    board={"approved": "pr_approved"}, suggest={"behind": "git-tidy:pr-sync"},
 )
 
 if __name__ == "__main__":

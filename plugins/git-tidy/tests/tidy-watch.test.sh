@@ -81,11 +81,13 @@ appr "20=a:APPROVED:10 minutes,b:APPROVED:9 minutes" > "$tmp/mine.json"
 out=$("$bin" poll)
 check "état initial : rien lancé" "1|" "$(grep -c 'déjà là' <<<"$out")|$(calls)"
 appr "19=a:APPROVED:10 minutes,b:APPROVED:9 minutes" > "$tmp/mine.json"
-check "dépôt non listé : off" "o/r#19 (approved, off) : ignoré|" "$("$bin" poll)|$(calls)"
+check "rien de réglé : off" "o/r#19 (pr_approved, off) : ignoré|" "$("$bin" poll)|$(calls)"
 
-# 2. /git-tidy:approved-auto on : config partagée avec les réglages de /git-tidy:ready
+# 2. /git-tidy:approved-auto on : section watcher de git-tidy.json (le reste : réglages des skills)
+mkdir -p "$(dirname "$cfg")" && echo '{"repos": {"o/r": {"reviewers": ["x"]}}}' > "$cfg"
 (cd "$tmp/clone" && "$bin" auto . on >/dev/null)
-check "auto on → git-tidy.json" "auto $tmp/clone" "$(jq -r '.repos["o/r"] | "\(.approved) \(.path)"' "$cfg")"
+check "auto on → section watcher de git-tidy.json, le reste gardé" "auto $tmp/clone x" \
+  "$(jq -r '"\(.watcher.repos["o/r"] | "\(.on_pr_approved) \(.path)") \(.repos["o/r"].reviewers[0])"' "$cfg")"
 
 # 3. Pas assez d'approbations, changements demandés, brouillon, trop récente → rien
 appr "21=a:APPROVED:10 minutes" "22=a:APPROVED:10 minutes,b:CHANGES_REQUESTED:9 minutes" \
@@ -96,7 +98,7 @@ check "1 approbation, changements demandés, brouillon, trop récente → rien" 
 # 4. Fil de review en attente de ma réponse → attendre ; répondu → lancer
 appr "25tb=a:APPROVED:10 minutes,b:APPROVED:9 minutes" > "$tmp/mine.json"
 out=$("$bin" poll)
-check "fil non résolu d'un autre → attend" "1|" "$(grep -c 'o/r#25 (approved) : 1 fil' <<<"$out")|$(calls)"
+check "fil non résolu d'un autre → attend" "1|" "$(grep -c 'o/r#25 (pr_approved) : 1 fil' <<<"$out")|$(calls)"
 "$bin" poll >/dev/null  # toujours en attente : pas une deuxième entrée d'historique
 appr "25tmoi=a:APPROVED:10 minutes,b:APPROVED:9 minutes" > "$tmp/mine.json"
 "$bin" poll >/dev/null
@@ -106,7 +108,7 @@ check "fil répondu → /git-tidy:ready --prepare dans le worktree de la branche
 check "notification « prête »" "Préparation au merge prête à valider : o/r#25" "$(notifs)"
 st=$XDG_STATE_HOME/claude-tools/tidy-watch/state.json
 check "historique : en attente (une fois), puis lancé" "en attente|lancé" \
-  "$(jq -r '[.history[] | select(.key == "o/r#25:approved") | .action] | join("|")' "$st")"
+  "$(jq -r '[.history[] | select(.key == "o/r#25:pr_approved") | .action] | join("|")' "$st")"
 
 # 5. Approbation de plus → pas relancé
 rm -f "$tmp/notifs" "$tmp/claude-calls"
@@ -122,6 +124,11 @@ check "approvals 3 → 2 ne suffisent pas" "" "$(calls)"
 (cd "$tmp/clone" && "$bin" set . validation_status "Recette" >/dev/null && "$bin" set . test_env "https://recette/{branch}" >/dev/null)
 check "repos --json : approvals et réglages" "3 Recette https://recette/{branch}" \
   "$("$bin" repos --json | jq -r '.[0] | "\(.approvals) \(.validation_status) \(.test_env)"')"
+check "réglages des skills hors de la section watcher" "3 Recette" \
+  "$(jq -r '.repos["o/r"] | "\(.approvals) \(.validation_status)"' "$cfg")"
+"$bin" approvals '*' 4 >/dev/null
+check "approvals * → default de git-tidy.json (lu par les skills)" 4 "$(jq -r .default.approvals "$cfg")"
+"$bin" approvals '*' default >/dev/null
 check "set sans valeur : réglage et provenance" "o/r : validation_status = Recette (dépôt)" \
   "$(cd "$tmp/clone" && "$bin" set . validation_status)"
 (cd "$tmp/clone" && "$bin" approvals . default >/dev/null && "$bin" set . validation_status default >/dev/null)
@@ -129,24 +136,24 @@ check "default → valeur par défaut" "o/r : validation_status = En validation 
   "$(cd "$tmp/clone" && "$bin" set . validation_status)|$("$bin" repos --json | jq -r '.[0].approvals')"
 (cd "$tmp/clone" && "$bin" auto . off >/dev/null)
 check "auto off : réglages gardés" "null https://recette/{branch}" \
-  "$(jq -r '.repos["o/r"] | "\(.approved) \(.test_env)"' "$cfg")"
+  "$(jq -r '"\(.watcher.repos["o/r"].on_pr_approved) \(.repos["o/r"].test_env)"' "$cfg")"
 
 # skip et launch --at (gh-watch skip / launch) : date retenue, historique, sans reculer
 st=$XDG_STATE_HOME/claude-tools/tidy-watch/state.json
-"$bin" skip o/r#77 approved --at 2026-11-04T10:00:00Z >/dev/null
+"$bin" skip o/r#77 pr_approved --at 2026-11-04T10:00:00Z >/dev/null
 check "skip : date retenue et historique « refusé »" "2026-11-04T10:00:00Z refusé" \
-  "$(jq -r '"\(.approved["o/r#77"]) \(.history[-1].action)"' "$st")"
-"$bin" skip o/r#77 approved --at 2026-11-01T10:00:00Z >/dev/null
-check "skip : une date plus ancienne ne recule pas" "2026-11-04T10:00:00Z" "$(jq -r '.approved["o/r#77"]' "$st")"
-check "skip sans --at → erreur" 2 "$("$bin" skip o/r#77 approved >/dev/null 2>&1; echo $?)"
-"$bin" launch o/r#78 approved --at 2026-11-04T12:00:00Z >/dev/null 2>&1
+  "$(jq -r '"\(.pr_approved["o/r#77"]) \(.history[-1].action)"' "$st")"
+"$bin" skip o/r#77 pr_approved --at 2026-11-01T10:00:00Z >/dev/null
+check "skip : une date plus ancienne ne recule pas" "2026-11-04T10:00:00Z" "$(jq -r '.pr_approved["o/r#77"]' "$st")"
+check "skip sans --at → erreur" 2 "$("$bin" skip o/r#77 pr_approved >/dev/null 2>&1; echo $?)"
+"$bin" launch o/r#78 pr_approved --at 2026-11-04T12:00:00Z >/dev/null 2>&1
 check "launch --at : date retenue, historique « lancé » à la main" "2026-11-04T12:00:00Z lancé à la main" \
-  "$(jq -r '"\(.approved["o/r#78"]) \(.history[-1].action) \(.history[-1].detail | split(" :")[0])"' "$st")"
+  "$(jq -r '"\(.pr_approved["o/r#78"]) \(.history[-1].action) \(.history[-1].detail | split(" :")[0])"' "$st")"
 
 # launch --background : analyse en fond même quand herdr tourne
 rm -f "$tmp/claude-calls" "$tmp/notifs"
 printf '#!/usr/bin/env bash\n[ "$1 $2" = "status server" ] && echo "status: running" && exit 0\nexit 1\n' > "$tmp/fakebin/herdr"
-"$bin" launch o/r#79 approved --background >/dev/null 2>&1
+"$bin" launch o/r#79 pr_approved --background >/dev/null 2>&1
 for _ in $(seq 50); do grep -q ' 79 --prepare' "$tmp/claude-calls" 2>/dev/null && break; sleep 0.1; done
 check "launch --background avec herdr en marche → analyse en fond (--prepare)" "-p /git-tidy:ready 79 --prepare" \
   "$(grep ' 79 --prepare' "$tmp/claude-calls" | cut -d' ' -f2-5)"
@@ -197,9 +204,23 @@ check "… qui ouvre la liste des manquées" 1 \
   "$(grep -c "^herdr pane run w9:p1 exec sh -c '$GH_WATCH_BIN board --all --missed -i ||" "$tmp/herdr.log")"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/fakebin/herdr"
 printf '#!/usr/bin/env bash\necho "$*" > "$FAKE/term"\n' > "$tmp/fakebin/term" && chmod +x "$tmp/fakebin/term"
-jq --arg t "$tmp/fakebin/term" '.terminal = $t' "$cfg" > "$tmp/c" && mv "$tmp/c" "$cfg"
+jq --arg t "$tmp/fakebin/term" '.watcher.terminal = $t' "$cfg" > "$tmp/c" && mv "$tmp/c" "$cfg"
 "$bin" _catchup_open
 for _ in $(seq 50); do [ -s "$tmp/term" ] && break; sleep 0.1; done
 check "clic sans herdr → terminal de la config" "$GH_WATCH_BIN board --all --missed -i" "$(cat "$tmp/term")"
+
+# Ancienne config : réglages du watcher au premier niveau de git-tidy.json → section watcher
+export XDG_CONFIG_HOME=$tmp/config2 XDG_STATE_HOME=$tmp/state2
+cfg=$XDG_CONFIG_HOME/claude-tools/git-tidy.json
+mkdir -p "$(dirname "$cfg")"
+echo '{"repos": {"o/r": {"approved": "auto", "path": "/x", "approvals": 3, "test_env": "e"}},
+  "default": {"approved": "notify", "approvals": 2}, "interval": 9}' > "$cfg"
+"$bin" status >/dev/null
+check "migration : section watcher, réglages des skills gardés" \
+  '{"repos":{"o/r":{"approvals":3,"test_env":"e"}},"default":{"approvals":2},"watcher":{"repos":{"o/r":{"on_pr_approved":"auto","path":"/x"},"*":{"on_pr_approved":"notify"}},"interval":9}}' \
+  "$(jq -c . "$cfg")"
+check "migration : copie .bak" présent "$([ -e "$cfg.bak" ] && echo présent || echo absent)"
+"$bin" status >/dev/null
+check "migration : une seule fois" 1 "$(jq '.watcher.repos | length == 2 | if . then 1 else 0 end' "$cfg")"
 
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

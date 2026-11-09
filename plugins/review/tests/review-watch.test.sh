@@ -93,11 +93,17 @@ notif 1; pr 1 "1 hour"; mine > "$tmp/mine.json"
 out=$("$bin" poll)
 check "état initial : rien lancé ni notifié" "1:" "$(grep -c 'déjà là' <<<"$out"):$(notifs)"
 
-# 2. Dépôt non listé : notification dont le clic lance /review:pr
+check "rien de réglé → off partout" "off off" \
+  "$("$bin" status --json | jq -r '.default | "\(.review_requested) \(.feedback_received)"')"
+
+# 2. Dépôt sans réglage propre, * en notify : notification dont le clic lance /review:pr
+"$bin" add '*' --on-review-requested notify --on-feedback-received notify >/dev/null
+check "add * → entrée * de watcher.repos" "notify notify" \
+  "$(jq -r '.watcher.repos["*"] | "\(.on_review_requested) \(.on_feedback_received)"' "$XDG_CONFIG_HOME/claude-tools/review.json")"
 notif 1 2; pr 2 "1 minute"
 "$bin" poll >/dev/null
-check "non listé → notification" "Revue demandée : o/r#2" "$(notifs)"
-check "clic → review-watch launch" "launch o/r#2 review" "$(jq -r '.action[2:] | join(" ")' "$tmp/notifs")"
+check "* en notify → notification" "Revue demandée : o/r#2" "$(notifs)"
+check "clic → review-watch launch" "launch o/r#2 review_requested" "$(jq -r '.action[2:] | join(" ")' "$tmp/notifs")"
 check "PR déjà traitée → rien de plus" 1 "$("$bin" poll >/dev/null; wc -l < "$tmp/notifs")"
 
 # 3. Déjà relue depuis la demande → rien
@@ -106,17 +112,17 @@ rm -f "$tmp/notifs"; notif 3; pr 3 "10 minutes" "2 minutes"
 check "déjà relue → rien" "" "$(notifs)"
 
 # 4. /review:pr-auto on : analyse en fond (herdr arrêté) puis notification « prête »
-(cd "$tmp/clone" && "$bin" auto . on review >/dev/null && "$bin" auto . on feedback >/dev/null)
+(cd "$tmp/clone" && "$bin" auto . on review_requested >/dev/null && "$bin" auto . on feedback_received >/dev/null)
 check "auto on → config" "auto auto $tmp/clone" \
-  "$(jq -r '.repos["o/r"] | "\(.review) \(.feedback) \(.path)"' "$XDG_CONFIG_HOME/claude-tools/review-watch.json")"
+  "$(jq -r '.watcher.repos["o/r"] | "\(.on_review_requested) \(.on_feedback_received) \(.path)"' "$XDG_CONFIG_HOME/claude-tools/review.json")"
 notif 4; pr 4 "1 minute"
 "$bin" poll >/dev/null
 for _ in $(seq 50); do [ -s "$tmp/notifs" ] && break; sleep 0.1; done
 check "analyse en fond : /review:pr --prepare dans le clone" "$tmp/clone -p /review:pr 4 --prepare" \
   "$(cut -d' ' -f1-5 "$tmp/claude-calls")"
-check "notification prête, clic → resume" "Revue prête à valider : o/r#4|resume o/r#4 review" \
+check "notification prête, clic → resume" "Revue prête à valider : o/r#4|resume o/r#4 review_requested" \
   "$(jq -r '"\(.title)|\(.action[2:] | join(" "))"' "$tmp/notifs")"
-check "session prête" ready "$(jq -r '.sessions["o/r#4:review"].status' "$XDG_STATE_HOME/claude-tools/review-watch/state.json")"
+check "session prête" ready "$(jq -r '.sessions["o/r#4:review_requested"].status' "$XDG_STATE_HOME/claude-tools/review-watch/state.json")"
 
 # 5. Retours sur ma PR : trop récents → attendre ; avec commentaires → /review:feedback dans un worktree
 rm -f "$tmp/notifs" "$tmp/claude-calls"; echo '[]' > "$tmp/notifs.json"
@@ -138,7 +144,7 @@ mine "9:10 minutes:COMMENTED:2" "10:10 minutes:APPROVED:0" > "$tmp/mine.json"
 "$bin" poll >/dev/null
 check "approuvée → notification, rien lancé" "PR approuvée : o/r#10|" "$(notifs)|$(cat "$tmp/claude-calls" 2>/dev/null)"
 check "historique : notifié, approuvée sans retour" "notifié approuvée sans retour à traiter" \
-  "$(jq -r '[.history[] | select(.key == "o/r#10:feedback")][-1] | "\(.action) \(.detail)"' \
+  "$(jq -r '[.history[] | select(.key == "o/r#10:feedback_received")][-1] | "\(.action) \(.detail)"' \
      "$XDG_STATE_HOME/claude-tools/review-watch/state.json")"
 
 # 6b. Même calcul que gh-watch board : un message à traiter lance, « LGTM 👍 » non ;
@@ -159,27 +165,28 @@ check "approbation sur des retours déjà vus → notification, rien lancé" "PR
   "$(notifs)|$(cat "$tmp/claude-calls" 2>/dev/null)"
 
 # 7. off : retour au mode par défaut ; mode off : ignoré
-(cd "$tmp/clone" && "$bin" auto . off review >/dev/null && "$bin" auto . off feedback >/dev/null)
-check "auto off → dépôt retiré de la config" null "$(jq -c '.repos["o/r"]' "$XDG_CONFIG_HOME/claude-tools/review-watch.json")"
-"$bin" add o/r --review off >/dev/null
+(cd "$tmp/clone" && "$bin" auto . off review_requested >/dev/null && "$bin" auto . off feedback_received >/dev/null)
+check "auto off → dépôt retiré de la config" null "$(jq -c '.watcher.repos["o/r"]' "$XDG_CONFIG_HOME/claude-tools/review.json")"
+"$bin" add o/r --on-review-requested off >/dev/null
 rm -f "$tmp/notifs"; notif 11; pr 11 "1 minute"; mine > "$tmp/mine.json"
 check "mode off → ignoré" "ignoré|" "$("$bin" poll | sed 's/.*: //')|$(notifs)"
-check "repos --json" "o/r off notify" "$("$bin" repos --json | jq -r '.[0] | "\(.repo) \(.review) \(.feedback)"')"
+check "repos --json" "o/r off notify" \
+  "$("$bin" repos --json | jq -r '.[] | select(.repo == "o/r") | "\(.repo) \(.review_requested) \(.feedback_received)"')"
 
 # 8. Intervalle du scan : drop-in du timer, retiré au retour à 5 min
 dropin=$XDG_CONFIG_HOME/systemd/user/review-watch.timer.d/interval.conf
 "$bin" interval 15 >/dev/null
 check "interval 15 → config et drop-in" "15 OnUnitActiveSec=15min" \
-  "$(jq -r .interval "$XDG_CONFIG_HOME/claude-tools/review-watch.json") $(tail -1 "$dropin")"
+  "$(jq -r .watcher.interval "$XDG_CONFIG_HOME/claude-tools/review.json") $(tail -1 "$dropin")"
 check "status donne l'intervalle" 1 "$("$bin" status | grep -c 'toutes les 15 min')"
 "$bin" interval 5 >/dev/null
 check "interval 5 → défaut, drop-in retiré" "null absent" \
-  "$(jq -r .interval "$XDG_CONFIG_HOME/claude-tools/review-watch.json") $([ -e "$dropin" ] && echo présent || echo absent)"
+  "$(jq -r .watcher.interval "$XDG_CONFIG_HOME/claude-tools/review.json") $([ -e "$dropin" ] && echo présent || echo absent)"
 
 # 9. Session herdr déjà ouverte sur la PR : nouveaux retours envoyés dans le pane
-"$bin" add o/r --feedback auto >/dev/null
+"$bin" add o/r --on-feedback-received auto >/dev/null
 st=$XDG_STATE_HOME/claude-tools/review-watch/state.json
-jq '.sessions["o/r#30:feedback"] = {mode: "herdr", pane: "p30", dir: "d"}' "$st" > "$st.new" && mv "$st.new" "$st"
+jq '.sessions["o/r#30:feedback_received"] = {mode: "herdr", pane: "p30", dir: "d"}' "$st" > "$st.new" && mv "$st.new" "$st"
 mine "30:10 minutes:COMMENTED:2" > "$tmp/mine.json"
 rm -f "$tmp/notifs" "$tmp/claude-calls" "$tmp/herdr-prompts"
 "$bin" poll >/dev/null
@@ -193,32 +200,50 @@ HERDR_PROMPT_RC=1 "$bin" poll >/dev/null
 check "agent en attente d'une réponse → notification critique" "occupée, message non envoyé critical" "$(body)"
 
 # 10. L'auteur d'une PR que j'ai relue a réagi (answered) : pris en charge pour le rattrapage
-# de gh-watch (événement review), jamais cherché par poll
-check "answered → review, pour gh-watch board" review "$("$bin" status --json | jq -r .board.answered)"
+# de gh-watch (événement review_requested), jamais cherché par poll
+check "answered → review_requested, pour gh-watch board" review_requested "$("$bin" status --json | jq -r .board.answered)"
 
 # 11. auto pour tous les dépôts d'un propriétaire (owner/*) ou pour tous (*) ; le réglage
 # propre d'un dépôt l'emporte
-cfgf=$XDG_CONFIG_HOME/claude-tools/review-watch.json
-modes() { "$bin" repos --json | jq -r --arg r "$1" '.[] | select(.repo == $r) | "\(.review) \(.feedback)"'; }
+cfgf=$XDG_CONFIG_HOME/claude-tools/review.json
+modes() { "$bin" repos --json | jq -r --arg r "$1" '.[] | select(.repo == $r) | "\(.review_requested) \(.feedback_received)"'; }
 "$bin" remove o/r >/dev/null
-"$bin" auto 'o/*' on review >/dev/null
-"$bin" add o/r --feedback off >/dev/null
+"$bin" auto 'o/*' on review_requested >/dev/null
+"$bin" add o/r --on-feedback-received off >/dev/null
 check "auto o/* on → o/r en auto par son propriétaire" "auto off" "$(modes o/r)"
-check "status : o/* listé" "o/*  review=auto feedback=notify  (tous les dépôts de o)" "$("$bin" status | grep -F 'o/*' | sed 's/^ *//')"
+check "status : o/* listé" "o/*  on_review_requested=auto on_feedback_received=notify  (tous les dépôts de o)" \
+  "$("$bin" status | grep -F 'o/*' | sed 's/^ *//')"
 check "gh-watch board : mode de o/r par o/*" auto "$(python3 - "$("$bin" status --json)" <<'PY'
 import json, os, sys
 sys.path.insert(0, os.path.join(os.environ["LIB"]))
 import board
-print(board.repo_entry(json.loads(sys.argv[1])["repos"], "O/x").get("review"))
+print(board.repo_entry(json.loads(sys.argv[1])["repos"], "O/x").get("review_requested"))
 PY
 )"
-"$bin" auto 'o/*' off review >/dev/null
-check "auto o/* off → retiré de la config" null "$(jq -c '.repos["o/*"]' "$cfgf")"
+"$bin" auto 'o/*' off review_requested >/dev/null
+check "auto o/* off → retiré de la config" null "$(jq -c '.watcher.repos["o/*"]' "$cfgf")"
 "$bin" auto '*' on >/dev/null
-check "auto * on → défaut en auto" "auto auto" "$(jq -r '.default | "\(.review) \(.feedback)"' "$cfgf")"
+check "auto * on → entrée * en auto" "auto auto" "$(jq -r '.watcher.repos["*"] | "\(.on_review_requested) \(.on_feedback_received)"' "$cfgf")"
 check "auto * : réglage propre de o/r gardé" "auto off" "$(modes o/r)"
-"$bin" auto '*' off feedback >/dev/null
-check "auto * off feedback → défaut du watcher" "auto notify" "$("$bin" status --json | jq -r '.default | "\(.review) \(.feedback)"')"
+"$bin" auto '*' off feedback_received >/dev/null
+check "auto * off feedback_received → off (rien au-dessus)" "auto off" \
+  "$("$bin" status --json | jq -r '.default | "\(.review_requested) \(.feedback_received)"')"
 check "cible invalide refusée" 1 "$("$bin" auto o on 2>&1 | grep -c 'owner/\*')"
+
+# 12. Ancienne config (review-watch.json) et ancien état : convertis au premier lancement
+export XDG_CONFIG_HOME=$tmp/config2 XDG_STATE_HOME=$tmp/state2
+mkdir -p "$XDG_CONFIG_HOME/claude-tools" "$XDG_STATE_HOME/claude-tools/review-watch"
+echo '{"repos": {"o/r": {"review": "auto", "feedback": "notify", "path": "/x"}}, "default": {"review": "off"}, "interval": 7}' \
+  > "$XDG_CONFIG_HOME/claude-tools/review-watch.json"
+echo '{"review": {"o/r#1": "2026-01-01T00:00:00Z"}, "sessions": {"o/r#1:review": {"mode": "herdr", "dir": "d"}},
+  "history": [{"key": "o/r#1:review", "kind": "review", "when": "2026-01-01T00:00:00Z", "action": "lancé"}]}' \
+  > "$XDG_STATE_HOME/claude-tools/review-watch/state.json"
+"$bin" status >/dev/null
+check "migration : section watcher de review.json" '{"watcher":{"repos":{"o/r":{"on_review_requested":"auto","on_feedback_received":"notify","path":"/x"},"*":{"on_review_requested":"off"}},"interval":7}}' \
+  "$(jq -c . "$XDG_CONFIG_HOME/claude-tools/review.json")"
+check "migration : ancien fichier retiré, copie .bak" "absent présent" \
+  "$([ -e "$XDG_CONFIG_HOME/claude-tools/review-watch.json" ] && echo présent || echo absent) $([ -e "$XDG_CONFIG_HOME/claude-tools/review-watch.json.bak" ] && echo présent || echo absent)"
+check "migration : état (dates, sessions, historique)" "2026-01-01T00:00:00Z o/r#1:review_requested o/r#1:review_requested review_requested" \
+  "$(jq -r '"\(.review_requested["o/r#1"]) \(.sessions | keys[0]) \(.history[0].key) \(.history[0].kind)"' "$XDG_STATE_HOME/claude-tools/review-watch/state.json")"
 
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

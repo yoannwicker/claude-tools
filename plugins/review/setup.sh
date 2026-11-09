@@ -28,7 +28,8 @@ on_status() {
   local out
   out=$("$plugin_dir/herdr/profile.sh" status)
   [ -z "$out" ] || note "$out"
-  if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/claude-tools/review-watch.json" ] && command -v systemctl >/dev/null 2>&1 \
+  local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/claude-tools/review.json"
+  if [ -f "$cfg" ] && grep -q '"on_[a-z_]*": *"\(auto\|notify\)"' "$cfg" && command -v systemctl >/dev/null 2>&1 \
      && ! systemctl --user is-active --quiet review-watch.timer 2>/dev/null; then
     note "review-watch configuré mais arrêté : review-watch enable"
   fi

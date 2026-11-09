@@ -69,12 +69,14 @@ def gh_watch_bin():
     return os.environ.get("GH_WATCH_BIN") or os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "bin", "gh-watch")
 
 
-def configure(name, env, self_path, kinds, skill, label, tab, defaults, announce, tell,
-              guess_kind, config=None, worktrees=None, detached=(), extra=None, default_kinds=None, repo_extra=None,
-              board=None, suggest=None):
+def configure(name, env, self_path, kinds, skill, label, tab, announce, tell,
+              guess_kind, config, legacy=None, worktrees=None, detached=(), extra=None, default_kinds=None,
+              repo_extra=None, board=None, suggest=None):
     """name : nom de la commande (review-watch) ; env : préfixe des variables d'environnement
     (REVIEW_WATCH : _CONFIG, _STATE, _NOTIFY_LOG) ; config : nom du fichier de config dans
-    ~/.config/claude-tools/ (<name>.json par défaut) ; worktrees : dossier des worktrees
+    ~/.config/claude-tools/ (<plugin>.json, celui du plugin : réglages du watcher dans sa
+    section `watcher`, le reste aux skills) ; legacy : {"config": ancien fichier, "kinds":
+    {ancien nom d'événement: nouveau}}, converti au premier lancement (migrate) ; worktrees : dossier des worktrees
     d'analyse en fond dans ~/.cache/claude-tools/ (<name>-worktrees par défaut) ; kinds : événements ; skill[kind] :
     commande lancée (« review:pr 12 » → « /review:pr 12 ») ; label/tab/announce[kind] :
     libellé, onglet herdr, titre de notification ; tell[kind] : message à une session herdr
@@ -88,7 +90,10 @@ def configure(name, env, self_path, kinds, skill, label, tab, defaults, announce
     « git-tidy:pr-sync »)."""
     cfgdir = os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config")
     S.name, S.env, S.self = name, env, os.path.realpath(self_path)
-    S.config = os.environ.get(f"{env}_CONFIG") or os.path.join(cfgdir, "claude-tools", config or f"{name}.json")
+    S.config = os.environ.get(f"{env}_CONFIG") or os.path.join(cfgdir, "claude-tools", config)
+    S.legacy = legacy or {}
+    S.legacy_config = (os.path.join(cfgdir, "claude-tools", S.legacy["config"])
+                       if S.legacy.get("config") and not os.environ.get(f"{env}_CONFIG") else None)
     S.state_dir = os.environ.get(f"{env}_STATE") or os.path.join(
         os.environ.get("XDG_STATE_HOME", f"{HOME}/.local/state"), "claude-tools", name)
     S.state = os.path.join(S.state_dir, "state.json")
@@ -97,12 +102,13 @@ def configure(name, env, self_path, kinds, skill, label, tab, defaults, announce
     S.timer = f"{name}.timer"
     S.dropin = os.path.join(cfgdir, "systemd", "user", f"{S.timer}.d", "interval.conf")
     S.kinds, S.skill, S.label, S.tab = tuple(kinds), skill, label, tab
-    S.defaults, S.announce, S.tell, S.detached = defaults, announce, tell, set(detached)
+    S.announce, S.tell, S.detached = announce, tell, set(detached)
     S.default_kinds = tuple(default_kinds or kinds)
     S.guess_kind = guess_kind
     S.repo_extra = repo_extra or (lambda cfg, repo: "")
     S.extra = extra or (lambda cfg, repo: {})
     S.board, S.suggest = board or {}, suggest or {}
+    migrate()
 
 
 def die(msg, code=1):
@@ -148,6 +154,98 @@ def save_json(path, data):
     os.replace(tmp, path)
 
 
+def ckey(kind):
+    """Clé de config (et option) du mode d'un événement : on_<événement>."""
+    return f"on_{kind}"
+
+
+def flag(kind):
+    return "--" + ckey(kind).replace("_", "-")
+
+
+SECTION = "watcher"  # section du fichier du plugin propre au watcher
+WATCHER_KEYS = ("interval", "feedback_delay", "terminal", "claude")  # réglages d'un watcher hors dépôts
+
+
+def load_config():
+    """Config du watcher : section `watcher` du fichier du plugin."""
+    return load_json(S.config).get(SECTION, {})
+
+
+def save_config(cfg):
+    """Écrit la section `watcher`, sans toucher au reste du fichier (réglages des skills)."""
+    data = load_json(S.config)
+    data[SECTION] = cfg
+    save_json(S.config, data)
+
+
+def migrate():
+    """Ancienne config (review-watch.json ; réglages du watcher au premier niveau de
+    git-tidy.json) → section `watcher` du fichier du plugin, une fois : événements renommés
+    (review → on_review_requested…), `default` → entrée « * » de `repos`, chemins et
+    réglages du watcher déplacés. Le reste (réglages des skills) reste où il est ; un ancien
+    fichier à part est supprimé s'il ne contient plus rien. Copie dans <ancien>.bak."""
+    old = S.legacy_config
+    if not old or not os.path.exists(old) or SECTION in load_json(S.config):
+        return
+    src = load_json(old)
+    kinds = S.legacy.get("kinds", {})
+    new, rest = {}, json.loads(json.dumps(src))
+
+    def take(entry, dest):
+        for k, v in list(entry.items()):
+            if k in kinds:
+                dest[ckey(kinds[k])] = v
+                del entry[k]
+    for repo, r in rest.get("repos", {}).items():
+        dest = {}
+        take(r, dest)
+        if "path" in r:
+            dest["path"] = r.pop("path")
+        if dest:
+            new.setdefault("repos", {})[repo] = dest
+    star = {}
+    take(rest.get("default", {}), star)
+    if star:
+        new.setdefault("repos", {})["*"] = star
+    for k in WATCHER_KEYS:
+        if k in rest:
+            new[k] = rest.pop(k)
+    if not new:
+        return
+    rest["repos"] = {k: v for k, v in rest.get("repos", {}).items() if v}
+    for k in ("repos", "default"):
+        if not rest.get(k):
+            rest.pop(k, None)
+    shutil.copyfile(old, f"{old}.bak")
+    same = os.path.realpath(old) == os.path.realpath(S.config)
+    if not same:
+        if rest:
+            save_json(old, rest)
+        else:
+            os.remove(old)
+    save_json(S.config, {**(rest if same else load_json(S.config)), SECTION: new})
+
+
+def migrate_state(data):
+    """État d'avant le renommage des événements : dates traitées, sessions, historique."""
+    kinds = S.legacy.get("kinds", {})
+    if not any(k in data for k in kinds) and not any(
+            key.rsplit(":", 1)[-1] in kinds for key in data.get("sessions", {})):
+        return
+
+    def rekey(key):
+        base, _, k = key.rpartition(":")
+        return f"{base}:{kinds[k]}" if k in kinds else key
+    for old, new in kinds.items():
+        if old in data:
+            data[new] = {**data.pop(old), **data.get(new, {})}
+    data["sessions"] = {rekey(k): v for k, v in data.get("sessions", {}).items()}
+    for e in data.get("history", []):
+        e["key"] = rekey(e["key"])
+        e["kind"] = kinds.get(e.get("kind"), e.get("kind"))
+
+
 class State:
     """state.json sous verrou : un seul poll/launch à la fois."""
 
@@ -156,6 +254,7 @@ class State:
         self.lock = open(f"{S.state}.lock", "w")
         fcntl.flock(self.lock, fcntl.LOCK_EX)
         self.data = load_json(S.state)
+        migrate_state(self.data)
         for k in (*S.kinds, "sessions", "clones"):
             self.data.setdefault(k, {})
         return self.data
@@ -173,15 +272,17 @@ def repo_cfg(cfg, repo):
 
 def repo_keys(repo):
     """Clés de config qui s'appliquent au dépôt, de la plus précise à la plus large :
-    owner/repo puis owner/* (tous les dépôts du propriétaire) ; `default` (« * ») vient
-    après."""
-    return [repo] if repo.endswith("/*") else [repo, repo.split("/")[0] + "/*"]
+    owner/repo, owner/* (tous les dépôts du propriétaire), * (tous les dépôts)."""
+    if repo == "*":
+        return ["*"]
+    return [repo, "*"] if repo.endswith("/*") else [repo, repo.split("/")[0] + "/*", "*"]
 
 
 def setting(cfg, repo, key, default=None):
-    """Réglage du dépôt, sinon de son propriétaire (owner/*), sinon de `default`, sinon la
-    valeur par défaut donnée."""
-    for k in repo_keys(repo) if repo else ():
+    """Réglage du dépôt, sinon de son propriétaire (owner/*), sinon de « * » (repo None :
+    « * »), sinon de `default` (réglages des skills, ex. git-tidy.json), sinon la valeur par
+    défaut donnée."""
+    for k in repo_keys(repo or "*"):
         v = repo_cfg(cfg, k).get(key)
         if v is not None:
             return v
@@ -189,7 +290,8 @@ def setting(cfg, repo, key, default=None):
 
 
 def mode(cfg, repo, kind):
-    return setting(cfg, repo, kind) or S.defaults[kind]
+    """Mode de l'événement sur le dépôt (repo None : « * ») ; rien de réglé : off."""
+    return setting(cfg, repo, ckey(kind)) or "off"
 
 
 def claude_cmd(cfg):
@@ -242,11 +344,11 @@ def workspaces():
 
 
 def clone_path(cfg, state, repo):
-    """Clone du dépôt : `path` de la config, sinon cherché (et retenu) dans les espaces de
-    travail de `cl` (~/workspace* à défaut)."""
-    p = repo_cfg(cfg, repo).get("path") or state["clones"].get(repo.lower())
-    if p and os.path.isdir(os.path.expanduser(p)):
-        return os.path.expanduser(p)
+    """Clone du dépôt : `path` de la config, sinon celui déjà trouvé, sinon cherché (et
+    retenu) dans les espaces de travail de `cl` (~/workspace* à défaut)."""
+    for p in (repo_cfg(cfg, repo).get("path"), state["clones"].get(repo.lower())):
+        if p and os.path.isdir(os.path.expanduser(p)):
+            return os.path.expanduser(p)
     for ws in workspaces():
         if not os.path.isdir(ws):
             continue
@@ -532,7 +634,7 @@ def launch(cfg, state, repo, n, kind, at=None, background=False):
 
 def background_run(key):
     """Analyse en fond (lancé détaché par launch) : claude -p … --prepare, puis notification."""
-    cfg = load_json(S.config)
+    cfg = load_config()
     with State() as state:
         s = state["sessions"][key]
         s["pid"] = os.getpid()
@@ -686,7 +788,7 @@ def repo_arg(arg):
 
 
 def target_arg(arg):
-    """Cible de `auto` : « * » (tous les dépôts : réglage `default`), « owner/* » (tous les
+    """Cible de `auto`, `add`, `remove` : « * » (tous les dépôts), « owner/* » (tous les
     dépôts du propriétaire), owner/repo ou . (dépôt courant)."""
     if arg == "*":
         return arg
@@ -737,11 +839,13 @@ def apply_interval(cfg):
 
 
 def modes_line(cfg, repo):
-    """Modes du dépôt (repo None : des dépôts non listés)."""
-    if repo is None:
-        d = {**S.defaults, **cfg.get("default", {})}
-        return " ".join(f"{k}={d[k]}" for k in S.kinds) + S.repo_extra(cfg, None)
-    return " ".join(f"{k}={mode(cfg, repo, k)}" for k in S.kinds) + S.repo_extra(cfg, repo)
+    """Modes du dépôt (« * » : de tous les dépôts sans réglage plus précis)."""
+    return " ".join(f"{ckey(k)}={mode(cfg, repo, k)}" for k in S.kinds) + S.repo_extra(cfg, repo)
+
+
+def watched_entry(r):
+    """Entrée de `repos` qui concerne le watcher (un mode, ou un chemin)."""
+    return any(ckey(k) in r for k in S.kinds) or "path" in r
 
 
 def next_run():
@@ -762,7 +866,7 @@ def status_data(cfg, state):
     """État du watcher pour `status --json` (supervision par gh-watch)."""
     repos = []
     for repo, r in sorted(cfg.get("repos", {}).items()):
-        if not any(k in r for k in S.kinds) and "path" not in r:
+        if repo == "*" or not watched_entry(r):
             continue
         repos.append({"repo": repo, **{k: mode(cfg, repo, k) for k in S.kinds}, **S.extra(cfg, repo),
                       "path": r.get("path") or state["clones"].get(repo.lower())})
@@ -779,7 +883,8 @@ def status_data(cfg, state):
         sessions.append(d)
     return {"name": S.name, "timer": S.timer, "state": timer_state(), "interval": interval(cfg),
             "last": state.get("since"), "next": next_run(), "kinds": list(S.kinds),
-            "default": {**{k: v for k, v in {**S.defaults, **cfg.get("default", {})}.items()}},
+            # « * » : dépôts sans réglage plus précis
+            "default": {**{k: mode(cfg, "*", k) for k in S.kinds}, **S.extra(cfg, "*")},
             "repos": repos, "sessions": sessions, "history": state.get("history", []),
             "skill": S.skill, "board": S.board, "suggest": S.suggest,
             # Date du dernier événement traité, par événement et PR (repo#n) : suivi de gh-watch board
@@ -791,9 +896,9 @@ def cmd_status(cfg, state, as_json=False):
         return print(json.dumps(status_data(cfg, state), ensure_ascii=False))
     print(f"surveillance : {timer_state()} ({S.timer}, toutes les {interval(cfg)} min) ;"
           f" dernier passage : {state.get('since', 'jamais')}")
-    print(f"dépôts non listés : {modes_line(cfg, None)}")
+    print(f"* (tous les dépôts) : {modes_line(cfg, '*')}")
     for repo, r in sorted(cfg.get("repos", {}).items()):
-        if not any(k in r for k in S.kinds) and "path" not in r:
+        if repo == "*" or not watched_entry(r):
             continue  # réglages sans surveillance (ex. d'un skill)
         where = (f"(tous les dépôts de {repo[:-2]})" if repo.endswith("/*")
                  else r.get("path") or state["clones"].get(repo.lower()) or "(clone cherché au besoin)")
@@ -815,23 +920,25 @@ def remember_path(r, arg):
 
 
 def cmd_add(cfg, state, args):
-    repo = repo_arg(args.repo)
-    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo):
-        die(f"dépôt attendu : owner/repo, pas « {repo} »")
+    """add <repo|owner/*|*|.> [--on-<événement> M…] [--path <clone>] : sans mode ni chemin,
+    auto pour tous les événements ; --path : owner/repo seulement."""
+    repo = target_arg(args.repo)
     r = cfg.setdefault("repos", {}).setdefault(repo, {})
-    if not any(getattr(args, k) for k in S.kinds):
-        for k in S.kinds:
-            setattr(args, k, "auto")
-    for kind in S.kinds:
-        if getattr(args, kind):
-            r[kind] = getattr(args, kind)
+    modes = {k: getattr(args, ckey(k)) for k in S.kinds if getattr(args, ckey(k))}
+    if not modes and not args.path:
+        modes = {k: "auto" for k in S.kinds}
+    for kind, m in modes.items():
+        r[ckey(kind)] = m
     if args.path:
+        if "/" not in repo or repo.endswith("/*"):
+            die(f"{repo} : --path seulement pour un dépôt (owner/repo)")
         p = os.path.abspath(os.path.expanduser(args.path))
         if remote_repo(p) != repo.lower():
             die(f"{p} : pas un clone de {repo}")
         r["path"] = p
-    remember_path(r, args.repo)
-    save_json(S.config, cfg)
+    if "/" in repo and not repo.endswith("/*"):
+        remember_path(r, args.repo)
+    save_config(cfg)
     print(f"{repo} : {modes_line(cfg, repo)}")
     if timer_state() != "active":
         print(f"surveillance arrêtée : {S.name} enable")
@@ -851,6 +958,8 @@ def local_repos(cfg, state):
                     found.setdefault(r, p)
     out = []
     for repo, r in cfg.get("repos", {}).items():
+        if not watched_entry(r):
+            continue
         out.append((repo, r.get("path") or found.pop(repo.lower(), None) or state["clones"].get(repo.lower())))
     out += sorted(found.items())
     return [{"repo": repo, "path": path, **{k: mode(cfg, repo, k) for k in S.kinds},
@@ -858,49 +967,40 @@ def local_repos(cfg, state):
 
 
 def prune_repo(cfg, repo):
-    """Dépôt retiré de la config quand il n'y reste que son chemin."""
-    if not set(cfg.get("repos", {}).get(repo, {})) - {"path"}:
+    """Dépôt retiré de la config quand il n'y reste que le chemin de son clone."""
+    r = cfg.get("repos", {}).get(repo, {})
+    if not set(r) - {"path"}:
         cfg.get("repos", {}).pop(repo, None)
 
 
 def cmd_auto(cfg, args):
     """auto <repo|owner/*|*|.> on|off [<événement>] : off remet le mode du niveau au-dessus
-    (dépôt → owner/* → dépôts non listés → défaut du watcher), jamais « off » explicite.
-    « * » règle les dépôts non listés (`default`) ; owner/* tous les dépôts du propriétaire
-    sans réglage propre."""
+    (dépôt → owner/* → * → off), jamais « off » explicite. owner/* : tous les dépôts du
+    propriétaire sans réglage propre ; * : tous les dépôts sans réglage plus précis."""
     repo = target_arg(args.repo)
     kinds = [args.kind] if args.kind else list(S.default_kinds)
-    if repo == "*":
-        d = cfg.setdefault("default", {})
-        for kind in kinds:
-            if args.state == "on":
-                d[kind] = "auto"
-            else:
-                d.pop(kind, None)
-        save_json(S.config, cfg)
-        print(f"* (dépôts non listés) : {modes_line(cfg, None)}")
-        if args.state == "on" and timer_state() != "active":
-            print(f"surveillance arrêtée : {S.name} enable")
-        return
     r = cfg.setdefault("repos", {}).setdefault(repo, {})
     for kind in kinds:
         if args.state == "on":
-            r[kind] = "auto"
+            r[ckey(kind)] = "auto"
         else:
-            r.pop(kind, None)
-    if args.state == "on" and not repo.endswith("/*"):
+            r.pop(ckey(kind), None)
+    if args.state == "on" and "/" in repo and not repo.endswith("/*"):
         remember_path(r, args.repo)
+    path = r.get("path")
     prune_repo(cfg, repo)
-    save_json(S.config, cfg)
+    if path and repo not in cfg.get("repos", {}):
+        with State() as state:  # entrée retirée : son clone reste connu (gh-watch launch)
+            state["clones"].setdefault(repo.lower(), path)
+    save_config(cfg)
     print(f"{repo} : {modes_line(cfg, repo)}")
     if args.state == "on" and timer_state() != "active":
         print(f"surveillance arrêtée : {S.name} enable")
 
 
 def main(doc, events, extend=None, handle=None):
-    """Commandes communes. extend(sub, default_parser) ajoute des sous-commandes ou des
-    options de `default` ; handle(cfg, args) traite celles du watcher (True si traité) et
-    les options ajoutées à `default`."""
+    """Commandes communes. extend(sub) ajoute des sous-commandes ; handle(cfg, args) traite
+    celles du watcher (True si traité)."""
     p = argparse.ArgumentParser(prog=S.name, description=doc.split("\n")[0])
     sub = p.add_subparsers(dest="cmd")
     sub.add_parser("status").add_argument("--json", action="store_true")
@@ -912,12 +1012,9 @@ def main(doc, events, extend=None, handle=None):
     a = sub.add_parser("add")
     a.add_argument("repo")
     for k in S.kinds:
-        a.add_argument(f"--{k}", choices=MODES)
+        a.add_argument(flag(k), dest=ckey(k), choices=MODES)
     a.add_argument("--path")
     sub.add_parser("remove").add_argument("repo")
-    d = sub.add_parser("default")
-    for k in S.kinds:
-        d.add_argument(f"--{k}", choices=MODES)
     sub.add_parser("interval").add_argument("minutes", nargs="?", type=int)
     sub.add_parser("enable")
     sub.add_parser("disable")
@@ -938,9 +1035,9 @@ def main(doc, events, extend=None, handle=None):
     sub.add_parser("_catchup")
     sub.add_parser("_catchup_open")
     if extend:
-        extend(sub, d)
+        extend(sub)
     args = p.parse_args()
-    cfg = load_json(S.config)
+    cfg = load_config()
     try:
         _main(cfg, args, events, handle)
     except RuntimeError as e:
@@ -959,7 +1056,7 @@ def _main(cfg, args, events, handle):
     if args.cmd in (None, "status"):
         with State() as state:
             return cmd_status(cfg, state, getattr(args, "json", False))
-    if handle and args.cmd != "default" and handle(cfg, args):
+    if handle and handle(cfg, args):
         return
     if args.cmd == "repos":
         with State() as state:
@@ -967,7 +1064,7 @@ def _main(cfg, args, events, handle):
         if args.json:
             return print(json.dumps(repos, ensure_ascii=False))
         for r in repos:
-            print(f"{r['repo']}  {modes_line(cfg, r['repo'])}  {r['path'] or '(pas de clone)'}")
+            print(f"{r['repo']}  {modes_line(cfg, r['repo'])}  {r['path'] or ('' if '*' in r['repo'] else '(pas de clone)')}")
         return
     if args.cmd == "auto":
         return cmd_auto(cfg, args)
@@ -975,24 +1072,11 @@ def _main(cfg, args, events, handle):
         with State() as state:
             return cmd_add(cfg, state, args)
     if args.cmd == "remove":
-        repo = repo_arg(args.repo)
+        repo = target_arg(args.repo)
         if cfg.get("repos", {}).pop(repo, None) is None:
             die(f"{repo} n'est pas listé")
-        save_json(S.config, cfg)
-        print(f"{repo} retiré (mode des dépôts non listés désormais)")
-        return
-    if args.cmd == "default":
-        dflt = cfg.setdefault("default", {})
-        changed = False
-        for kind in S.kinds:
-            if getattr(args, kind):
-                dflt[kind] = getattr(args, kind)
-                changed = True
-        if handle and handle(cfg, args):
-            changed = True
-        if changed:
-            save_json(S.config, cfg)
-        print(modes_line(cfg, None))
+        save_config(cfg)
+        print(f"{repo} retiré (réglage du niveau au-dessus désormais : owner/*, *, sinon off)")
         return
     if args.cmd == "enable":
         with State() as state:
@@ -1012,7 +1096,7 @@ def _main(cfg, args, events, handle):
                 cfg.pop("interval", None)
             else:
                 cfg["interval"] = args.minutes
-            save_json(S.config, cfg)
+            save_config(cfg)
         apply_interval(cfg)  # sans argument : applique aussi une valeur éditée à la main
         print(f"scan toutes les {interval(cfg)} min ({timer_state()})")
         return

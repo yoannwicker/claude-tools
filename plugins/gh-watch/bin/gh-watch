@@ -181,11 +181,11 @@ def show(data, dry_run, since=None):
         warn = "  ⚠ arrêté alors qu'un dépôt est en auto" if d["state"] != "active" and auto else ""
         print(f"  timer {d['timer']} : {d['state']}, toutes les {d['interval']} min ;"
               f" dernier passage {local(d['last'])}, prochain {local(d['next'])}{warn}")
-        print("  dépôts non listés : " + " ".join(f"{k}={d['default'].get(k)}" for k in d["kinds"]))
+        print("  * (tous les dépôts) : " + " ".join(f"on_{k}={d['default'].get(k)}" for k in d["kinds"]))
         for r in d["repos"]:
             extra = " ".join(f"{k}={v}" for k, v in r.items()
                              if k not in ("repo", "path", *d["kinds"]) and v is not None)
-            print(f"  {r['repo']}  " + " ".join(f"{k}={r[k]}" for k in d["kinds"])
+            print(f"  {r['repo']}  " + " ".join(f"on_{k}={r[k]}" for k in d["kinds"])
                   + (f"  ({extra})" if extra else ""))
         for s in d["sessions"]:
             line = f"  session {s['key']}  {s['mode']} {s.get('status')}, lancée {local(s.get('launched'))}"

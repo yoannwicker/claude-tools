@@ -324,6 +324,12 @@ class Follow(unittest.TestCase):
 
 
 def load(path, name):
+    # Jamais la vraie config : charger un watcher le configure (et migrerait l'ancienne config)
+    import tempfile
+    tmp = tempfile.mkdtemp()
+    for env in ("REVIEW_WATCH", "TIDY_WATCH"):
+        os.environ[f"{env}_CONFIG"] = os.path.join(tmp, f"{env}.json")
+        os.environ[f"{env}_STATE"] = os.path.join(tmp, env)
     loader = importlib.machinery.SourceFileLoader(name, os.path.join(ROOT, path))
     mod = importlib.util.module_from_spec(importlib.util.spec_from_loader(name, loader))
     loader.exec_module(mod)
@@ -352,8 +358,8 @@ class SameAsPoll(unittest.TestCase):
         try:
             rw = load("plugins/review/bin/review-watch", "review_watch")
             tw = load("plugins/git-tidy/bin/tidy-watch", "tidy_watch")
-            feedback = rw.feedback_events({"feedback": {}}, 300)
-            approved, waiting = tw.approved_events({}, {"approved": {}}, 300)
+            feedback = rw.feedback_events({"feedback_received": {}}, 300)
+            approved, waiting = tw.approved_events({}, {"pr_approved": {}}, 300)
         finally:
             b.gql = old
         rows = b.build(ME, [(p, {"mine"}) for p in prs], lambda repo: 2, 2)

@@ -18,10 +18,10 @@ validation et message Slack à copier pour le testeur (tickets, PR de la pile,
 environnement de test). Une PR n'est relancée que pour une nouvelle série d'approbations
 (après qu'elles ont été écartées), pas pour une approbation de plus ni pour un push.
 
-Par dépôt : **auto** (session lancée d'office : worktree et pane herdr s'il tourne, sinon
-analyse en fond `--prepare` puis notification dont le clic reprend la session),
-**notify** (notification, son clic lance la session) ou **off** (défaut des dépôts non
-listés). Rien n'est réécrit, poussé ni publié sans validation dans la session.
+Par dépôt (`on_pr_approved`, section `watcher` de `~/.config/claude-tools/git-tidy.json`) :
+**auto** (session lancée d'office : worktree et pane herdr s'il tourne, sinon analyse en
+fond `--prepare` puis notification dont le clic reprend la session), **notify**
+(notification, son clic lance la session) ou **off** (rien de réglé : off). Rien n'est réécrit, poussé ni publié sans validation dans la session.
 
 `tidy-watch` absent du `PATH` (`command -v tidy-watch`) : dire qu'il faut l'installer avec
 le plugin (`./install.sh plugin git-tidy` depuis claude-tools : lien et unités systemd) et
@@ -35,7 +35,7 @@ la valeur). Afficher la sortie en une ligne.
 ## Avec `approvals [<n> | default]`
 
 Approbations attendues sur le dépôt courant : `tidy-watch approvals . [<n> | default]`
-(`default` : revenir à la valeur commune, 2 sauf `tidy-watch default --approvals <n>` ;
+(`default` : revenir à la valeur commune, 2 sauf `tidy-watch approvals '*' <n>` ;
 sans valeur : affiche). Afficher la sortie en une ligne.
 
 ## Avec `status [<statut> | default]` ou `env [<texte> | default]`
@@ -54,21 +54,21 @@ ligne.
 
 `tidy-watch auto <cible> on|off`, cible `.` (dépôt courant) par défaut, sinon celle donnée :
 `owner/repo`, `owner/*` (tous les dépôts du propriétaire, ex. `softwarevidal/*`) ou `*`
-(tous les dépôts non listés). Le réglage le plus précis l'emporte : dépôt, puis `owner/*`,
-puis `*`. `off` remet le niveau au-dessus (au bout, off) et garde les autres réglages ;
-pour exclure un dépôt d'un `owner/*` ou `*` en auto : `tidy-watch add <repo> --approved
-notify` (ou `off`). Afficher la sortie en une ligne.
+(tous les dépôts). Le réglage le plus précis l'emporte : dépôt, puis `owner/*`, puis `*`.
+`off` remet le niveau au-dessus (au bout, off) et garde les autres réglages ; pour exclure
+un dépôt d'un `owner/*` ou `*` en auto : `tidy-watch add <repo> --on-pr-approved notify`
+(ou `off`). Afficher la sortie en une ligne.
 
 ## Sans argument
 
 1. `tidy-watch repos --json` : dépôts configurés et clones GitHub des espaces de travail
-   de `cl` (`repo`, `path`, `approved`, `approvals`, `validation_status`, `test_env`).
-2. Demander (`AskUserQuestion`, `multiSelect`, header « Auto ») quels dépôts ont `approved`
+   de `cl` (`repo`, `path`, `pr_approved` : le mode, `approvals`, `validation_status`, `test_env`).
+2. Demander (`AskUserQuestion`, `multiSelect`, header « Auto ») quels dépôts ont `pr_approved`
    en auto : une option par dépôt, ceux déjà en auto en premier et marqués « (actif) »
    avec leur nombre d'approbations, le dépôt courant ensuite. Au-delà de 4 options : les 3
    premières plus « Autres… » ; dans ce cas, montrer d'abord la liste numérotée complète
    et accepter des numéros ou noms en texte libre.
-   Les entrées `owner/*` de la config y figurent aussi (sans `path`) ; rappeler sous la
+   Les entrées `owner/*` et `*` de la config y figurent aussi ; rappeler sous la
    question que `on owner/*` ou `on *` active tout un propriétaire ou tous les dépôts.
 3. Pour chaque dépôt dont l'état change : `tidy-watch auto <repo> on|off`.
 4. Récapitulatif : `tidy-watch status` et, pour les dépôts en auto, `validation_status` et

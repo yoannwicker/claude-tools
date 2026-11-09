@@ -678,7 +678,7 @@ Les watchers et la commande `gh-watch` ne tournent que depuis un clone (liens po
 
 - `gh-watch status` (défaut) : un bloc par watcher déclaré — timer actif ou non, intervalle,
   dernier et prochain passage, « ⚠ arrêté » si un dépôt est en auto avec le timer arrêté,
-  mode des dépôts non listés, dépôts et modes (avec leurs réglages : `approvals`,
+  modes de `*` (tous les dépôts sans réglage plus précis), dépôts et modes (avec leurs réglages : `approvals`,
   `validation_status`…), sessions (herdr ouverte/fermée, analyse en fond `running`, `ready`
   ou `failed`, lancée quand, avec la commande `resume` et le journal en cas d'échec), puis
   les 5 derniers déclenchements (`--since <D>` : tous ceux depuis `D`). Un watcher en
@@ -771,7 +771,7 @@ liste `TRIVIAL` de `lib/board.py` ; dans le doute, à traiter) ; traité dès qu
 ou fais une review après, ou que le relecteur donne un avis plus récent (approbation,
 changements demandés, autre message).
 
-**Un seul calcul** : `review-watch` (événement `feedback`) et `tidy-watch` (`approved`)
+**Un seul calcul** : `review-watch` (événement `feedback_received`) et `tidy-watch` (`pr_approved`)
 tirent leurs événements de ce même classement (`board.watched`, une requête sur mes PR),
 à la même date (feedback : dernière review d'un autre, robots compris ; approved : N-ième
 approbation) : le tableau et leur `poll` ne divergent pas.
@@ -871,9 +871,9 @@ auto) et n'écrivent rien hors du dépôt local sans accord.
 `~/.config/claude-tools/watchers.d/tidy-watch` (déclaration auprès de
 [`gh-watch`](#gh-watch)) posés par `setup.sh`, le drop-in
 `tidy-watch.timer.d/interval.conf` écrit par `tidy-watch interval`, les réglages par dépôt
-`~/.config/claude-tools/git-tidy.json` (non versionnés : mode auto, approbations,
-relecteurs, statut JIRA de validation, environnement de test ; écrits par `tidy-watch`,
-`/git-tidy:approved-auto` et `/git-tidy:ready` sur accord) et l'état
+`~/.config/claude-tools/git-tidy.json` (non versionnés : approbations, relecteurs, statut
+JIRA de validation, environnement de test, et la section `watcher` de `tidy-watch` ; écrits
+par `tidy-watch`, `/git-tidy:approved-auto` et `/git-tidy:ready` sur accord) et l'état
 `~/.local/state/claude-tools/tidy-watch/`. **Activé dans** : tous les profils.
 
 **Prérequis** : `git` ; `gh` authentifié (base de la PR, `/git-tidy:pr-sync`) ; pour JIRA, un
@@ -1021,7 +1021,7 @@ l'historique sort dans sa forme finale, sans `fixup!` restant.
   `{"default": {"validation_status": "En validation"}, "repos": {"owner/repo":
   {"approvals": 2, "reviewers": ["login", "org/équipe"], "validation_status": "…",
   "test_env": "https://recette/{branch}"}}}` (la clé du dépôt l'emporte sur `default` ;
-  même fichier que la config de `tidy-watch`).
+  même fichier que la config de `tidy-watch`, dans sa section `watcher`).
 - Mêmes accords que les deux skills (plan, rebase, push, publication), plus la demande de
   relecture et le passage en validation ; finit par un résumé : commits réécrits, rebase,
   sauvegardes, push, relecteurs demandés, tickets passés, liens publiés, message Slack.
@@ -1037,7 +1037,7 @@ Lancer `/git-tidy:ready <n>` d'office quand une de mes PR a ses approbations, d�
 dépôt : la PR étant approuvée, `ready` va jusqu'au passage du ticket en validation et au
 message Slack. Rien n'est réécrit, poussé ni publié sans validation dans la session lancée.
 
-**Événement** `approved`, cherché par `tidy-watch poll` (timer systemd utilisateur
+**Événement** `pr_approved`, cherché par `tidy-watch poll` (timer systemd utilisateur
 `tidy-watch.timer`, toutes les 5 min par défaut) : une de mes PR ouvertes est à l'état
 « approuvée » de [`gh-watch board`](#gh-watch) (même calcul, `board.watched`) : hors
 brouillon, au moins `approvals` approbations (2 par défaut, réglable par dépôt), d'après le
@@ -1049,10 +1049,11 @@ La date retenue est celle de la N-ième approbation : une approbation de plus ou
 relancent pas ; une nouvelle série d'approbations (après qu'elles ont été écartées)
 relance.
 
-**Modes**, par dépôt : `auto` (session lancée), `notify` (notification, dont le clic lance
-la session) ou `off` (rien ; défaut des dépôts non listés). Réglables aussi pour tous les
-dépôts d'un propriétaire (`owner/*`, ex. `softwarevidal/*`) ou pour tous (`*`, le réglage
-`default`) ; le plus précis l'emporte : dépôt, puis `owner/*`, puis `*`.
+**Modes**, par dépôt (clé `on_pr_approved`) : `auto` (session lancée), `notify`
+(notification, dont le clic lance la session) ou `off` (rien ; aussi quand rien n'est
+réglé). Réglables aussi pour tous les dépôts d'un propriétaire (`owner/*`, ex.
+`softwarevidal/*`) ou pour tous (`*`) ; le plus précis l'emporte : dépôt, puis `owner/*`,
+puis `*`.
 
 - `/git-tidy:approved-auto [on|off|interval <min>|approvals <n|default>|status <statut|default>|env <texte|default>]` :
   avec `on`/`off [<cible>]`, le dépôt courant ou la cible donnée (`owner/repo`, `owner/*`,
@@ -1065,9 +1066,9 @@ dépôts d'un propriétaire (`owner/*`, ex. `softwarevidal/*`) ou pour tous (`*`
   (`test_env`) ; sans valeur, affiche le réglage et sa provenance. Surveillance arrêtée :
   propose `tidy-watch enable`. Sans `tidy-watch` dans le `PATH` : dit d'installer le plugin
   et s'arrête.
-- En terminal : `tidy-watch auto <owner/repo|owner/*|*|.> on|off`, `add <repo> [--approved M]
-  [--path <clone>]`, `remove <repo>`, `default [--approved M] [--approvals N]`,
-  `approvals <repo|.> [<n>|default]`, `set <repo|.> validation_status|test_env
+- En terminal : `tidy-watch auto <owner/repo|owner/*|*|.> on|off`, `add <cible>
+  [--on-pr-approved M] [--path <clone>]`, `remove <cible>`,
+  `approvals <repo|*|.> [<n>|default]`, `set <repo|*|.> validation_status|test_env
   [<valeur>|default]`, `repos [--json]`, `status`, `enable` (enregistre d'abord ce qui est
   déjà là, sans rien lancer) / `disable`, `poll [--dry-run]`, `interval [<minutes>]`
   (drop-in `~/.config/systemd/user/tidy-watch.timer.d/interval.conf`), `launch`, `resume`.
@@ -1082,10 +1083,13 @@ seule) dans un worktree sous `~/.cache/claude-tools/tidy-worktrees/`, puis notif
 la PR : message dans son pane. Journal : `~/.local/state/claude-tools/tidy-watch/logs/`.
 Le profil lancé (réglage `claude`) doit activer le plugin `git-tidy`.
 
-Config `~/.config/claude-tools/git-tidy.json` (partagée avec les réglages de
-`/git-tidy:ready`) : `{"repos": {"owner/repo": {"approved": "auto", "approvals": 2, "path":
-"…", …}}, "default": {"approved": "off", "approvals": 2}, "interval": 5, "feedback_delay":
-300, "claude": "claude", "terminal": null}`.
+Config : section `watcher` de `~/.config/claude-tools/git-tidy.json` (le reste du fichier :
+réglages de `/git-tidy:ready`, dont `approvals`, `approvals '*'` écrivant `default`) :
+`{"watcher": {"repos": {"*": {"on_pr_approved": "off"},
+"owner/repo": {"on_pr_approved": "auto", "path": "…"}}, "interval": 5, "feedback_delay":
+300, "claude": "claude", "terminal": null}}`. Clone : comme pour
+[`review-watch`](#review). Une ancienne config (réglages du watcher au premier niveau,
+`approved`, `default`) est convertie au premier lancement (copie dans `git-tidy.json.bak`).
 
 Installation : `./install.sh plugin git-tidy` relie `tidy-watch` dans `~/.local/bin` et les
 unités dans `~/.config/systemd/user/` ; le timer n'est activé que par `tidy-watch enable`.
@@ -1395,7 +1399,7 @@ hors du plugin, les liens `~/.local/bin/review-watch`,
 `~/.config/claude-tools/watchers.d/review-watch` (déclaration auprès de
 [`gh-watch`](#gh-watch)) posés par `setup.sh`, le drop-in
 `review-watch.timer.d/interval.conf` écrit par `review-watch interval`, la config
-`~/.config/claude-tools/review-watch.json` et l'état `~/.local/state/claude-tools/review-watch/`
+`~/.config/claude-tools/review.json` (section `watcher`) et l'état `~/.local/state/claude-tools/review-watch/`
 (non versionnés), et le profil Herdr UI facultatif
 `~/.config/agent-launcher/agents/custom-reviewer/prompt.md` (voir
 [Profil Herdr UI](#profil-herdr-ui)). **Activé dans** :
@@ -1600,7 +1604,7 @@ Rien n'est posté ni répondu sans validation dans la session lancée.
 **Événements**, cherchés par `review-watch poll` (timer systemd utilisateur
 `review-watch.timer`, toutes les 5 min par défaut) :
 
-- **review** : notification GitHub `review_requested` sur la PR ouverte d'un autre (API
+- **review_requested** : notification GitHub `review_requested` sur la PR ouverte d'un autre (API
   `notifications`, lues comprises, depuis le passage précédent). La date de la demande vient
   de la timeline de la PR (dernier `ReviewRequestedEvent` pour moi ou une équipe) : une
   nouvelle demande (re-request) relance, une revue de ma part postée depuis la demande
@@ -1609,7 +1613,7 @@ Rien n'est posté ni répondu sans validation dans la session lancée.
   mon dernier passage, fil de moi devenu obsolète) : même événement, mais **par le
   rattrapage seulement** (`gh-watch board --missed`, `/gh-watch:board-auto`), jamais
   cherché par `poll` ;
-- **feedback** : review d'un autre que moi (robots compris) sur une de mes PR ouvertes,
+- **feedback_received** : review d'un autre que moi (robots compris) sur une de mes PR ouvertes,
   plus récente que la dernière traitée, classée par [`gh-watch board`](#gh-watch) (même
   calcul, `board.watched`). Elle lance `/review:feedback` si la PR a des retours à traiter
   arrivés depuis (changements demandés, fil non résolu dont le dernier message n'est pas de
@@ -1619,22 +1623,23 @@ Rien n'est posté ni répondu sans validation dans la session lancée.
   (`feedback_delay` en secondes dans la config), le temps que le relecteur finisse. Un
   brouillon attend d'être prêt.
 
-**Modes**, par dépôt et par événement : `auto` (session lancée), `notify` (notification,
-dont le clic lance la session ; défaut des dépôts non listés) ou `off` (rien). Réglables
-aussi pour tous les dépôts d'un propriétaire (`owner/*`, ex. `softwarevidal/*`) ou pour
-tous (`*`, le réglage `default`) ; le plus précis l'emporte : dépôt, puis `owner/*`, puis
-`*`. Pour exclure un dépôt d'un `owner/*` ou `*` en auto : `review-watch add <repo>
---review notify`.
+**Modes**, par dépôt et par événement (clés `on_review_requested`, `on_feedback_received`) :
+`auto` (session lancée), `notify` (notification, dont le clic lance la session) ou `off`
+(rien ; aussi quand rien n'est réglé). Réglables aussi pour tous les dépôts d'un
+propriétaire (`owner/*`, ex. `softwarevidal/*`) ou pour tous (`*`) ; le plus précis
+l'emporte : dépôt, puis `owner/*`, puis `*`. Pour exclure un dépôt d'un `owner/*` ou `*` en
+auto : `review-watch add <repo> --on-review-requested notify`.
 
-- `/review:pr-auto [on|off [<cible>]|interval <min>]` règle `review`, `/review:feedback-auto [on|off [<cible>]|interval <min>]` règle
-  `feedback` (procédure commune : `auto.md`). Avec `on`/`off` : le dépôt courant, ou la
+- `/review:pr-auto [on|off [<cible>]|interval <min>]` règle `review_requested`, `/review:feedback-auto [on|off [<cible>]|interval <min>]` règle
+  `feedback_received` (procédure commune : `auto.md`). Avec `on`/`off` : le dépôt courant, ou la
   cible donnée (`owner/repo`, `owner/*`, `*`) (`off` remet le niveau au-dessus, au bout
-  `notify`). Sans argument : choix parmi les dépôts connus, c'est-à-dire
+  `off`). Sans argument : choix parmi les dépôts connus, c'est-à-dire
   ceux de la config et les clones GitHub des espaces de travail de [`cl`](TOOLS.md#lanceur-cl).
   Si la surveillance est arrêtée, le skill propose `review-watch enable`.
-- En terminal : `review-watch auto <owner/repo|owner/*|*|.> on|off [review|feedback]`,
-  `add <repo> [--review M] [--feedback M] [--path <clone>]`, `remove <repo>`,
-  `default [--review M] [--feedback M]`, `repos`, `status` (`--json` : pour
+- En terminal : `review-watch auto <owner/repo|owner/*|*|.> on|off [review_requested|feedback_received]`,
+  `add <owner/repo|owner/*|*|.> [--on-review-requested M] [--on-feedback-received M]
+  [--path <clone>]` (sans mode ni `--path` : auto pour les deux),
+  `remove <cible>`, `repos`, `status` (`--json` : pour
   [`gh-watch`](#gh-watch), qui supervise tous les watchers : `gh-watch status`, `/gh-watch:auto-status`).
 - `review-watch enable` : enregistre d'abord ce qui est déjà en attente, sans rien lancer
   (listé, avec la commande `launch` pour le faire), puis active le timer ; `disable`
@@ -1646,12 +1651,13 @@ tous (`*`, le réglage `default`) ; le plus précis l'emporte : dépôt, puis `o
   `~/.config/systemd/user/review-watch.timer.d/interval.conf` (retiré si on revient à 5 ;
   timer relancé s'il tourne).
 
-**Lancement** (`review-watch launch <owner/repo#n | n> [review|feedback] [--at <date>]
+**Lancement** (`review-watch launch <owner/repo#n | n> [review_requested|feedback_received] [--at <date>]
 [--background]`, appelé aussi par le mode auto, par le clic d'une notification et par
 [`gh-watch launch`](#gh-watch) ; `--background` : analyse en fond même si herdr tourne ;
 `--at` : date de l'événement, retenue comme traitée ; `review-watch skip … --at` écarte un
-événement). Clone du dépôt : `path` de la config,
-sinon cherché dans les espaces de travail de `cl` et retenu.
+événement). Clone du dépôt : `path` de la config, sinon celui déjà trouvé, sinon cherché
+dans les espaces de travail de `cl` et retenu ; introuvable : notification « Clone
+introuvable ». `auto … off` qui retire l'entrée d'un dépôt garde son clone en mémoire.
 
 - **herdr tourne** (`herdr status server`) : worktree de la PR sous
   `~/.herdr/worktrees/<dépôt>/`. Pour une revue, branche `agent/review-<n>-<titre>` sur la
@@ -1686,10 +1692,14 @@ sinon cherché dans les espaces de travail de `cl` et retenu.
 - `claude` (réglage `claude` de la config, ex. `"claude-profile switch vidal"`) : le profil
   utilisé doit activer le plugin `review` (profil de référence, `vidal` ; pas `lean`).
 
-Config `~/.config/claude-tools/review-watch.json` :
-`{"repos": {"owner/repo": {"review": "auto", "feedback": "notify", "path": "…"}},
-"default": {"review": "notify", "feedback": "notify"}, "interval": 5, "feedback_delay": 300,
-"claude": "claude", "terminal": null}`. Les noms de dépôt ne tiennent pas compte de la casse.
+Config : section `watcher` de `~/.config/claude-tools/review.json` (un fichier par plugin ; le
+reste est libre pour les skills) : `{"watcher": {"repos": {"*": {"on_review_requested": "off"},
+"owner/*": {…}, "owner/repo": {"on_review_requested": "auto",
+"on_feedback_received": "notify", "path": "…"}}, "interval": 5, "feedback_delay": 300,
+"claude": "claude", "terminal": null}}`. Les noms de dépôt ne tiennent pas compte de la
+casse. Une ancienne config (`review-watch.json` : `review`, `feedback`, `default`) est
+convertie au premier lancement (copie dans `review-watch.json.bak`), l'état aussi
+(événements renommés).
 
 Installation : `./install.sh plugin review` relie `review-watch` dans `~/.local/bin`
 (chemin fixe pour systemd et les clics) et les unités dans `~/.config/systemd/user/`. Le

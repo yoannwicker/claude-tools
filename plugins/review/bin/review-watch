@@ -3,16 +3,19 @@
 
 Deux événements, interrogés par `poll` (timer systemd utilisateur, toutes les 5 min par
 défaut : `interval` de la config) :
-  review    une revue m'est demandée sur la PR d'un autre (notification `review_requested`,
-            date de la demande lue dans la timeline de la PR) → /review:pr <n>
-  feedback  une de mes PR ouvertes a des retours à traiter — état « feedback » de gh-watch
-            board : changements demandés, fil non résolu dont le dernier message n'est pas
-            de moi, ou message de review qui demande une réponse — depuis la dernière
-            review traitée → /review:feedback <n>. Une review qui n'en laisse pas
-            (approbation sans message, « LGTM ») : simple notification.
+  review_requested   une revue m'est demandée sur la PR d'un autre (notification
+                     `review_requested`, date de la demande lue dans la timeline de la PR)
+                     → /review:pr <n>
+  feedback_received  une de mes PR ouvertes a des retours d'un autre à traiter — état
+                     « feedback » de gh-watch board : changements demandés, fil non résolu
+                     dont le dernier message n'est pas de moi, ou message de review qui
+                     demande une réponse — depuis la dernière review traitée
+                     → /review:feedback <n>. Une review qui n'en laisse pas (approbation
+                     sans message, « LGTM ») : simple notification.
 
-Mode par dépôt et par événement (config ~/.config/claude-tools/review-watch.json ; le
-réglage du dépôt l'emporte sur celui de son propriétaire, owner/*, puis sur `default`) :
+Mode par dépôt et par événement, clés on_review_requested et on_feedback_received (section
+`watcher` de ~/.config/claude-tools/review.json, `watcher.repos` : le dépôt l'emporte sur son
+propriétaire, owner/*, qui l'emporte sur * ; rien de réglé : off) :
   auto     la session est lancée : herdr (worktree + pane) s'il tourne, sinon analyse en
            fond (claude -p … --prepare) puis notification, dont le clic reprend la session
            dans un terminal pour la validation
@@ -25,31 +28,33 @@ Mécanique commune (lancement, notifications, timer) : lib/watchlib.py du plugin
 
   review-watch status                          surveillance, dépôts, sessions
   review-watch repos [--json]                  dépôts configurés et clones GitHub trouvés
-  review-watch auto <owner/repo|owner/*|*|.> on|off [review|feedback]
+  review-watch auto <owner/repo|owner/*|*|.> on|off [review_requested|feedback_received]
                                                (owner/* : tous les dépôts du propriétaire,
-                                               * : dépôts non listés ; off : retour au
-                                               niveau au-dessus — dépôt → owner/* → *)
-  review-watch add <owner/repo|.> [--review M] [--feedback M] [--path <clone>]
-                                               (sans --review/--feedback : auto pour les deux)
-  review-watch remove <owner/repo|.>
-  review-watch default [--review M] [--feedback M]   mode des dépôts non listés (notify)
+                                               * : tous les dépôts ; off : retour au
+                                               niveau au-dessus — dépôt → owner/* → * → off)
+  review-watch add <owner/repo|owner/*|*|.> [--on-review-requested M]
+                   [--on-feedback-received M] [--path <clone>]
+                                               (sans mode ni --path : auto pour les deux)
+  review-watch remove <owner/repo|owner/*|*|.>
   review-watch enable | disable                timer systemd (enable : état initial d'abord)
   review-watch interval [<minutes>]            fréquence du scan (5 par défaut), appliquée au timer
                                                (sans argument : affiche et applique la config)
   review-watch poll [--dry-run]                un passage
-  review-watch launch <owner/repo#n | n> [review|feedback] [--at <date>] [--background]
+  review-watch launch <owner/repo#n | n> [review_requested|feedback_received] [--at <date>]
+                                               [--background]
                                                (--at : date de l'événement, alors retenu
                                                comme traité ; gh-watch launch la donne ;
                                                --background : analyse en fond même si
                                                herdr tourne)
-  review-watch skip <owner/repo#n | n> review|feedback --at <date>
+  review-watch skip <owner/repo#n | n> review_requested|feedback_received --at <date>
                                                écarter cet événement (gh-watch skip)
-  review-watch resume [<owner/repo#n> [review|feedback]]   session préparée en fond
+  review-watch resume [<owner/repo#n> [review_requested|feedback_received]]
+                                               session préparée en fond
 
 Pris en charge seulement par le rattrapage (gh-watch board --missed, /gh-watch:board-auto),
 jamais par `poll` : l'état « answered » de gh-watch board (l'auteur d'une PR que j'ai relue
 a réagi : réponse dans un de mes fils, commentaire de la PR, fil de moi devenu obsolète),
-sous l'événement review → /review:pr <n> (reprise de la relecture).
+sous l'événement review_requested → /review:pr <n> (reprise de la relecture).
 """
 import json, os, sys
 
@@ -97,7 +102,7 @@ def review_events(state, since):
         mine = [r["submittedAt"] for r in pr["reviews"]["nodes"] if r.get("submittedAt")]
         if mine and max(mine) >= asked_at:
             continue  # déjà relue depuis la demande
-        if state["review"].get(f"{repo}#{n}", "") >= asked_at:
+        if state["review_requested"].get(f"{repo}#{n}", "") >= asked_at:
             continue
         events.append((repo, n, pr["title"], pr["url"], asked_at))
     return events
@@ -117,7 +122,7 @@ def feedback_events(state, delay):
         repo, n, latest = pr["repository"]["nameWithOwner"], pr["number"], c.get("latest_at")
         if c["state"] == "draft":
             continue  # brouillon : ses retours attendent qu'elle soit prête (la date n'est pas retenue)
-        last = state["feedback"].get(f"{repo}#{n}", "")
+        last = state["feedback_received"].get(f"{repo}#{n}", "")
         if not latest or latest <= last:
             continue
         if (w.now() - w.parse(latest)).total_seconds() < delay:
@@ -130,49 +135,51 @@ def feedback_events(state, delay):
 
 
 def events(cfg, state, since, delay, dry_run=False, seed=False):
-    todo = [("review", repo, n, title, url, at)
+    todo = [("review_requested", repo, n, title, url, at)
             for repo, n, title, url, at in review_events(state, since - w.dt.timedelta(minutes=2))]
     out = []
     for repo, n, title, url, at, actionable, review in feedback_events(state, delay):
-        if actionable or seed or w.mode(cfg, repo, "feedback") == "off":
-            todo.append(("feedback", repo, n, title, url, at))
+        if actionable or seed or w.mode(cfg, repo, "feedback_received") == "off":
+            todo.append(("feedback_received", repo, n, title, url, at))
             continue
         # Review sans retour à traiter (approbation, « LGTM ») : pas de session, une notification
         what = "approuvée" if review == "APPROVED" else "review"
-        out.append(f"{repo}#{n} (feedback, {w.mode(cfg, repo, 'feedback')}) : {what} sans retour à traiter")
+        out.append(f"{repo}#{n} (feedback_received, {w.mode(cfg, repo, 'feedback_received')}) : {what} sans retour à traiter")
         if not dry_run:
             w.notify(f"PR approuvée : {repo}#{n}" if review == "APPROVED" else f"Nouvelle review : {repo}#{n}",
                      f"{title}\nrien à traiter", ["xdg-open", url])
-            w.record(state, "feedback", repo, n, "notifié", f"{what} sans retour à traiter", title, at)
-            state["feedback"][f"{repo}#{n}"] = at
+            w.record(state, "feedback_received", repo, n, "notifié", f"{what} sans retour à traiter", title, at)
+            state["feedback_received"][f"{repo}#{n}"] = at
     return todo, out
 
 
 def guess_kind(state, repo, n):
     author = json.loads(w.run(["gh", "pr", "view", str(n), "--repo", repo, "--json", "author"]))
-    return "feedback" if author["author"]["login"] == w.me(state) else "review"
+    return "feedback_received" if author["author"]["login"] == w.me(state) else "review_requested"
 
 
 w.configure(
     name="review-watch", env="REVIEW_WATCH", self_path=__file__,
-    kinds=("review", "feedback"),
-    skill={"review": "review:pr", "feedback": "review:feedback"},
-    label={"review": "revue", "feedback": "retours"},
-    tab={"review": "revue", "feedback": "retours"},
-    defaults={"review": "notify", "feedback": "notify"},
-    announce={"review": "Revue demandée", "feedback": "Nouveaux retours"},
+    config="review.json",
+    legacy={"config": "review-watch.json", "kinds": {"review": "review_requested", "feedback": "feedback_received"}},
+    kinds=("review_requested", "feedback_received"),
+    skill={"review_requested": "review:pr", "feedback_received": "review:feedback"},
+    label={"review_requested": "revue", "feedback_received": "retours"},
+    tab={"review_requested": "revue", "feedback_received": "retours"},
+    announce={"review_requested": "Revue demandée", "feedback_received": "Nouveaux retours"},
     # Message à une session déjà ouverte sur la PR : elle ne voit pas seule ce qui arrive ensuite
     tell={
-        "review": "review-watch : review redemandée sur la PR #{n}{when}, ou l'auteur a réagi à "
+        "review_requested": "review-watch : review redemandée sur la PR #{n}{when}, ou l'auteur a réagi à "
                   "tes retours. La PR a pu changer depuis ta relecture : regarde les nouveaux "
                   "commits et les réponses dans tes fils avant de poster.",
-        "feedback": "review-watch : nouveaux retours sur la PR #{n}{when}. Relis les fils non "
+        "feedback_received": "review-watch : nouveaux retours sur la PR #{n}{when}. Relis les fils non "
                     "résolus (requête de l'étape 2 de /review:feedback) et prends en compte ceux "
                     "qui ne sont pas dans ton analyse avant de répondre ou de relancer les relecteurs.",
     },
-    guess_kind=guess_kind, worktrees="review-worktrees", detached=("review",),
+    guess_kind=guess_kind, worktrees="review-worktrees", detached=("review_requested",),
     # États du tableau de gh-watch board pris en charge (answered : par le rattrapage seulement)
-    board={"to_review": "review", "re_requested": "review", "answered": "review", "feedback": "feedback"},
+    board={"to_review": "review_requested", "re_requested": "review_requested", "answered": "review_requested",
+           "feedback": "feedback_received"},
 )
 
 if __name__ == "__main__":

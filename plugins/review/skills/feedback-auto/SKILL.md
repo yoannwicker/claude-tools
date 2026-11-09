@@ -8,4 +8,4 @@ allowed-tools: Bash(review-watch:*)
 
 Arguments : `$ARGUMENTS`
 
-Lire `${CLAUDE_SKILL_DIR}/../../auto.md` et le suivre avec `<kind>` = `feedback`.
+Lire `${CLAUDE_SKILL_DIR}/../../auto.md` et le suivre avec `<kind>` = `feedback_received`.
