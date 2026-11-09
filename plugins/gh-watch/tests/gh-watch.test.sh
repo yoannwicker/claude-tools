@@ -113,7 +113,7 @@ export GH_FAKE_LOG=$tmp/gh.log
 out=$(COLUMNS=100 "$bin" board)
 check "board : dépôt courant, à toi" "o/r — 2 à toi| À toi" "$(head -2 <<<"$out" | paste -sd'|')"
 check "board : approuvée → skill du watcher qui la prend en charge" 1 \
-  "$(grep -cE '^  #7  approuvée 2/2, en retard  [0-9]+ (min|h|j)( ⚠)? +/git-tidy:ready  Ma PR$' <<<"$out")"
+  "$(grep -cE '^  #7  ✓✓ approuvée 2/2, en retard  [0-9]+ (min|h|j)( ⚠)? +/git-tidy:ready  Ma PR$' <<<"$out")"
 check "board : relecture demandée, aucun watcher pour elle → pas d'action" 1 \
   "$(grep -cE '^  #9  à relire +[0-9]+ (h|j) ⚠ +Sa PR$' <<<"$out")"
 out=$("$bin" board --all)
@@ -155,12 +155,12 @@ check "launch : PR absente du tableau → erreur" 1 "$("$bin" launch o/r#42 >/de
 check "board --missed --launch : lance les manquées" "a-watch launch o/r#7 approved --at 2026-11-04T11:00:00Z" "$(cat "$tmp/calls.log")"
 check "board --launch sans --missed → erreur" 1 "$("$bin" board --launch >/dev/null 2>&1; echo $?)"
 : > "$tmp/calls.log"
-check "skip : jusqu'au prochain événement" "o/r#7 (approuvée 2/2) : écartée jusqu'au prochain événement" "$("$bin" skip o/r#7)"
+check "skip : jusqu'au prochain événement" "o/r#7 (✓✓ approuvée 2/2) : écartée jusqu'au prochain événement" "$("$bin" skip o/r#7)"
 check "skip : relayé au watcher" "a-watch skip o/r#7 approved --at 2026-11-04T11:00:00Z" "$(cat "$tmp/calls.log")"
 out=$("$bin" board --missed)
 check "écartée : masquée, comptée" "aucune action manquée sur o/r|(1 écartée(s) : --skipped pour les voir, gh-watch unskip <repo#n>)" \
   "$(paste -sd'|' <<<"$out")"
-check "--skipped : montrée" 1 "$("$bin" board --skipped | grep -c '#7  écartée : approuvée 2/2')"
+check "--skipped : montrée" 1 "$("$bin" board --skipped | grep -c '#7  écartée : ✓✓ approuvée 2/2')"
 check "unskip" "o/r#7 : réintégrée (pour la lancer : gh-watch launch o/r#7)" "$("$bin" unskip o/r#7)"
 check "unskip d'une ligne non écartée → erreur" 1 "$("$bin" unskip o/r#7 >/dev/null 2>&1; echo $?)"
 check "skip --until-closed" "o/r#9 (à relire) : écartée jusqu'à la fermeture de la PR" "$("$bin" skip 9 --until-closed)"

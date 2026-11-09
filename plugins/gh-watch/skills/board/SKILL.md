@@ -41,8 +41,8 @@ dépendent) et s'arrêter.
    - **Titre** : `title` sans le gitmoji de tête, coupé à 50 caractères.
 3. Un dépôt (`repo` non nul) : titre `dépôt`, puis un tableau **À toi** (`bucket` = `me`)
    et un tableau **En attente des autres** (`others`), un tableau vide n'apparaît pas ;
-   puis le reste (`rest`) en une ligne, groupé par `short` (« brouillon #199 (conflit),
-   #204 · mentionné #168 »).
+   puis le reste (`rest`) en une ligne, groupé par `short` sans ses `checks` de tête, les
+   coches après le numéro (« brouillon #199 (conflit), #204 ✓ · mentionné #168 »).
 4. Tous (`repo` nul) : seulement ce sur quoi j'ai à agir — `bucket` = `me`, ou `state` =
    `mentioned` — en un seul tableau avec une colonne **Dépôt** en tête (dépôts avec le
    plus de lignes à moi d'abord) ; puis une ligne : « + N autres PR (en attente des

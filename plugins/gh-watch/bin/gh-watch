@@ -422,7 +422,9 @@ def rest_line(rows):
     groups = {}
     for r in rows:
         alerts = ", ".join(SHORT_ALERT[x] for x in r["alerts"])
-        groups.setdefault(r["short"].split(" (")[0], []).append(f"#{r['n']}" + (f" ({alerts})" if alerts else ""))
+        checks = r.get("checks") or ""  # coches d'approbation : sur la PR, pas dans le groupe
+        groups.setdefault(r["short"][len(checks):].strip().split(" (")[0], []).append(
+            f"#{r['n']}" + (f" {checks}" if checks else "") + (f" ({alerts})" if alerts else ""))
     return " · ".join(f"{k} {', '.join(v)}" for k, v in groups.items())
 
 

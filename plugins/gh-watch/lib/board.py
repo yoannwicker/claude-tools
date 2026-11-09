@@ -216,8 +216,9 @@ def _alerts(pr):
 
 
 def classify(pr, login, cats, approvals=2):
-    """État d'une PR : {state, short, detail, since, event_at, alerts, mine, bucket} (short :
-    libellé court pour le tableau ; bucket : qui doit agir, voir BUCKETS). `event_at` : date
+    """État d'une PR : {state, short, detail, since, event_at, alerts, mine, bucket, approved,
+    approved_by_me, checks} (short : libellé court pour le tableau, précédé de `checks`, une
+    coche par approbation : ☑ la mienne, ✓ celle d'un autre ; bucket : qui doit agir, voir BUCKETS). `event_at` : date
     de l'événement au sens des watchers (feedback : dernière review d'un autre, robots
     compris ; approved : N-ième approbation ; review : dernière demande qui me vise), None
     sinon. Mes PR ont aussi, pour les watchers : approvals (nombre), changes (changements
@@ -228,6 +229,20 @@ def classify(pr, login, cats, approvals=2):
     r = (classify_mine if mine else classify_other)(pr, login, cats, approvals)
     r.update(mine=mine, alerts=_alerts(pr) if mine else [])
     r.setdefault("event_at", None)
+    # Approbations (humains autres que l'auteur) : une coche par approbation en tête de
+    # l'état, ☑ pour la mienne, ✓ pour les autres, quel que soit l'état
+    ok = [_login(x["author"]) for x in (pr.get("latestOpinionatedReviews") or {}).get("nodes", [])
+          if x and x["state"] == "APPROVED" and _human(x.get("author"))
+          and _login(x["author"]) != _login(pr.get("author"))]
+    r["approved"], r["approved_by_me"] = len(ok) >= approvals, login in ok
+    r["checks"] = ("☑" if r["approved_by_me"] else "") + "✓" * (len(ok) - r["approved_by_me"])
+    if r["approved"] and r["short"] == "approuvée par moi":
+        r["short"] = f"approuvée {len(ok)}/{approvals}"
+    if r["checks"]:
+        r["short"] = f"{r['checks']} {r['short']}"
+    if r["state"] != "approved" and r["approved"] and "approbation" not in (r.get("detail") or ""):
+        r["detail"] = " ; ".join(x for x in (r.get("detail"), f"approuvée {len(ok)}/{approvals}"
+                                             + (" dont moi" if r["approved_by_me"] else "")) if x)
     bucket = BUCKET[r["state"]]
     if mine and bucket == "others" and {"ci", "conflict"} & set(r["alerts"]):
         bucket = "me"  # CI en échec ou conflit : à moi de corriger

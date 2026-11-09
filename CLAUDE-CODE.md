@@ -759,6 +759,12 @@ agir :
   réglés en `others = open` (PR d'un autre, hors brouillon, sans toutes ses approbations,
   pas relue par moi).
 
+L'état d'une PR commence par une coche par approbation (d'humains autres que son auteur) :
+☑ pour la mienne, ✓ pour chacune des autres — `☑✓ réponse de l'auteur (3 fils)`,
+`✓✓ approuvée 2/2` ; dans *le reste*, les coches suivent le numéro (`brouillon #204 ✓`).
+Champs `checks`, `approved` (toutes les approbations attendues) et `approved_by_me` en
+`--json`.
+
 Message de review à traiter : le corps d'une review d'un humain (approbation comprise),
 sauf s'il ne contient que des mots d'approbation (`LGTM`, `ok`, `merci`, `ça me va`, emoji…
 liste `TRIVIAL` de `lib/board.py` ; dans le doute, à traiter) ; traité dès que je commente

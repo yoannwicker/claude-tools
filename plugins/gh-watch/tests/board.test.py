@@ -196,6 +196,24 @@ class Others(unittest.TestCase):
         c = state(pr(author="alice", reviews=[review(ME, "APPROVED", "2026-11-03T08:00:00Z")],
                      latest=[review(ME, "APPROVED", "2026-11-03T08:00:00Z")]), {"reviewed"})
         self.assertIn("approuvée par moi", c["detail"])
+        self.assertEqual((c["short"], c["approved"], c["approved_by_me"]), ("☑ approuvée par moi", False, True))
+
+    def test_one_check_per_approval_mine_apart(self):
+        ok = [review("bob", "APPROVED", "2026-11-03T08:00:00Z"), review(ME, "APPROVED", "2026-11-03T09:00:00Z")]
+        c = state(pr(author="alice", reviews=ok, latest=ok), {"reviewed"}, need=2)
+        self.assertEqual((c["short"], c["checks"], c["approved"]), ("☑✓ approuvée 2/2", "☑✓", True))
+        c = state(pr(author="alice", reviews=ok, latest=ok[1:], threads=[thread(ME, "alice", "2026-11-04T08:00:00Z")]),
+                  {"reviewed"}, need=2)
+        self.assertEqual(c["short"], "☑ réponse de l'auteur (1 fil)")
+        c = state(pr(author="alice", latest=ok[:1], asked=[ME], timeline=[requested("2026-11-04T08:00:00Z")]),
+                  {"requested"}, need=1)
+        self.assertEqual((c["short"], c["approved_by_me"]), ("✓ à relire", False))
+        self.assertIn("approuvée 1/1", c["detail"])
+        c = state(pr(latest=ok + [review("carol", "APPROVED", "x"), review("dan", "COMMENTED", "x")],
+                     threads=[thread("dan", "dan", "2026-11-04T10:00:00Z")]), need=2)
+        self.assertEqual((c["state"], c["short"]), ("feedback", "✓✓ retours (1 fil)"))  # ma PR : ma coche ne compte pas
+        self.assertEqual(state(pr(latest=ok), need=1)["short"], "✓ approuvée 1/1")
+        self.assertEqual(state(pr(author="alice"), {"mentioned"})["checks"], "")
 
     def test_mentioned(self):
         self.assertEqual(state(pr(author="alice"), {"mentioned"})["state"], "mentioned")
