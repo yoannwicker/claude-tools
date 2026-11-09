@@ -175,7 +175,7 @@ def show(data, dry_run, since=None):
         if d.get("error"):
             print(f"  erreur : {d['error']}")
             continue
-        auto = [r for r in d["repos"] if any(r.get(k) == "auto" for k in d["kinds"])]
+        auto = [r for r in d["repos"] + [d["default"]] if any(r.get(k) == "auto" for k in d["kinds"])]
         warn = "  ⚠ arrêté alors qu'un dépôt est en auto" if d["state"] != "active" and auto else ""
         print(f"  timer {d['timer']} : {d['state']}, toutes les {d['interval']} min ;"
               f" dernier passage {local(d['last'])}, prochain {local(d['next'])}{warn}")
@@ -283,9 +283,9 @@ def approvals_for(data):
         for d in data:
             if d.get("error"):
                 continue
-            for r in d.get("repos", []):
-                if r["repo"].lower() == repo.lower() and r.get("approvals"):
-                    return int(r["approvals"])
+            r = b.repo_entry(d.get("repos", []), repo)
+            if r.get("approvals"):
+                return int(r["approvals"])
             if (d.get("default") or {}).get("approvals"):
                 return int(d["default"]["approvals"])
         return APPROVALS

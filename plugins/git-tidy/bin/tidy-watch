@@ -9,7 +9,8 @@ Un événement, interrogé par `poll` (timer systemd utilisateur, toutes les 5 m
             fil ni message de review en attente de moi → /git-tidy:ready <n>
 
 Mode par dépôt (config ~/.config/claude-tools/git-tidy.json, partagée avec les réglages de
-/git-tidy:ready) :
+/git-tidy:ready ; le réglage du dépôt l'emporte sur celui de son propriétaire, owner/*,
+puis sur `default`) :
   auto     la session est lancée : herdr (worktree + pane) s'il tourne, sinon analyse en
            fond (claude -p … --prepare) puis notification, dont le clic reprend la session
            dans un terminal pour la validation
@@ -20,7 +21,10 @@ Mécanique commune avec review-watch : lib/watchlib.py du plugin gh-watch.
 
   tidy-watch status                          surveillance, dépôts, sessions
   tidy-watch repos [--json]                  dépôts configurés et clones GitHub trouvés
-  tidy-watch auto <owner/repo|.> on|off      (off : retour au mode des dépôts non listés)
+  tidy-watch auto <owner/repo|owner/*|*|.> on|off
+                                             (owner/* : tous les dépôts du propriétaire,
+                                             * : dépôts non listés ; off : retour au
+                                             niveau au-dessus — dépôt → owner/* → *)
   tidy-watch add <owner/repo|.> [--approved M] [--path <clone>]
   tidy-watch remove <owner/repo|.>
   tidy-watch default [--approved M] [--approvals N]   dépôts non listés (off ; 2)

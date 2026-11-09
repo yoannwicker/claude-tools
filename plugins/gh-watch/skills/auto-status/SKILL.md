@@ -26,7 +26,8 @@ qui l'implique).
    prochain passage (heure locale `HH:MM`, date si ce n'est pas aujourd'hui).
 3. Par watcher, ses dépôts : un tableau `dépôt` + une colonne par événement (`kinds`) avec
    le mode, plus les réglages en plus s'il y en a (`approvals`, `validation_status`,
-   `test_env`) ; puis la ligne « dépôts non listés » (`default`).
+   `test_env`) — une entrée `owner/*` vaut pour tous les dépôts du propriétaire sans
+   réglage propre ; puis la ligne « dépôts non listés » (`default`, réglé par `auto * on`).
 4. Les sessions, s'il y en a (sans `--history`, les sessions herdr `fermée` sont omises ;
    aucune restante : pas de section) : clé (`dépôt#n:événement`), titre, herdr ouverte/fermée ou
    analyse en fond (`running`, `ready`, `failed`, `resumed`), lancée quand (`launched`) et

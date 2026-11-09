@@ -4,6 +4,7 @@
 # notifications écrites dans un fichier. Rien n'est lancé ni publié pour de vrai.
 set -u
 bin=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bin/review-watch
+export LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/gh-watch/lib
 fails=0
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -194,5 +195,30 @@ check "agent en attente d'une réponse → notification critique" "occupée, mes
 # 10. L'auteur d'une PR que j'ai relue a réagi (answered) : pris en charge pour le rattrapage
 # de gh-watch (événement review), jamais cherché par poll
 check "answered → review, pour gh-watch board" review "$("$bin" status --json | jq -r .board.answered)"
+
+# 11. auto pour tous les dépôts d'un propriétaire (owner/*) ou pour tous (*) ; le réglage
+# propre d'un dépôt l'emporte
+cfgf=$XDG_CONFIG_HOME/claude-tools/review-watch.json
+modes() { "$bin" repos --json | jq -r --arg r "$1" '.[] | select(.repo == $r) | "\(.review) \(.feedback)"'; }
+"$bin" remove o/r >/dev/null
+"$bin" auto 'o/*' on review >/dev/null
+"$bin" add o/r --feedback off >/dev/null
+check "auto o/* on → o/r en auto par son propriétaire" "auto off" "$(modes o/r)"
+check "status : o/* listé" "o/*  review=auto feedback=notify  (tous les dépôts de o)" "$("$bin" status | grep -F 'o/*' | sed 's/^ *//')"
+check "gh-watch board : mode de o/r par o/*" auto "$(python3 - "$("$bin" status --json)" <<'PY'
+import json, os, sys
+sys.path.insert(0, os.path.join(os.environ["LIB"]))
+import board
+print(board.repo_entry(json.loads(sys.argv[1])["repos"], "O/x").get("review"))
+PY
+)"
+"$bin" auto 'o/*' off review >/dev/null
+check "auto o/* off → retiré de la config" null "$(jq -c '.repos["o/*"]' "$cfgf")"
+"$bin" auto '*' on >/dev/null
+check "auto * on → défaut en auto" "auto auto" "$(jq -r '.default | "\(.review) \(.feedback)"' "$cfgf")"
+check "auto * : réglage propre de o/r gardé" "auto off" "$(modes o/r)"
+"$bin" auto '*' off feedback >/dev/null
+check "auto * off feedback → défaut du watcher" "auto notify" "$("$bin" status --json | jq -r '.default | "\(.review) \(.feedback)"')"
+check "cible invalide refusée" 1 "$("$bin" auto o on 2>&1 | grep -c 'owner/\*')"
 
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

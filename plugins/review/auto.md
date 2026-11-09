@@ -16,10 +16,14 @@ listés) ou **off**. Rien n'est jamais posté sans validation dans la session.
 Fréquence du scan, commune aux deux événements : `review-watch interval [<minutes>]` (5 par
 défaut ; sans nombre, affiche la valeur). Afficher la sortie en une ligne.
 
-## Avec `on` ou `off`
+## Avec `on` ou `off` [`<cible>`]
 
-Dépôt courant : `review-watch auto . on|off <kind>`. `off` remet le mode des dépôts non
-listés (notifier), il ne coupe pas tout. Afficher la sortie en une ligne.
+`review-watch auto <cible> on|off <kind>`, cible `.` (dépôt courant) par défaut, sinon
+celle donnée : `owner/repo`, `owner/*` (tous les dépôts du propriétaire, ex.
+`softwarevidal/*`) ou `*` (tous les dépôts non listés). Le réglage le plus précis
+l'emporte : dépôt, puis `owner/*`, puis `*`. `off` remet le niveau au-dessus (au bout,
+notifier), il ne coupe pas tout ; pour exclure un dépôt d'un `owner/*` ou `*` en auto :
+`review-watch add <repo> --<kind> notify` (ou `off`). Afficher la sortie en une ligne.
 
 ## Sans argument
 
@@ -30,6 +34,8 @@ listés (notifier), il ne coupe pas tout. Afficher la sortie en une ligne.
    dépôt courant ensuite. Au-delà de 4 options : les 3 premières plus « Autres… » ; dans ce
    cas, montrer d'abord la liste numérotée complète et accepter des numéros ou noms en
    texte libre.
+   Les entrées `owner/*` de la config y figurent aussi (sans `path`) ; rappeler sous la
+   question que `on owner/*` ou `on *` active tout un propriétaire ou tous les dépôts.
 3. Pour chaque dépôt dont l'état change : `review-watch auto <repo> on|off <kind>`.
 4. Récapitulatif : `review-watch status`.
 

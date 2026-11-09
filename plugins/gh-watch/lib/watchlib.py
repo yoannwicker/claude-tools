@@ -166,14 +166,26 @@ class State:
 
 
 def repo_cfg(cfg, repo):
-    """Réglages du dépôt (noms GitHub insensibles à la casse)."""
+    """Réglages propres à cette clé (owner/repo ou owner/*, noms GitHub insensibles à la
+    casse)."""
     return next((r for k, r in cfg.get("repos", {}).items() if k.lower() == repo.lower()), {})
 
 
+def repo_keys(repo):
+    """Clés de config qui s'appliquent au dépôt, de la plus précise à la plus large :
+    owner/repo puis owner/* (tous les dépôts du propriétaire) ; `default` (« * ») vient
+    après."""
+    return [repo] if repo.endswith("/*") else [repo, repo.split("/")[0] + "/*"]
+
+
 def setting(cfg, repo, key, default=None):
-    """Réglage du dépôt, sinon de `default`, sinon la valeur par défaut donnée."""
-    v = repo_cfg(cfg, repo).get(key) if repo else None
-    return v if v is not None else cfg.get("default", {}).get(key, default)
+    """Réglage du dépôt, sinon de son propriétaire (owner/*), sinon de `default`, sinon la
+    valeur par défaut donnée."""
+    for k in repo_keys(repo) if repo else ():
+        v = repo_cfg(cfg, k).get(key)
+        if v is not None:
+            return v
+    return cfg.get("default", {}).get(key, default)
 
 
 def mode(cfg, repo, kind):
@@ -673,6 +685,17 @@ def repo_arg(arg):
     return (current_repo() if arg == "." else arg).lower()
 
 
+def target_arg(arg):
+    """Cible de `auto` : « * » (tous les dépôts : réglage `default`), « owner/* » (tous les
+    dépôts du propriétaire), owner/repo ou . (dépôt courant)."""
+    if arg == "*":
+        return arg
+    t = repo_arg(arg)
+    if not re.fullmatch(r"[\w.-]+/([\w.-]+|\*)", t):
+        die(f"dépôt attendu : owner/repo, owner/*, * ou . (dépôt courant), pas « {arg} »")
+    return t
+
+
 def split_target(target, state):
     m = re.fullmatch(r"(?:([\w.-]+/[\w.-]+))?#?(\d+)", target)
     if not m:
@@ -772,8 +795,9 @@ def cmd_status(cfg, state, as_json=False):
     for repo, r in sorted(cfg.get("repos", {}).items()):
         if not any(k in r for k in S.kinds) and "path" not in r:
             continue  # réglages sans surveillance (ex. d'un skill)
-        print(f"  {repo}  {modes_line(cfg, repo)}"
-              f"  {r.get('path') or state['clones'].get(repo.lower()) or '(clone cherché au besoin)'}")
+        where = (f"(tous les dépôts de {repo[:-2]})" if repo.endswith("/*")
+                 else r.get("path") or state["clones"].get(repo.lower()) or "(clone cherché au besoin)")
+        print(f"  {repo}  {modes_line(cfg, repo)}  {where}")
     sessions = state["sessions"]
     if sessions:
         print("sessions :")
@@ -840,17 +864,31 @@ def prune_repo(cfg, repo):
 
 
 def cmd_auto(cfg, args):
-    """auto <repo|.> on|off [<événement>] : off remet le mode des dépôts non listés, jamais
-    « off » explicite."""
-    repo = repo_arg(args.repo)
+    """auto <repo|owner/*|*|.> on|off [<événement>] : off remet le mode du niveau au-dessus
+    (dépôt → owner/* → dépôts non listés → défaut du watcher), jamais « off » explicite.
+    « * » règle les dépôts non listés (`default`) ; owner/* tous les dépôts du propriétaire
+    sans réglage propre."""
+    repo = target_arg(args.repo)
     kinds = [args.kind] if args.kind else list(S.default_kinds)
+    if repo == "*":
+        d = cfg.setdefault("default", {})
+        for kind in kinds:
+            if args.state == "on":
+                d[kind] = "auto"
+            else:
+                d.pop(kind, None)
+        save_json(S.config, cfg)
+        print(f"* (dépôts non listés) : {modes_line(cfg, None)}")
+        if args.state == "on" and timer_state() != "active":
+            print(f"surveillance arrêtée : {S.name} enable")
+        return
     r = cfg.setdefault("repos", {}).setdefault(repo, {})
     for kind in kinds:
         if args.state == "on":
             r[kind] = "auto"
         else:
             r.pop(kind, None)
-    if args.state == "on":
+    if args.state == "on" and not repo.endswith("/*"):
         remember_path(r, args.repo)
     prune_repo(cfg, repo)
     save_json(S.config, cfg)

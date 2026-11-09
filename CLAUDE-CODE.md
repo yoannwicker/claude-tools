@@ -1040,11 +1040,14 @@ relancent pas ; une nouvelle série d'approbations (après qu'elles ont été é
 relance.
 
 **Modes**, par dépôt : `auto` (session lancée), `notify` (notification, dont le clic lance
-la session) ou `off` (rien ; défaut des dépôts non listés).
+la session) ou `off` (rien ; défaut des dépôts non listés). Réglables aussi pour tous les
+dépôts d'un propriétaire (`owner/*`, ex. `softwarevidal/*`) ou pour tous (`*`, le réglage
+`default`) ; le plus précis l'emporte : dépôt, puis `owner/*`, puis `*`.
 
 - `/git-tidy:approved-auto [on|off|interval <min>|approvals <n|default>|status <statut|default>|env <texte|default>]` :
-  avec `on`/`off`, le dépôt courant (`tidy-watch auto . on|off` ; `off` le remet au mode
-  des dépôts non listés et garde ses autres réglages) ; sans argument, choix parmi les
+  avec `on`/`off [<cible>]`, le dépôt courant ou la cible donnée (`owner/repo`, `owner/*`,
+  `*`) (`tidy-watch auto <cible> on|off` ; `off` remet le niveau au-dessus et garde les
+  autres réglages) ; sans argument, choix parmi les
   dépôts connus (ceux de la config et les clones GitHub des espaces de travail de
   [`cl`](TOOLS.md#lanceur-cl), actifs en premier), puis récapitulatif. `approvals` :
   approbations attendues ; `status` : statut JIRA de validation (`validation_status`,
@@ -1052,7 +1055,7 @@ la session) ou `off` (rien ; défaut des dépôts non listés).
   (`test_env`) ; sans valeur, affiche le réglage et sa provenance. Surveillance arrêtée :
   propose `tidy-watch enable`. Sans `tidy-watch` dans le `PATH` : dit d'installer le plugin
   et s'arrête.
-- En terminal : `tidy-watch auto <owner/repo|.> on|off`, `add <repo> [--approved M]
+- En terminal : `tidy-watch auto <owner/repo|owner/*|*|.> on|off`, `add <repo> [--approved M]
   [--path <clone>]`, `remove <repo>`, `default [--approved M] [--approvals N]`,
   `approvals <repo|.> [<n>|default]`, `set <repo|.> validation_status|test_env
   [<valeur>|default]`, `repos [--json]`, `status`, `enable` (enregistre d'abord ce qui est
@@ -1607,14 +1610,19 @@ Rien n'est posté ni répondu sans validation dans la session lancée.
   brouillon attend d'être prêt.
 
 **Modes**, par dépôt et par événement : `auto` (session lancée), `notify` (notification,
-dont le clic lance la session ; défaut des dépôts non listés) ou `off` (rien).
+dont le clic lance la session ; défaut des dépôts non listés) ou `off` (rien). Réglables
+aussi pour tous les dépôts d'un propriétaire (`owner/*`, ex. `softwarevidal/*`) ou pour
+tous (`*`, le réglage `default`) ; le plus précis l'emporte : dépôt, puis `owner/*`, puis
+`*`. Pour exclure un dépôt d'un `owner/*` ou `*` en auto : `review-watch add <repo>
+--review notify`.
 
-- `/review:pr-auto [on|off|interval <min>]` règle `review`, `/review:feedback-auto [on|off|interval <min>]` règle
-  `feedback` (procédure commune : `auto.md`). Avec `on`/`off` : le dépôt courant
-  (`off` le remet en `notify`). Sans argument : choix parmi les dépôts connus, c'est-à-dire
+- `/review:pr-auto [on|off [<cible>]|interval <min>]` règle `review`, `/review:feedback-auto [on|off [<cible>]|interval <min>]` règle
+  `feedback` (procédure commune : `auto.md`). Avec `on`/`off` : le dépôt courant, ou la
+  cible donnée (`owner/repo`, `owner/*`, `*`) (`off` remet le niveau au-dessus, au bout
+  `notify`). Sans argument : choix parmi les dépôts connus, c'est-à-dire
   ceux de la config et les clones GitHub des espaces de travail de [`cl`](TOOLS.md#lanceur-cl).
   Si la surveillance est arrêtée, le skill propose `review-watch enable`.
-- En terminal : `review-watch auto <owner/repo|.> on|off [review|feedback]`,
+- En terminal : `review-watch auto <owner/repo|owner/*|*|.> on|off [review|feedback]`,
   `add <repo> [--review M] [--feedback M] [--path <clone>]`, `remove <repo>`,
   `default [--review M] [--feedback M]`, `repos`, `status` (`--json` : pour
   [`gh-watch`](#gh-watch), qui supervise tous les watchers : `gh-watch status`, `/gh-watch:auto-status`).

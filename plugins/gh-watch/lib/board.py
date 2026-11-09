@@ -437,6 +437,16 @@ def same(a, b):
     return (a or "").lower() == (b or "").lower()
 
 
+def repo_entry(entries, repo):
+    """Entrée d'un watcher (`repos` de son status --json) qui s'applique au dépôt : la
+    sienne, sinon celle de son propriétaire (owner/*), sinon {} (dépôts non listés)."""
+    for key in w.repo_keys(repo):
+        e = next((x for x in entries if same(x["repo"], key)), None)
+        if e:
+            return e
+    return {}
+
+
 def follow(r, d, kind, now):
     """Suivi d'une ligne par le watcher `d` qui gère son état sous `kind` : {watcher, kind,
     mode, handled, follow, missed, command}. Manquée : dépôt en auto ou notify, et rien de
@@ -444,7 +454,7 @@ def follow(r, d, kind, now):
     échec, ignorée (déjà là à l'activation, mode off à l'époque), notifiée sans session
     lancée depuis — ni session en cours (herdr ouverte, analyse en cours ou prête)."""
     repo, n, ev = r["repo"], r["n"], r.get("event_at")
-    rc = next((x for x in d.get("repos", []) if same(x["repo"], repo)), {})
+    rc = repo_entry(d.get("repos", []), repo)
     mode = rc.get(kind) or (d.get("default") or {}).get(kind) or "off"
     key = f"{repo}#{n}:{kind}"
     handled = max((v or "" for k, v in (d.get("handled") or {}).get(kind, {}).items() if same(k, f"{repo}#{n}")),

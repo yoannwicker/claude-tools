@@ -11,7 +11,8 @@ défaut : `interval` de la config) :
             review traitée → /review:feedback <n>. Une review qui n'en laisse pas
             (approbation sans message, « LGTM ») : simple notification.
 
-Mode par dépôt et par événement (config ~/.config/claude-tools/review-watch.json) :
+Mode par dépôt et par événement (config ~/.config/claude-tools/review-watch.json ; le
+réglage du dépôt l'emporte sur celui de son propriétaire, owner/*, puis sur `default`) :
   auto     la session est lancée : herdr (worktree + pane) s'il tourne, sinon analyse en
            fond (claude -p … --prepare) puis notification, dont le clic reprend la session
            dans un terminal pour la validation
@@ -24,8 +25,10 @@ Mécanique commune (lancement, notifications, timer) : lib/watchlib.py du plugin
 
   review-watch status                          surveillance, dépôts, sessions
   review-watch repos [--json]                  dépôts configurés et clones GitHub trouvés
-  review-watch auto <owner/repo|.> on|off [review|feedback]
-                                               (off : retour au mode des dépôts non listés)
+  review-watch auto <owner/repo|owner/*|*|.> on|off [review|feedback]
+                                               (owner/* : tous les dépôts du propriétaire,
+                                               * : dépôts non listés ; off : retour au
+                                               niveau au-dessus — dépôt → owner/* → *)
   review-watch add <owner/repo|.> [--review M] [--feedback M] [--path <clone>]
                                                (sans --review/--feedback : auto pour les deux)
   review-watch remove <owner/repo|.>

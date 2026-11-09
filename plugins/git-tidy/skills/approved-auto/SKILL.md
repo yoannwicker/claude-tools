@@ -1,7 +1,7 @@
 ---
 name: approved-auto
-description: Mode auto des PR approuvées — lancer d'office /git-tidy:ready (commits au propre, rebase, description et ticket, puis ticket JIRA passé en validation et message Slack pour le testeur) quand une de mes PR a ses approbations (2 par défaut) — à activer ou désactiver sur le dépôt courant (on/off) ou en choisissant parmi les dépôts connus ; approbations, statut JIRA et environnement de test réglables par dépôt
-argument-hint: "[on | off | interval <minutes> | approvals <n|default> | status <statut|default> | env <texte|default>]"
+description: Mode auto des PR approuvées — lancer d'office /git-tidy:ready (commits au propre, rebase, description et ticket, puis ticket JIRA passé en validation et message Slack pour le testeur) quand une de mes PR a ses approbations (2 par défaut) — à activer ou désactiver sur le dépôt courant, un dépôt, tous ceux d'un propriétaire (owner/*) ou tous (*) (on/off) ou en choisissant parmi les dépôts connus ; approbations, statut JIRA et environnement de test réglables par dépôt
+argument-hint: "[on | off [<owner/repo> | <owner>/* | *] | interval <minutes> | approvals <n|default> | status <statut|default> | env <texte|default>]"
 disable-model-invocation: true
 allowed-tools: Bash(tidy-watch:*), Bash(command -v tidy-watch)
 ---
@@ -50,10 +50,14 @@ Réglages de `/git-tidy:ready` pour le dépôt courant :
 Sans valeur, la commande affiche le réglage et sa provenance. Afficher la sortie en une
 ligne.
 
-## Avec `on` ou `off`
+## Avec `on` ou `off` [`<cible>`]
 
-Dépôt courant : `tidy-watch auto . on|off`. `off` remet le mode des dépôts non listés (off
-par défaut) et garde les autres réglages du dépôt. Afficher la sortie en une ligne.
+`tidy-watch auto <cible> on|off`, cible `.` (dépôt courant) par défaut, sinon celle donnée :
+`owner/repo`, `owner/*` (tous les dépôts du propriétaire, ex. `softwarevidal/*`) ou `*`
+(tous les dépôts non listés). Le réglage le plus précis l'emporte : dépôt, puis `owner/*`,
+puis `*`. `off` remet le niveau au-dessus (au bout, off) et garde les autres réglages ;
+pour exclure un dépôt d'un `owner/*` ou `*` en auto : `tidy-watch add <repo> --approved
+notify` (ou `off`). Afficher la sortie en une ligne.
 
 ## Sans argument
 
@@ -64,6 +68,8 @@ par défaut) et garde les autres réglages du dépôt. Afficher la sortie en une
    avec leur nombre d'approbations, le dépôt courant ensuite. Au-delà de 4 options : les 3
    premières plus « Autres… » ; dans ce cas, montrer d'abord la liste numérotée complète
    et accepter des numéros ou noms en texte libre.
+   Les entrées `owner/*` de la config y figurent aussi (sans `path`) ; rappeler sous la
+   question que `on owner/*` ou `on *` active tout un propriétaire ou tous les dépôts.
 3. Pour chaque dépôt dont l'état change : `tidy-watch auto <repo> on|off`.
 4. Récapitulatif : `tidy-watch status` et, pour les dépôts en auto, `validation_status` et
    `test_env` (de `repos --json`) ; rappeler `/git-tidy:approved-auto approvals <n>`,
