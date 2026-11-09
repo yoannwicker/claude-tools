@@ -34,7 +34,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Plugin `herdr-session` (reprise des sessions par herdr) | `./install.sh plugin herdr-session` | herdr et son intégration Claude (`./setup/20-herdr.sh`) |
 | Plugin `build-brief` (consigne et garde-fou Gradle) | `./install.sh plugin build-brief` | `build-brief` dans le PATH, `python3` |
 | Plugin `session-analysis` (analyse des sessions avec AgentsView, qu'il installe) | `./install.sh plugin session-analysis` | `python3`, `curl` |
-| Plugin `review` (agent reviewer, skills `/review:diff`, `/review:pr`, `/review:feedback` : relire son diff ou la PR d'un collègue, traiter les retours reçus ; `/review:pr-auto`, `/review:feedback-auto` : les lancer d'office depuis les notifications GitHub) | `./install.sh plugin review`, puis `review-watch enable` pour le mode auto | `git`, `python3` ; `gh` authentifié ; `git-nav` pour chercher une PR par mots-clés ; systemd utilisateur pour le mode auto |
+| Plugin `review` (agent reviewer, skills `/review:diff`, `/review:pr`, `/review:feedback` : relire son diff ou la PR d'un collègue, traiter les retours reçus ; `/review:summary` : résumer une PR ; `/review:pr-auto`, `/review:feedback-auto` : les lancer d'office depuis les notifications GitHub) | `./install.sh plugin review`, puis `review-watch enable` pour le mode auto | `git`, `python3` ; `gh` authentifié ; `git-nav` pour chercher une PR par mots-clés ; systemd utilisateur pour le mode auto |
 
 Plusieurs plugins d'un coup : `./install.sh plugin <nom>…`, tous : `./install.sh plugin --all`
 (c'est ce que fait `./install.sh`). Relancer met à jour. `./install.sh plugin --remove <nom>…`
@@ -92,7 +92,8 @@ demander une déconnexion/reconnexion de session.
   ajouté seulement) ; `/review:pr <n…>` : relire la PR d'un collègue, ou plusieurs PR
   liées (pile, même sujet) avec leur cohérence, et y poster les commentaires retenus ; `/review:feedback` : traiter les retours reçus sur ma PR
   (solution, options ou à discuter pour chacun, puis fixups et réponses). Chaque point est
-  priorisé et validé avant d'être envoyé ou traité (plugin `review`).
+  priorisé et validé avant d'être envoyé ou traité ; `/review:summary <n>` : résumé concis
+  d'une PR, fonctionnel et choix techniques (plugin `review`).
 - `/review:pr-auto` : lancer ces revues d'office à la demande de review ;
   `/review:feedback-auto` : lancer le plan de traitement au retour de revue reçu sur mes PR.
   Dépôt par dépôt (`on`/`off`, ou choix dans la liste) ; sinon une notification, dont le

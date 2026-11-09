@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:auto-status` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:auto-status` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:summary`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -1320,14 +1320,15 @@ conversation, rien n'est écrit.
 session) — relire son propre diff (`/review:diff`), relire la PR d'un collègue, ou plusieurs
 PR liées ensemble (pile de PR, même sujet), et y poster les commentaires retenus
 (`/review:pr`), traiter les retours reçus sur sa PR
-(`/review:feedback`). Chaque point est priorisé avec un conseil et validé avant d'être
-envoyé ou traité. Les skills ne se lancent qu'à la demande (`disable-model-invocation`),
-y compris par [`review-watch`](#review-watch-reviewpr-auto-reviewfeedback-auto), qui les lance d'office à la demande de review
+(`/review:feedback`), et résumer une PR sans la relire (`/review:summary`). Chaque point
+est priorisé avec un conseil et validé avant d'être envoyé ou traité. Les skills ne se
+lancent qu'à la demande (`disable-model-invocation`) — sauf `/review:summary`, en lecture
+seule, que Claude lance aussi quand on lui demande de résumer une PR —, y compris par [`review-watch`](#review-watch-reviewpr-auto-reviewfeedback-auto), qui les lance d'office à la demande de review
 (`/review:pr-auto`) ou au retour de revue reçu sur mes PR (`/review:feedback-auto`).
 
 **Fichiers** : `plugins/review/` (`agents/reviewer.md`,
-`skills/{diff,pr,feedback,pr-auto,feedback-auto}/SKILL.md`, `validation.md` et `ticket.md`
-communs aux skills, `auto.md` commun à `pr-auto` et `feedback-auto`,
+`skills/{diff,pr,feedback,summary,pr-auto,feedback-auto}/SKILL.md`, `validation.md` et
+`ticket.md` communs aux skills, `auto.md` commun à `pr-auto` et `feedback-auto`,
 `bin/{review-post,review-watch}`, `systemd/review-watch.{service,timer}`,
 `tests/{review-post,review-watch}.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
 hors du plugin, les liens `~/.local/bin/review-watch`,
@@ -1341,9 +1342,9 @@ hors du plugin, les liens `~/.local/bin/review-watch`,
 [Profil Herdr UI](#profil-herdr-ui)). **Activé dans** :
 le profil de référence et `vidal` (pas `lean`).
 
-**Prérequis** : `git`, `python3` ; `gh` authentifié (`/review:pr`, `/review:feedback`) ;
+**Prérequis** : `git`, `python3` ; `gh` authentifié (`/review:pr`, `/review:feedback`, `/review:summary`) ;
 plugin [`gh-watch`](#gh-watch) (dépendance déclarée, installé automatiquement : mécanique
-commune des watchers et supervision) ; plugin [`git-nav`](#git-nav) pour chercher une PR par mots-clés dans `/review:pr` (`gpr`).
+commune des watchers et supervision) ; plugin [`git-nav`](#git-nav) pour chercher une PR par mots-clés dans `/review:pr` et `/review:summary` (`gpr`).
 Lecture du ticket : MCP Atlassian (`getJiraIssue`) pour JIRA, `gh` pour une issue GitHub ;
 sans eux, la revue se fait sans le ticket. Outils IntelliJ utilisés par l'agent s'ils répondent (plugin [`intellij`](#intellij)),
 sinon recherche classique. Mode auto (`review-watch`) : systemd utilisateur ; herdr
@@ -1494,6 +1495,19 @@ session s'il y tourne. Un worktree ouvert dans Herdr est retiré par `herdr work
 qui ferme son workspace mais garde la branche, supprimée juste après : si la session y
 tourne, les deux sont lancés détachés en dernier (échecs dans
 `~/.cache/claude-tools/review-cleanup.log`).
+
+#### `/review:summary`
+
+`/review:summary [numéro | recherche]` : résumé concis d'une PR (la PR en contexte ou
+celle de la branche courante sans argument, recherche par `gpr list`), rendu dans la
+conversation, sans s'y placer ni rien poster. En une vingtaine de lignes : en-tête (auteur,
+branches, taille, état, ticket), **Fonctionnel** (ce qui change pour l'utilisateur ou le
+système, à partir du diff et du ticket lu comme pour la revue), **Choix techniques** (les
+décisions qui structurent la PR, avec leur raison et sa source quand elle est écrite dans
+la description, les commits ou le ticket — jamais inventée), et **Points d'attention**
+s'il y en a (écart au ticket, rupture de compatibilité, zone non testée, description
+absente ou trompeuse). Pas de suggestion de code : pour une revue, `/review:pr`. Seul
+skill du plugin que Claude lance aussi de lui-même (« résume la PR 83 »).
 
 #### `/review:feedback`
 

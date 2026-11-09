@@ -58,7 +58,7 @@
     {
       "name": "review",
       "source": "./plugins/review",
-      "description": "Agent reviewer (code ajouté seulement, conformité au ticket, refactoring exceptionnel, découpage) et skills /review:diff, /review:pr, /review:feedback : relire son diff, relire la PR d'un collègue et y poster les commentaires validés, traiter les retours reçus sur sa PR — chaque point priorisé, validé avant d'être envoyé ou traité ; /review:pr-auto : lancer ces revues d'office à la demande de review ; /review:feedback-auto : lancer le plan de traitement au retour de revue reçu sur mes PR créées (review-watch, notifications GitHub, dépôt par dépôt)"
+      "description": "Agent reviewer (code ajouté seulement, conformité au ticket, refactoring exceptionnel, découpage) et skills /review:diff, /review:pr, /review:feedback : relire son diff, relire la PR d'un collègue et y poster les commentaires validés, traiter les retours reçus sur sa PR — chaque point priorisé, validé avant d'être envoyé ou traité ; /review:summary : résumer une PR (fonctionnel, choix techniques) ; /review:pr-auto : lancer ces revues d'office à la demande de review ; /review:feedback-auto : lancer le plan de traitement au retour de revue reçu sur mes PR créées (review-watch, notifications GitHub, dépôt par dépôt)"
     }
   ]
 }
