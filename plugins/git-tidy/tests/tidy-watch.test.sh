@@ -152,4 +152,54 @@ check "launch --background avec herdr en marche → analyse en fond (--prepare)"
   "$(grep ' 79 --prepare' "$tmp/claude-calls" | cut -d' ' -f2-5)"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/fakebin/herdr"
 
+# Rattrapage quotidien (gh-watch set board_auto on) : à la fin du premier poll de la journée,
+# gh-watch board --all --missed --json en détaché, une notification, une fois par jour
+export GH_WATCH_CONFIG=$tmp/gh-watch.json GH_WATCH_STATE=$tmp/gh-watch/state.json GH_WATCH_BIN=$tmp/fakebin/gh-watch
+cat > "$GH_WATCH_BIN" <<'EOF'
+#!/usr/bin/env bash
+echo "$*" >> "$FAKE/gh-watch-calls"
+row() { echo "{\"repo\": \"o/r\", \"n\": $1, \"title\": \"PR $1\", \"state\": \"$2\", \"short\": \"$3\",
+  \"event_at\": \"2026-11-04T10:00:00Z\", \"watch\": {\"watcher\": \"tidy-watch\", \"kind\": \"$4\"}}"; }
+echo "{\"prs\": [$(row 40 approved "approuvée 2/2" approved), $(row 41 feedback "retours (1 fil)" feedback)]}"
+EOF
+chmod +x "$GH_WATCH_BIN"
+catchup=$tmp/gh-watch/catchup.json
+appr > "$tmp/mine.json"
+rm -f "$tmp/notifs" "$tmp/gh-watch-calls"
+"$bin" poll >/dev/null
+check "board_auto absent → pas de rattrapage" "absent" "$([ -e "$catchup" ] && echo présent || echo absent)"
+echo '{"board_auto": "on"}' > "$GH_WATCH_CONFIG"
+check "board_auto on → rattrapage lancé au poll" 1 "$("$bin" poll | grep -c 'rattrapage du jour lancé')"
+for _ in $(seq 50); do [ -s "$tmp/notifs" ] && break; sleep 0.1; done
+check "gh-watch board --all --missed --json" "board --all --missed --json" "$(cat "$tmp/gh-watch-calls")"
+check "une notification « 2 actions manquées »" "2 actions manquées|_catchup_open" \
+  "$(jq -r '"\(.title)|\(.action[2])"' "$tmp/notifs")"
+check "rattrapage retenu : jour, nombre, lignes" "$(date +%F) tidy-watch 2 41:feedback" \
+  "$(jq -r '"\(.day) \(.by) \(.count) \(.rows[1].n):\(.rows[1].kind)"' "$catchup")"
+"$bin" poll >/dev/null
+check "deuxième poll du jour → pas relancé" 0 "$("$bin" poll | grep -c rattrapage)"
+jq '.day = "2026-01-01"' "$catchup" > "$tmp/c" && mv "$tmp/c" "$catchup"
+check "nouveau jour → relancé" 1 "$("$bin" poll | grep -c 'rattrapage du jour lancé')"
+for _ in $(seq 50); do [ "$(jq -r .finished "$catchup")" != null ] && break; sleep 0.1; done
+# Clic : liste des manquées dans un workspace herdr s'il tourne, sinon un terminal
+cat > "$tmp/fakebin/herdr" <<'EOF'
+#!/usr/bin/env bash
+echo "herdr $*" >> "$FAKE/herdr.log"
+case "$1 $2" in
+  "status server") echo "status: running" ;;
+  "workspace create") echo '{"result": {"root_pane": {"pane_id": "w9:p1"}}}' ;;
+esac
+EOF
+"$bin" _catchup_open
+check "clic, herdr en marche → workspace" "herdr workspace create --cwd $HOME --label manquées --focus" \
+  "$(grep 'workspace create' "$tmp/herdr.log")"
+check "… qui ouvre la liste des manquées" 1 \
+  "$(grep -c "^herdr pane run w9:p1 exec sh -c '$GH_WATCH_BIN board --all --missed -i ||" "$tmp/herdr.log")"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/fakebin/herdr"
+printf '#!/usr/bin/env bash\necho "$*" > "$FAKE/term"\n' > "$tmp/fakebin/term" && chmod +x "$tmp/fakebin/term"
+jq --arg t "$tmp/fakebin/term" '.terminal = $t' "$cfg" > "$tmp/c" && mv "$tmp/c" "$cfg"
+"$bin" _catchup_open
+for _ in $(seq 50); do [ -s "$tmp/term" ] && break; sleep 0.1; done
+check "clic sans herdr → terminal de la config" "$GH_WATCH_BIN board --all --missed -i" "$(cat "$tmp/term")"
+
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

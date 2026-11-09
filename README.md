@@ -26,7 +26,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Claude Code (settings, status line) | `./install.sh link` | `claude` installé et connecté, `jq`, `python3`, `gh` authentifié |
 | Plugin `profiles` (commande `/profile`, `claude-profile` et fonction shell `claude` pour le terminal) | `./install.sh plugin profiles` | `jq` ; le profil de référence de `./install.sh link` |
 | Plugin `git-nav` (skills `/pr`, `/br`, `/worktree`, ménage après un merge ; `gpr`, `gbr` pour le terminal) | `./install.sh plugin git-nav` | `git` ; `gh` authentifié |
-| Plugin `gh-watch` (base des watchers GitHub `review-watch` et `tidy-watch`, supervision : `/gh-watch:auto-status`, `gh-watch status` ; point sur les PR : `/gh-watch:board`, `gh-watch board`) | installé avec `review` ou `git-tidy` (ou `./install.sh plugin gh-watch`) | `python3` ; systemd utilisateur |
+| Plugin `gh-watch` (base des watchers GitHub `review-watch` et `tidy-watch`, supervision : `/gh-watch:auto-status`, `gh-watch status` ; point sur les PR : `/gh-watch:board`, `gh-watch board` ; rattrapage quotidien des actions manquées : `/gh-watch:board-auto`) | installé avec `review` ou `git-tidy` (ou `./install.sh plugin gh-watch`) | `python3` ; systemd utilisateur |
 | Plugin `git-tidy` (skills `/git-tidy:commits`, `/git-tidy:pr-sync`, `/git-tidy:ready` : commits remis au propre, rebase sur la base, PR et ticket JIRA en phase ; `/git-tidy:approved-auto` : lancer `ready` d'office quand la PR a ses approbations) | `./install.sh plugin git-tidy`, puis `tidy-watch enable` pour le mode auto | `git` ; `gh` authentifié ; MCP Atlassian pour JIRA ; `python3` et systemd utilisateur pour le mode auto |
 | Plugin `pr-comments` (fils de review non résolus) | `./install.sh plugin pr-comments` | `claude` ≥ 2.1.287, `gh` authentifié |
 | Plugin `intellij` (MCP IntelliJ + consigne) | `./install.sh plugin intellij` | IntelliJ avec le serveur MCP sur le port 64342 |
@@ -110,6 +110,10 @@ demander une déconnexion/reconnexion de session.
   à lancer ou écarter (`gh-watch launch`, `gh-watch skip`) ; `gh-watch board -i` : la même
   liste, interactive, pour lancer (en fond au choix) ou écarter ligne par ligne
   (`/gh-watch:board -i` : dans un pane herdr, sinon par questions) (plugin `gh-watch`).
+- `/gh-watch:board-auto on` : une fois par jour, après le premier passage d'un watcher, les
+  actions manquées remontent en une seule notification « N actions manquées », dont le clic
+  ouvre cette liste interactive (herdr, sinon un terminal) ; `gh-watch status` rappelle
+  celles qui attendent depuis plus d'un jour ouvré (plugin `gh-watch`).
 - `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des
   agents (AgentsView), rangé dans `docs/analyses-sessions/` pour ce dépôt ;
   `/session-analysis:session` : bilan de la session en cours (plugin `session-analysis`).
@@ -139,7 +143,8 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     git-nav/ (skills /pr, /br, /worktree, branch-cleanup, hook merge-watch, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
                     gh-watch/ (lib/watchlib.py commun aux watchers, bin/gh-watch et skill
                     /gh-watch:auto-status pour les superviser, lib/board.py, lib/tui.py et skill
-                    /gh-watch:board pour le point sur les PR),
+                    /gh-watch:board pour le point sur les PR, skill /gh-watch:board-auto
+                    pour le rattrapage quotidien),
                     git-tidy/ (skills /git-tidy:commits, :pr-sync, :ready et :approved-auto,
                     bin/tidy-watch, timer systemd tidy-watch),
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),

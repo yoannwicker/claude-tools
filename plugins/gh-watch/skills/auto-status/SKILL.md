@@ -1,6 +1,6 @@
 ---
 name: auto-status
-description: Superviser les watchers GitHub (review-watch, tidy-watch…) — timers actifs ou arrêtés, dernier et prochain passage, dépôts et modes, sessions lancées et quand (herdr, analyses en fond prêtes à reprendre), et sur demande l'historique des déclenchements (session lancée, notification, ignoré, en attente, échec) et ce qu'un passage ferait maintenant
+description: Superviser les watchers GitHub (review-watch, tidy-watch…) — timers actifs ou arrêtés, dernier et prochain passage, dépôts et modes, sessions lancées et quand (herdr, analyses en fond prêtes à reprendre), dernier rattrapage quotidien et actions manquées qui attendent, et sur demande l'historique des déclenchements (session lancée, notification, ignoré, en attente, échec) et ce qu'un passage ferait maintenant
 argument-hint: "[--history] [--since <30m|24h|7d|date>] [--dry-run]"
 disable-model-invocation: true
 allowed-tools: Bash(gh-watch:*), Bash(command -v gh-watch)
@@ -37,6 +37,13 @@ qui l'implique).
    `notifié`, `ignoré`, `en attente`, `échec`) et son détail. Aucun : le dire en une ligne
    (« aucun déclenchement depuis 24 h »).
 6. Avec `--dry-run` : ce que chaque passage ferait maintenant (`dry_run`), tel quel.
-7. Ce qui cloche, en fin de réponse : watcher en erreur (`error`), timer arrêté alors qu'un
+7. Rattrapage quotidien : `gh-watch catchup --json` — une ligne : `board_auto` (on/off), dernier
+   rattrapage (`last` : fini quand, par quel watcher, nombre de manquées ou erreur ; `null` :
+   jamais). Off et jamais lancé : une ligne « rattrapage quotidien off
+   (/gh-watch:board-auto on) ».
+8. Ce qui cloche, en fin de réponse : watcher en erreur (`error`), timer arrêté alors qu'un
    dépôt est en `auto` (→ `<watcher> enable`), analyse échouée, déclenchement en `échec`,
-   session prête oubliée depuis plus d'un jour. Rien ne cloche : le dire en une ligne.
+   session prête oubliée depuis plus d'un jour, rattrapage en échec (`last.error`) ou
+   `board_auto` on sans timer actif (`timers` faux), et les manquées qui attendent depuis
+   plus d'un jour ouvré (`waiting` : `dépôt#n`, état, depuis combien de jours ouvrés, la
+   commande `gh-watch launch`). Rien ne cloche : le dire en une ligne.

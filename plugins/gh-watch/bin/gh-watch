@@ -64,8 +64,19 @@ posé par le setup.sh de son plugin (./install.sh plugin <plugin>) : gh-watch le
                                            PR des autres montrées pour ce dépôt : celles où
                                            l'on me sollicite (requested, défaut), ou aussi
                                            toutes celles qui attendent des relecteurs (open)
+  gh-watch set board_auto [on | off | default]
+                                           rattrapage quotidien (off par défaut) : à la fin
+                                           du premier poll de la journée d'un watcher,
+                                           board --all --missed en détaché, et une
+                                           notification « N actions manquées » dont le clic
+                                           ouvre board --all --missed -i (herdr, sinon un
+                                           terminal)
+  gh-watch catchup [--json]                dernier rattrapage, et ses manquées qui le sont
+                                           encore depuis plus d'un jour ouvré (aussi en fin
+                                           de gh-watch status)
 
-Config : ~/.config/claude-tools/gh-watch.json (GH_WATCH_CONFIG).
+Config : ~/.config/claude-tools/gh-watch.json (GH_WATCH_CONFIG) ; état :
+~/.local/state/claude-tools/gh-watch/ (GH_WATCH_STATE : state.json, catchup.json à côté).
 """
 import argparse, json, os, re, shlex, shutil, subprocess, sys
 
@@ -75,10 +86,9 @@ import board as b  # noqa: E402
 
 CFGDIR = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "claude-tools")
 WATCHERS = os.environ.get("GH_WATCH_DIR") or os.path.join(CFGDIR, "watchers.d")
-CONFIG = os.environ.get("GH_WATCH_CONFIG") or os.path.join(CFGDIR, "gh-watch.json")
+CONFIG = w.gh_watch_config()
 # Lignes écartées (gh-watch skip) : {"repo#n": {state, event, until_closed, when}}
-STATE = os.environ.get("GH_WATCH_STATE") or os.path.join(
-    os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state")), "claude-tools", "gh-watch", "state.json")
+STATE = w.gh_watch_state()
 STALE_DAYS = 2
 APPROVALS = 2
 
@@ -194,6 +204,54 @@ def show(data, dry_run, since=None):
                 print(f"  passage : {l.strip()}")
             if d.get("dry_run_error"):
                 print(f"  passage : erreur — {d['dry_run_error']}")
+
+
+# --- rattrapage quotidien (board_auto) ---------------------------------------------------------
+
+def catchup_report(data):
+    """Dernier rattrapage (catchup.json, écrit par watchlib) et, parmi ses manquées, celles
+    qui le sont encore d'après le suivi actuel des watchers (board.follow), non écartées,
+    depuis plus d'un jour ouvré."""
+    cfg = w.load_json(CONFIG)
+    rec = w.load_json(w.gh_watch_catchup())
+    by_name = {d["name"]: d for d in data if not d.get("error")}
+    skips = w.load_json(STATE).get("skipped", {})
+    now = w.now()
+    waiting = []
+    for r in rec.get("rows") or []:
+        d = by_name.get(r.get("watcher"))
+        if not d or not r.get("event_at") or skip_key(r) in skips:
+            continue
+        f = b.follow(r, d, r["kind"], now)
+        days = b.workdays(w.parse(r["event_at"]), now)
+        if f["missed"] and days > 1:
+            waiting.append({**r, "follow": f["follow"], "command": f["command"], "workdays": round(days, 2)})
+    timers = any(d.get("state") == "active" for d in by_name.values())
+    return {"board_auto": cfg.get("board_auto", "off"), "timers": timers,
+            "last": {k: rec.get(k) for k in ("day", "started", "finished", "by", "count", "error")} if rec else None,
+            "waiting": waiting}
+
+
+def show_catchup(c):
+    last = c["last"]
+    if c["board_auto"] != "on" and not last:
+        print("rattrapage quotidien : off (gh-watch set board_auto on)")
+        return
+    if not last:
+        line = "jamais lancé"
+    elif not last.get("finished"):
+        line = f"en cours depuis {local(last['started'])} ({last['by']})"
+    elif last.get("error"):
+        line = f"{local(last['finished'])} ({last['by']}) en échec — {last['error']}"
+    else:
+        n = last.get("count") or 0
+        line = f"{local(last['finished'])} ({last['by']}) — " + (f"{n} manquée(s)" if n else "aucune manquée")
+    warn = "  ⚠ aucun timer de watcher actif : rien ne le lance" if c["board_auto"] == "on" and not c["timers"] else ""
+    print(f"rattrapage quotidien : {c['board_auto']} ; dernier : {line}{warn}")
+    if c["waiting"]:
+        print("  manquées en attente depuis plus d'un jour ouvré :")
+        for r in c["waiting"]:
+            print(f"    {r['repo']}#{r['n']}  {r['short']}  {r['kind']}  {age(r['workdays'])} ouvrés  {r['command'] or ''}")
 
 
 # --- tableau des PR --------------------------------------------------------------------------
@@ -668,6 +726,19 @@ def cmd_set(args):
     cfg = w.load_json(CONFIG)
     if args.key == "board":
         return cmd_set_board(cfg, args)
+    if args.key == "board_auto":
+        if args.target not in (None, "on", "off", "default"):
+            die("valeur attendue : on, off ou default")
+        if args.target in ("off", "default"):
+            cfg.pop("board_auto", None)
+        elif args.target:
+            cfg["board_auto"] = "on"
+        if args.target:
+            w.save_json(CONFIG, cfg)
+        on = cfg.get("board_auto") == "on"
+        print(f"board_auto = {'on' if on else 'off'} (rattrapage quotidien des actions manquées"
+              + (" : à la fin du premier poll de la journée d'un watcher)" if on else ")"))
+        return
     if args.key == "stale_days":
         if args.target not in (None, "default") and (not args.target.isdigit() or int(args.target) < 1):
             die("nombre de jours ouvrés attendu (1 au moins), ou default")
@@ -727,7 +798,8 @@ def main():
     sk.add_argument("--until-closed", action="store_true")
     sub.add_parser("unskip").add_argument("target")
     se = sub.add_parser("set")
-    se.add_argument("key", choices=("stale_days", "others", "board"))
+    se.add_argument("key", choices=("stale_days", "others", "board", "board_auto"))
+    sub.add_parser("catchup").add_argument("--json", action="store_true")
     se.add_argument("target", nargs="?")
     se.add_argument("value", nargs="?")
     args = p.parse_args()
@@ -788,6 +860,11 @@ def main():
         for r in rows or [{"name": f"aucun watcher déclaré ({WATCHERS})", "script": ""}]:
             print(f"{r['name']}  {r['script'] or '(lien mort)'}")
         return
+    if args.cmd == "catchup":
+        c = catchup_report(collect(False))
+        if args.json:
+            return print(json.dumps(c, ensure_ascii=False))
+        return show_catchup(c)
     since = getattr(args, "since", None)
     if args.cmd == "history":
         rows = history(collect(False), since)
@@ -806,6 +883,8 @@ def main():
                 d["history"] = [e for e in d.get("history", []) if e["when"] >= since]
         return print(json.dumps(data, ensure_ascii=False))
     show(data, dry_run, since)
+    if data:
+        show_catchup(catchup_report(data))
 
 
 if __name__ == "__main__":

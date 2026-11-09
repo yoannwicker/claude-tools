@@ -8,6 +8,10 @@ par un lien ~/.config/claude-tools/watchers.d/<nom> vers son script (posé par l
 de son plugin) : `gh-watch status` les supervise tous.
 
 Le watcher appelle configure(...) avec ses réglages, puis main(events=…).
+
+Rattrapage automatique (`gh-watch set board_auto on`, /gh-watch:board-auto) : à la fin du
+premier `poll` de la journée de l'un des watchers, `gh-watch board --all --missed --json`
+lancé en détaché, et une notification s'il y a des actions manquées (voir catchup_*).
 """
 import argparse, datetime as dt, fcntl, json, os, re, shlex, shutil, subprocess, sys, uuid
 from types import SimpleNamespace
@@ -39,6 +43,30 @@ BACKGROUND_TOOLS = [
 ]
 
 S = SimpleNamespace()  # réglages du watcher, posés par configure()
+
+
+# --- gh-watch (supervision, tableau) : config, état, commande ---------------------------------
+
+def gh_watch_config():
+    """Config de gh-watch (réglages de board, board_auto)."""
+    return os.environ.get("GH_WATCH_CONFIG") or os.path.join(
+        os.environ.get("XDG_CONFIG_HOME", f"{HOME}/.config"), "claude-tools", "gh-watch.json")
+
+
+def gh_watch_state():
+    """État de gh-watch (lignes écartées) ; le rattrapage vit à côté (catchup.json)."""
+    return os.environ.get("GH_WATCH_STATE") or os.path.join(
+        os.environ.get("XDG_STATE_HOME", f"{HOME}/.local/state"), "claude-tools", "gh-watch", "state.json")
+
+
+def gh_watch_catchup():
+    return os.path.join(os.path.dirname(gh_watch_state()), "catchup.json")
+
+
+def gh_watch_bin():
+    """bin/gh-watch du plugin, à côté de lib/ (le PATH d'un timer systemd n'a pas ~/.local/bin) ;
+    GH_WATCH_BIN : tests."""
+    return os.environ.get("GH_WATCH_BIN") or os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "bin", "gh-watch")
 
 
 def configure(name, env, self_path, kinds, skill, label, tab, defaults, announce, tell,
@@ -351,6 +379,74 @@ def notify_wait(payload):
 
 
 # --- lancement --------------------------------------------------------------------------------
+
+# --- rattrapage quotidien (board_auto) ---------------------------------------------------------
+
+def today():
+    return dt.datetime.now().astimezone().date().isoformat()
+
+
+def catchup_due():
+    """board_auto à on et pas encore de rattrapage aujourd'hui (date locale) : retient la
+    journée (sous verrou, pour qu'un autre watcher ne le relance pas) et retourne True."""
+    if load_json(gh_watch_config()).get("board_auto") != "on":
+        return False
+    path = gh_watch_catchup()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(f"{path}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        last = load_json(path)
+        if last.get("day") == today():
+            return False
+        save_json(path, {**last, "day": today(), "started": iso(now()), "by": S.name, "finished": None})
+    return True
+
+
+def catchup_run():
+    """`<watcher> _catchup`, en détaché : gh-watch board --all --missed --json, résultat
+    retenu dans catchup.json, et une seule notification « N actions manquées » s'il y en a
+    (clic : catchup_open)."""
+    path = gh_watch_catchup()
+    try:
+        rows = json.loads(run([gh_watch_bin(), "board", "--all", "--missed", "--json"]))["prs"]
+        error = None
+    except Exception as e:
+        rows, error = [], str(e)[:300]
+    keep = ("repo", "n", "title", "url", "state", "short", "event_at", "since")
+    with open(f"{path}.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        rec = load_json(path)
+        rec.update(finished=iso(now()), error=error, count=len(rows),
+                   rows=[{**{k: r.get(k) for k in keep}, "watcher": r["watch"]["watcher"],
+                          "kind": r["watch"]["kind"]} for r in rows])
+        save_json(path, rec)
+    if error:
+        print(f"rattrapage en échec : {error}")
+        return
+    if not rows:
+        print("rattrapage : aucune action manquée")
+        return
+    s = "s" if len(rows) > 1 else ""
+    lines = [f"{r['repo']}#{r['n']} {r['short']}" for r in rows[:4]] + (["…"] if len(rows) > 4 else [])
+    notify(f"{len(rows)} action{s} manquée{s}", "\n".join(lines) + "\nclic : gh-watch board --all --missed -i",
+           [sys.executable, S.self, "_catchup_open"])
+
+
+def catchup_open(cfg):
+    """Clic sur la notification du rattrapage : la liste des manquées (gh-watch board --all
+    --missed -i) dans un workspace herdr s'il tourne, sinon dans un terminal."""
+    argv = [gh_watch_bin(), "board", "--all", "--missed", "-i"]
+    if herdr_running():
+        pane = herdr("workspace", "create", "--cwd", HOME, "--label", "manquées", "--focus")["root_pane"]["pane_id"]
+        keep = ' || { printf "\\n(Entrée pour fermer) "; read x; }'  # une erreur reste lisible
+        run(["herdr", "pane", "run", pane, "exec sh -c " + shlex.quote(shlex.join(argv) + keep)])
+        return
+    cmd = terminal_cmd(cfg, HOME, argv)
+    if not cmd:
+        notify("Actions manquées : pas de terminal", "lancer : gh-watch board --all --missed -i", urgency="critical")
+        return
+    detach(cmd, cwd=HOME)
+
 
 def key_of(repo, n, kind):
     return f"{repo}#{n}:{kind}"
@@ -801,6 +897,8 @@ def main(doc, events, extend=None, handle=None):
     sk.add_argument("--at", required=True)
     sub.add_parser("_run").add_argument("key")
     sub.add_parser("_notify").add_argument("payload")
+    sub.add_parser("_catchup")
+    sub.add_parser("_catchup_open")
     if extend:
         extend(sub, d)
     args = p.parse_args()
@@ -816,6 +914,10 @@ def _main(cfg, args, events, handle):
         return notify_wait(json.loads(args.payload))
     if args.cmd == "_run":
         return background_run(args.key)
+    if args.cmd == "_catchup":
+        return catchup_run()
+    if args.cmd == "_catchup_open":
+        return catchup_open(cfg)
     if args.cmd in (None, "status"):
         with State() as state:
             return cmd_status(cfg, state, getattr(args, "json", False))
@@ -885,6 +987,10 @@ def _main(cfg, args, events, handle):
             seed = not state.get("initialized") and not args.dry_run
             for line in poll(cfg, state, events, dry_run=args.dry_run, seed=seed):
                 print(line)
+        # Verrou du watcher relâché : rattrapage du jour (board_auto), en détaché
+        if not args.dry_run and catchup_due():
+            detach([sys.executable, S.self, "_catchup"], log=os.path.join(S.state_dir, "catchup.log"))
+            print("rattrapage du jour lancé (gh-watch board --all --missed)")
         return
     if args.cmd == "launch":
         with State() as state:

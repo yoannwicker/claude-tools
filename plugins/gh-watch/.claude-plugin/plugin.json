@@ -1,6 +1,6 @@
 {
   "name": "gh-watch",
-  "description": "Base des watchers GitHub de claude-tools (review-watch, tidy-watch) : mécanique commune (lancement d'une session Claude, notifications, timer systemd) supervision de tous les watchers (/gh-watch:auto-status, gh-watch status), et point sur les PR ouvertes qui me concernent (/gh-watch:board, gh-watch board)",
+  "description": "Base des watchers GitHub de claude-tools (review-watch, tidy-watch) : mécanique commune (lancement d'une session Claude, notifications, timer systemd) supervision de tous les watchers (/gh-watch:auto-status, gh-watch status), point sur les PR ouvertes qui me concernent (/gh-watch:board, gh-watch board), et rattrapage quotidien des actions manquées (/gh-watch:board-auto)",
   "author": {
     "name": "ywicker"
   }

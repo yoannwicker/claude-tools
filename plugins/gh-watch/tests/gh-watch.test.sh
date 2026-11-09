@@ -210,4 +210,29 @@ check "set board sans argument : réglages" "board --all : seulement les propri�
   "$("$bin" set board | paste -sd'|')"
 check "set board : valeur invalide → erreur" 1 "$("$bin" set board o peut-être >/dev/null 2>&1; echo $?)"
 
+# --- rattrapage quotidien (board_auto) ---
+check "status : rattrapage off par défaut" "rattrapage quotidien : off (gh-watch set board_auto on)" \
+  "$("$bin" status | tail -1)"
+check "set board_auto on" "board_auto = on" "$("$bin" set board_auto on | cut -d' ' -f1-3)"
+check "set board_auto : valeur invalide → erreur" 1 "$("$bin" set board_auto oui >/dev/null 2>&1; echo $?)"
+check "catchup : jamais lancé" "rattrapage quotidien : on ; dernier : jamais lancé" "$("$bin" catchup)"
+# Dernier rattrapage (écrit par watchlib) : #7 toujours manquée, #3 lancée depuis (historique
+# de a-watch), #9 écartée depuis, #5 trop récente (moins d'un jour ouvré)
+row() { echo "{\"repo\": \"o/r\", \"n\": $1, \"title\": \"PR $1\", \"state\": \"approved\", \"short\": \"approuvée 2/2\",
+  \"event_at\": \"$2\", \"watcher\": \"a-watch\", \"kind\": \"approved\"}"; }
+jq '.skipped["o/r#9"] = {"state": "approved", "event": "x", "until_closed": true}' "$GH_WATCH_STATE" > "$tmp/s" && mv "$tmp/s" "$GH_WATCH_STATE"
+cat > "$(dirname "$GH_WATCH_STATE")/catchup.json" <<EOF
+{"day": "$(date +%F)", "started": "2026-11-05T07:00:00Z", "finished": "2026-11-05T07:00:30Z", "by": "a-watch",
+ "count": 4, "error": null, "rows": [$(row 7 2026-11-04T11:00:00Z), $(row 3 2026-11-04T11:00:00Z),
+ $(row 9 2026-11-04T11:00:00Z), $(row 5 "$(date -u -d '2 hours ago' +%Y-%m-%dT%H:%M:%SZ)")]}
+EOF
+check "catchup --json : manquées depuis plus d'un jour ouvré, encore manquées" "on 4 7:gh-watch launch o/r#7" \
+  "$("$bin" catchup --json | jq -r '"\(.board_auto) \(.last.count) \([.waiting[] | "\(.n):\(.command)"] | join(","))"')"
+out=$("$bin" status)
+check "status : dernier rattrapage" 1 "$(grep -c '^rattrapage quotidien : on ; dernier : 05/11 .* (a-watch) — 4 manquée(s)$' <<<"$out")"
+check "status : manquée en attente, avec sa commande" 1 \
+  "$(grep -cE '^    o/r#7  approuvée 2/2  approved  [0-9]+ j ouvrés  gh-watch launch o/r#7$' <<<"$out")"
+"$bin" set board_auto off >/dev/null
+check "set board_auto off → retiré de la config" null "$(jq -r '.board_auto // "null"' "$GH_WATCH_CONFIG")"
+
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

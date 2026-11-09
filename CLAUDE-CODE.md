@@ -76,7 +76,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:auto-status` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:auto-status`, `:board` et `:board-auto` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -640,20 +640,23 @@ ajoute des alias.
 (config et état, clone et worktree, lancement d'une session Claude dans herdr ou en fond
 reprise au clic, notifications, timer systemd, commandes communes) — leur supervision
 (`gh-watch status` en terminal, `/gh-watch:auto-status` dans Claude) et le point sur les PR
-ouvertes qui me concernent (`gh-watch board`, `/gh-watch:board`). Dépendance déclarée de
+ouvertes qui me concernent (`gh-watch board`, `/gh-watch:board`), avec un rattrapage
+quotidien des actions manquées (`/gh-watch:board-auto`). Dépendance déclarée de
 `review` et `git-tidy` : installé avec eux.
 
 **Fichiers** : `plugins/gh-watch/` (`lib/watchlib.py`, `lib/board.py`, `lib/tui.py`, `bin/gh-watch`,
-`skills/{auto-status,board}/SKILL.md`, `tests/{gh-watch.test.sh,board.test.py}`, `setup.sh`) ;
+`skills/{auto-status,board,board-auto}/SKILL.md`, `tests/{gh-watch.test.sh,board.test.py}`, `setup.sh`) ;
 hors du plugin, le lien `~/.local/bin/gh-watch` posé par `setup.sh`, la config
-`~/.config/claude-tools/gh-watch.json` (réglages de `board`, écrite par `gh-watch set`) et
-l'état `~/.local/state/claude-tools/gh-watch/state.json` (lignes écartées). Les watchers se déclarent dans
+`~/.config/claude-tools/gh-watch.json` (réglages de `board`, `board_auto`, écrite par
+`gh-watch set`) et l'état `~/.local/state/claude-tools/gh-watch/` (`state.json` : lignes
+écartées ; `catchup.json` : dernier rattrapage). Les watchers se déclarent dans
 `~/.config/claude-tools/watchers.d/<nom>` (lien vers leur script, posé par le `setup.sh` de
 leur plugin). **Activé dans** : tous les profils (avec `review` ou `git-tidy`).
 
 **Prérequis** : `python3` ; systemd utilisateur (`systemctl --user list-timers -o json`,
 systemd ≥ 248) pour le prochain passage ; `gh` authentifié pour `board`. Tests :
-`bash plugins/gh-watch/tests/gh-watch.test.sh` (faux watchers, faux `gh`, rien n'est lancé)
+`bash plugins/gh-watch/tests/gh-watch.test.sh` (faux watchers, faux `gh`, rien n'est lancé ;
+le déclenchement du rattrapage est testé par `plugins/git-tidy/tests/tidy-watch.test.sh`)
 et `python3 plugins/gh-watch/tests/board.test.py` (classement des PR, et mêmes événements
 que le `poll` de `review-watch` et `tidy-watch`, sans réseau).
 
@@ -679,7 +682,9 @@ Les watchers et la commande `gh-watch` ne tournent que depuis un clone (liens po
   `validation_status`…), sessions (herdr ouverte/fermée, analyse en fond `running`, `ready`
   ou `failed`, lancée quand, avec la commande `resume` et le journal en cas d'échec), puis
   les 5 derniers déclenchements (`--since <D>` : tous ceux depuis `D`). Un watcher en
-  erreur ou un lien mort est signalé sans cacher les autres.
+  erreur ou un lien mort est signalé sans cacher les autres. En dernière ligne, le
+  rattrapage quotidien (voir [plus bas](#rattrapage-quotidien--board-auto)) : réglage,
+  dernier passage, et ses manquées qui attendent depuis plus d'un jour ouvré.
 - `gh-watch history [--since <D>] [--json]` : déclenchements de tous les watchers, du plus
   récent au plus ancien — `lancé` (session herdr ou analyse en fond, ou message à une
   session déjà ouverte), `notifié`, `ignoré` (mode off, ou déjà là à l'activation),
@@ -693,12 +698,38 @@ Les watchers et la commande `gh-watch` ne tournent que depuis un clone (liens po
 - `gh-watch board` : le point sur les PR, voir [plus bas](#point-sur-les-pr--board).
 - `/gh-watch:auto-status [--history] [--since <D>] [--dry-run]` : la même vue dans Claude,
   en tableaux, et ce qui cloche en fin de réponse (timer arrêté, analyse ou déclenchement
-  en échec depuis `D`, session prête oubliée). L'historique des déclenchements et les
+  en échec depuis `D`, session prête oubliée, rattrapage en échec ou sans timer, manquées
+  qui attendent depuis plus d'un jour ouvré). L'historique des déclenchements et les
   sessions herdr fermées ne sont affichés qu'avec `--history` (ou `--since`, qui
   l'implique ; `D` : 24 h par défaut).
   Lecture seule.
 
 Chaque watcher donne son état par `<watcher> status --json` (`watchlib.status_data`).
+
+#### Rattrapage quotidien : `board-auto`
+
+Ce que les watchers ont manqué (événement jamais vu, échec, notifiée sans session lancée…,
+voir `--missed` [plus bas](#point-sur-les-pr--board)) remonte une fois par jour, sans
+y penser.
+
+- `/gh-watch:board-auto [on|off]` (ou `gh-watch set board_auto [on | off | default]`) :
+  `board_auto` dans `gh-watch.json` (`GH_WATCH_CONFIG`), off par défaut. Sans argument,
+  le skill montre le dernier rattrapage et demande.
+- À la fin du premier `poll` de la journée (date locale) de l'un des watchers, verrou du
+  watcher relâché, `watchlib` retient la journée dans `catchup.json` (sous verrou : l'autre
+  watcher ne le relance pas le même jour) et lance en détaché `<watcher> _catchup` :
+  `gh-watch board --all --missed --json` (le `bin/gh-watch` du plugin, le `PATH` du timer
+  n'ayant pas `~/.local/bin`). Résultat retenu (fin, nombre, lignes, erreur) ; s'il y a des
+  lignes, **une** notification « N actions manquées » (les 4 premières dans le texte).
+- Son clic (`<watcher> _catchup_open`) ouvre `gh-watch board --all --missed -i` : dans un
+  nouveau workspace herdr (« manquées ») s'il tourne, sinon dans un terminal (`terminal` de
+  la config du watcher, sinon `gnome-terminal`). Rien n'est lancé sans choix dans la liste.
+- `gh-watch catchup [--json]` (aussi en fin de `gh-watch status`, et dans
+  `/gh-watch:auto-status`) : réglage, dernier rattrapage (quand, par quel watcher, nombre de
+  manquées ou erreur ; « ⚠ aucun timer de watcher actif » si `board_auto` est à on sans
+  timer), et ses manquées qui le sont encore d'après le suivi actuel des watchers
+  (`board.follow`, sans appel GitHub), non écartées, depuis plus d'un jour ouvré, avec la
+  commande `gh-watch launch`.
 
 #### Point sur les PR : `board`
 

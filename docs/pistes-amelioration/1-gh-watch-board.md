@@ -1,6 +1,6 @@
 # gh-watch : tableau de bord des PR (`board`), actions manquées et rattrapage
 
-- **Statut** : en cours (étapes 1 à 4 faites, liste interactive comprise)
+- **Statut** : en cours (étapes 1 à 5 faites, liste interactive comprise)
 - **Origine** : idée (2026-11-05), fusion de
   [review : faire le point sur mes PR](2-review-point-mes-pr.md),
   [gh-watch : vue des PR en cours](3-gh-watch-vue-pr.md),
@@ -188,6 +188,15 @@ si l'arborescence change).
   L'événement `feedback` compte les reviews des robots (comme avant), les approbations non.
   Une approbation de plus sur des retours déjà vus : notification, pas de nouvelle session.
   Brouillon : `review-watch` attend qu'il soit prêt (2026-11-06).
+
+- Étape 5 : le rattrapage lance `gh-watch board --all --missed --json` (tous les dépôts
+  de `--all`), et le clic ouvre la liste interactive `gh-watch board --all --missed -i`
+  plutôt que le skill (rien à valider dans Claude pour choisir) : nouveau workspace herdr
+  s'il tourne, sinon un terminal. Journée retenue dans `catchup.json` (état de gh-watch,
+  à part de `state.json`) avant le lancement, sous verrou : un rattrapage par jour, même
+  s'il échoue (l'erreur s'affiche dans `gh-watch status`). « Ce qui cloche » ne refait pas
+  d'appel GitHub : les manquées du dernier rattrapage, recalculées avec le suivi actuel
+  des watchers (2026-11-09).
 
 ## À trancher
 
