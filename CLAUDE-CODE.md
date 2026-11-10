@@ -1524,6 +1524,14 @@ commentaires validés sont **postés
 directement**, en une review `COMMENT` (jamais d'approbation ni de demande de
 changements), par `review-post`.
 
+**Relecture humaine** : si le risque alloué à la PR — dans sa description ou un de ses
+commentaires, posé par un bot ou un humain — demande une relecture humaine et qu'aucun
+humain autre que l'auteur ne l'a encore faite (review approuvée ou avec demande de
+changements, ou commentaire qui le dit ; hors bots et hors mes reviews faites avec ce
+skill), la validation commence par une alerte (risque, source, zones du diff à regarder
+d'abord) et demande de relire soi-même : faite, à faire après (rappel en fin de
+publication) ou arrêter sans rien poster. En `--prepare`, l'alerte est seulement affichée.
+
 Plusieurs PR (`/review:pr 83 84 85`, ou plusieurs choisies parmi les résultats de la
 recherche) forment un **lot** relu ensemble : une **pile** (base de l'une = tête d'une
 autre, rangée de bas en haut) ou des PR sur un **même sujet**, peut-être contradictoires.

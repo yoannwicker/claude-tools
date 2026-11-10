@@ -14,7 +14,8 @@ relisent ensemble : chacune pour elle-même, plus la cohérence entre elles.
 
 **`--prepare`** (analyse en fond lancée par `review-watch`, `claude -p` : personne pour
 répondre) : aucune question (`AskUserQuestion`) ni rien de posté. Étape 1 sans proposer la
-pile (la citer en une ligne si elle existe), étape 2, puis le tableau de l'étape 3
+pile (la citer en une ligne si elle existe), étape 2, l'alerte de relecture humaine
+de l'étape 3 s'il y en a une (sans la question), puis le tableau de l'étape 3
 (commentaires tels qu'ils seront postés, points `🔎` listés sans les trancher) ; finir par
 « Prêt pour la validation » et s'arrêter. À la reprise de la session (« Reprends à la
 validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalement.
@@ -25,7 +26,7 @@ validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalem
   (plugin `git-nav`) : un seul résultat → celui-là, plusieurs → demander lesquelles
   (`AskUserQuestion`, `multiSelect`, header « PR »). Sans argument : la ou les PR en
   contexte dans la conversation, sinon demander.
-- Pour chacune, `gh pr view <n> --json number,title,body,url,state,author,baseRefName,headRefName,headRefOid,isDraft,commits`.
+- Pour chacune, `gh pr view <n> --json number,title,body,url,state,author,baseRefName,headRefName,headRefOid,isDraft,commits,comments,reviews`.
   PR fermée ou mergée → le dire et la retirer du lot. PR à moi (`author` = `gh api user`)
   → le signaler et proposer `/review:diff` (sur sa branche) ou `/review:feedback` ; la
   retirer du lot. Plus aucune PR → s'arrêter. Toutes dans le dépôt courant (sinon le dire
@@ -59,6 +60,15 @@ validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalem
     garder les fils `isResolved: false` dont le premier message est de moi ;
   - **les commentaires de l'auteur** sur la PR postés après ma dernière review ;
   - **le commit de ma dernière review** (`reviews[].commit.oid`) : ce qui a changé depuis.
+- **Relecture humaine** : le risque alloué à la PR, s'il y en a un, est indiqué dans sa
+  description ou dans un de ses commentaires (`comments`, ou le corps d'une `reviews`),
+  posé par un bot d'analyse ou par un humain (niveau de risque, case cochée, « relecture
+  humaine requise »…). Retenir pour chaque PR : **relecture humaine requise** si ce risque
+  la demande (le dernier en date l'emporte), avec la source (lien du commentaire, ou
+  « description ») ; **déjà faite** si un humain autre que l'auteur l'a déjà relue
+  (review `APPROVED` ou `CHANGES_REQUESTED`, ou commentaire qui dit l'avoir faite — hors
+  bots et hors mes reviews précédentes, faites avec ce skill). Seul cas retenu : requise et
+  pas déjà faite. Pas de risque indiqué → ne rien dire.
 - Le ticket : lire `${CLAUDE_SKILL_DIR}/../../ticket.md` et le suivre pour chaque PR
   (`headRefName`, titre et description de la PR, messages de ses commits) ; un ticket
   commun n'est lu qu'une fois.
@@ -85,7 +95,13 @@ du ticket, commits). Dire combien ont été écartés et pourquoi, en une ligne.
 
 ## 3. La validation
 
-Lire `${CLAUDE_SKILL_DIR}/../../validation.md` et le suivre. En tête : le résumé de
+Lire `${CLAUDE_SKILL_DIR}/../../validation.md` et le suivre. Tout en tête, si une PR
+demande une relecture humaine pas encore faite (étape 1) : `⚠️ Relecture humaine requise
+pour #<n> (<risque>, <source>) et pas encore faite : relis toi-même le diff avant de
+poster` — en citant les fichiers ou zones les plus sensibles du diff à regarder d'abord —,
+puis demander (`AskUserQuestion`, header « Relecture ») : **Je l'ai faite, continuer** /
+**Je la ferai après, continuer** / **Arrêter ici** (rien n'est posté, passer au ménage).
+Puis : le résumé de
 l'agent, la couverture du ticket et ses écarts justifiés (pour information, avec la
 source), et la proposition de découpage s'il y en a une. Chaque écart non justifié est
 un point `🔎` : demander à l'auteur de le justifier (ce qui change par rapport au ticket et
@@ -143,7 +159,8 @@ review par PR qui a des points gardés (lot : de bas en haut de la pile) :
   et pour chaque fil **résoudre** (je suis le relecteur : c'est à moi de le faire) :
   `gh api graphql -f query='mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }' -F id=<thread id>`.
 - Fin : l'URL de chaque review, le nombre de commentaires inline et passés dans le corps ;
-  reprise : les fils répondus et résolus.
+  reprise : les fils répondus et résolus ; relecture humaine requise et répondue « Je la
+  ferai après » : le rappeler en une ligne, avec le lien de la PR.
 
 ## 5. Le ménage (seulement si un worktree ou une branche a été créé pour la revue)
 
