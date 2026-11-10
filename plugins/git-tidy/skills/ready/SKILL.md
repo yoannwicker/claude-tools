@@ -103,8 +103,12 @@ l'étape 5). Fichier absent : rien de réglé.
 - des approbations écartées par le push (`DISMISSED`, ou approbation antérieure au push
   avec `reviewDecision` revenu à `REVIEW_REQUIRED`) → **re-demander à ceux qui avaient
   approuvé**, en premier ;
-- brouillon, ou moins de `<N>` relecteurs (demandes en attente dans `reviewRequests` et
-  avis déjà donnés comptés) → **compléter jusqu'à `<N>`**.
+- brouillon, ou relecteurs manquants (demandes en attente dans `reviewRequests` et avis
+  déjà donnés comptés) → **compléter**, selon *Combien demander* ci-dessous.
+
+`<N>` est le seuil d'approbations, pas le nombre de relecteurs à demander : on demande à
+tous ceux dont l'avis est utile, pour que `<N>` approbations arrivent même si l'un d'eux
+ne répond pas.
 
 **Candidats** (jamais l'auteur, moi, ni un bot ; ceux déjà demandés sont gardés tels quels) :
 1. **Liste du dépôt** : `reviewers` des `<réglages>` (`["login", "org/équipe", …]`). Une
@@ -116,8 +120,22 @@ l'étape 5). Fichier absent : rien de réglé.
 3. Avec une liste : ne proposer que ses membres, classés par l'historique (un membre sans
    historique en dernier). Sans liste : les mieux classés de l'historique.
 
-Montrer la proposition : les `<N>` premiers retenus, chacun avec sa raison en une ligne (ex.
-« 6 des 30 dernières PR relues, a relu `src/api/` »), puis 2 ou 3 autres candidats.
+**Combien demander** (relecteurs déjà demandés ou ayant donné un avis compris) :
+- **tous ceux qui connaissent les fichiers touchés** (ont relu ou écrit une des 30
+  dernières PR sur les mêmes fichiers ou dossiers), jusqu'à `<N>` + 2 ;
+- **au moins `<N>` + 1** quand il y a assez de candidats cohérents : une marge pour
+  qu'un absent ne bloque pas la PR ; compléter avec les plus actifs en relecture ;
+- **plus**, si la PR touche plusieurs zones (front et back, plusieurs modules) connues de
+  personnes différentes : au moins une personne par zone, même au-delà de `<N>` + 2 ;
+- **moins que `<N>`** si l'historique et la liste n'offrent pas assez de candidats
+  cohérents (personne n'a touché ces fichiers, peu de relecteurs actifs) : ne pas
+  compléter avec des inconnus du code, le dire (« seulement 1 relecteur pertinent, `<N>`
+  approbations attendues ») et laisser « Autre » pour en ajouter ;
+- une équipe (`org/équipe`) compte pour un relecteur.
+
+Montrer la proposition : les retenus, chacun avec sa raison en une ligne (ex.
+« 6 des 30 dernières PR relues, a relu `src/api/` »), le nombre d'approbations attendues
+(`<N>`) et pourquoi ce nombre de relecteurs, puis 2 ou 3 autres candidats s'il en reste.
 `AskUserQuestion` (header « Relecture ») :
 - **Demander à <retenus> (Recommandé)** ;
 - **Choisir** : une option par candidat (`multiSelect`), « Autre » pour un login ou une

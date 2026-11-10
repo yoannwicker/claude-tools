@@ -999,8 +999,11 @@ l'historique sort dans sa forme finale, sans `fixup!` restant.
   passer à `pr-sync`.
 - **Relecture** (après `pr-sync`) : rien si la PR a déjà ses `<N>` approbations valides
   (`approvals` du dépôt dans `~/.config/claude-tools/git-tidy.json`, sinon 2). Sinon re-demande
-  d'abord à ceux dont l'approbation a sauté au push, puis complète jusqu'à `<N>`
-  relecteurs : membres de la liste du dépôt (`reviewers` de
+  d'abord à ceux dont l'approbation a sauté au push, puis complète, sans confondre le
+  seuil `<N>` avec le nombre de relecteurs : tous ceux qui connaissent les fichiers
+  touchés, au moins `<N>` + 1 pour la marge, une personne par zone touchée, moins que
+  `<N>` (en le disant) s'il n'y a pas assez de candidats cohérents ; candidats : membres
+  de la liste du dépôt (`reviewers` de
   `~/.config/claude-tools/git-tidy.json`), sinon tout l'historique, classés par
   l'historique des 30 dernières PR mergées (connaissance des fichiers touchés, puis nombre
   de relectures), jamais l'auteur ni un bot. Proposition avec la raison de chacun, puis
