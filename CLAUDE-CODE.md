@@ -1011,9 +1011,9 @@ l'historique sort dans sa forme finale, sans `fixup!` restant.
   chaque PR de la pile) : tickets JIRA des PR passés au statut `validation_status` du
   dépôt (`En validation` par défaut) par la transition qui y mène (rien si le ticket y est
   déjà, ni si une de ses PR n'est pas approuvée ; pas de transition possible → le dit, ne
-  force rien). Message Slack rédigé pour le testeur, à copier : *Ticket(s)* (clé,
-  description d'une ligne, lien), *PRs* seulement pour une pile (liens rangés sous leur
-  ticket), *Env de test* (`test_env` du dépôt, `{pr}`/`{branch}`/`{ticket}` remplacés ;
+  force rien). Message Slack rédigé pour le testeur, à copier : « Le ticket <lien> passe
+  en validation » (« Les tickets … passent », ou « La PR <lien> » sans ticket), une ligne
+  « PRs : <liens> » seulement pour une pile, « Env de test : … » (`test_env` du dépôt, `{pr}`/`{branch}`/`{ticket}` remplacés ;
   sinon dernier déploiement GitHub de la branche ; sinon demandé, et retenu sur accord).
   *Passer en « … » et garder le message*, *Message seulement*, *Ajuster* ou *Plus tard* ;
   presse-papiers proposé si `wl-copy` ou `xclip` existe.

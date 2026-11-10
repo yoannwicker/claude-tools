@@ -167,18 +167,19 @@ possible.
   le statut actuel et les transitions possibles, ne rien forcer.
 
 **Message Slack**, en français, à copier tel quel (dans un bloc de code ; texte simple et
-URL en clair, que Slack rend cliquables ; `*gras*` seulement pour les titres) :
+URL en clair, que Slack rend cliquables ; pas de gras) :
 
 ```
-*Ticket* (ou *Tickets* s'il y en a plusieurs)
-• <KEY> — <description succincte : ce que le ticket apporte, en une ligne> — <URL JIRA>
-*PRs* (seulement pour une pile)
-• <KEY> : <URL PR>, <URL PR>   (PR rangées sous leur ticket ; sans ticket : URL seule)
-*Env de test* : <env>
+Le ticket <URL JIRA> passe en validation
+Env de test : <env>
 ```
 
-Rien d'autre : pas de détails de PR, pas de liste de commits. Une seule PR : pas de section
-*PRs* (l'URL de la PR seulement si aucun ticket n'est lié).
+Plusieurs tickets : `Les tickets <URL JIRA>, <URL JIRA> passent en validation`. Pile de PR :
+ajouter avant *Env de test* une ligne `PRs : <URL PR>, <URL PR>`. Aucun ticket lié :
+`La PR <URL PR> passe en validation` (`Les PR <URL PR>, … passent en validation` pour une
+pile, sans ligne `PRs`).
+
+Rien d'autre : pas de description du ticket, pas de détails de PR, pas de liste de commits.
 
 Montrer les tickets à passer (`<KEY>` : statut actuel → `<statut>`) et le message, puis
 `AskUserQuestion` (header « Validation ») :
