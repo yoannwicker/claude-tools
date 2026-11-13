@@ -6,6 +6,12 @@
     "disabledPlugins": []
   },
   "enabledPlugins": {
-    "profiles@claude-tools": true
+    "profiles@claude-tools": true,
+    "git-nav@claude-tools": true,
+    "git-tidy@claude-tools": true,
+    "gh-watch@claude-tools": true,
+    "review@claude-tools": true,
+    "notify@claude-tools": true,
+    "herdr-session@claude-tools": true
   }
 }

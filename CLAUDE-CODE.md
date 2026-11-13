@@ -56,7 +56,7 @@ produit l'installeur d'un autre dépôt (section `base`, voir
 
 Profils versionnés : `vidal` (base [harnais](https://github.com/softwarevidal/harnais), la
 config Claude Code de l'équipe VIDAL, telle quelle : ses plugins, hooks, `CLAUDE.md`, skills
-et statusline, plus [`profiles`](#profiles) pour `/profile`, seul plugin de ce dépôt) et `lean` (tous les plugins du dépôt sauf
+et statusline, plus les plugins de ce dépôt [`profiles`](#profiles), [`git-nav`](#git-nav), [`git-tidy`](#git-tidy), [`gh-watch`](#gh-watch), [`review`](#review), [`notify`](#notify) et [`herdr-session`](#herdr-session) ; pas `build-brief`, que harnais fournit déjà) et `lean` (tous les plugins du dépôt sauf
 `pr-comments`, [`review`](#review) et `superpowers`, mais seuls les MCP `claude.ai Atlassian MCP` et
 `plugin:intellij:intellij` restent allumés, les autres connecteurs claude.ai étant coupés par
 url dans `deniedMcpServers`). Aucun profil par défaut à l'installation : `claude` part sur le
@@ -504,7 +504,7 @@ branche après son merge ([ménage après un merge](#ménage-après-un-merge)).
 `bin/{gpr,gbr,worktree-scan}`, `lib/git-tools.sh`, `shell/git-tools.sh`,
 `hooks/{hooks.json,merge-watch.py}`, `tests/{merge-watch,gbr-cleanup}.test.sh`, `setup.sh`) ; hors
 du plugin, les liens `~/.local/bin/{gpr,gbr}` et `~/.config/shell/git-tools.sh` (fonctions
-shell `gpr`/`gbr`, alias) posés par `./install.sh plugin git-nav`. **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
+shell `gpr`/`gbr`, alias) posés par `./install.sh plugin git-nav`. **Activé dans** : tous les profils.
 
 **Prérequis** : `git` ; `gh` authentifié (`/pr`, ménage après un merge, facultatif pour
 `/br`) ; Linux pour `/worktree` et le ménage après un merge (`/proc`) ; `python3` (hook).
@@ -712,7 +712,7 @@ hors du plugin, le lien `~/.local/bin/gh-watch` posé par `setup.sh`, la config
 `gh-watch set`) et l'état `~/.local/state/claude-tools/gh-watch/` (`state.json` : lignes
 écartées ; `catchup.json` : dernier rattrapage). Les watchers se déclarent dans
 `~/.config/claude-tools/watchers.d/<nom>` (lien vers leur script, posé par le `setup.sh` de
-leur plugin). **Activé dans** : le profil de référence et `lean`, avec `review` ou `git-tidy` (pas `vidal`, profil harnais).
+leur plugin). **Activé dans** : tous les profils, avec `review` ou `git-tidy`.
 
 **Prérequis** : `python3` ; systemd utilisateur (`systemctl --user list-timers -o json`,
 systemd ≥ 248) pour le prochain passage ; `gh` authentifié pour `board`. Tests :
@@ -935,7 +935,7 @@ auto) et n'écrivent rien hors du dépôt local sans accord.
 `~/.config/claude-tools/git-tidy.json` (non versionnés : approbations, relecteurs, statut
 JIRA de validation, environnement de test, et la section `watcher` de `tidy-watch` ; écrits
 par `tidy-watch`, `/git-tidy:approved-auto` et `/git-tidy:ready` sur accord) et l'état
-`~/.local/state/claude-tools/tidy-watch/`. **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
+`~/.local/state/claude-tools/tidy-watch/`. **Activé dans** : tous les profils.
 
 **Prérequis** : `git` ; `gh` authentifié (base de la PR, `/git-tidy:pr-sync`) ; pour JIRA, un
 MCP Atlassian connecté (`claude.ai Atlassian Rovo` ou `claude.ai Atlassian MCP`) ; sans lui,
@@ -1170,7 +1170,7 @@ gnome-terminal).
 `scripts/{notify.sh,notify-click.sh,claude-notify.py}`, `setup.sh`) ; hors du plugin, le lien
 `~/.local/bin/claude-notify-click` posé par `./install.sh plugin notify` pour l'extension GNOME
 `claude-notify@ywicker` ([TOOLS.md](TOOLS.md#extension-gnome-claude-notifyywicker)).
-**Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
+**Activé dans** : tous les profils.
 
 **Prérequis** : GNOME Shell + gnome-terminal (X11 : `xprop`), `python3-gi` avec
 `Notify 0.7`, `gdbus`, `jq` ; herdr et Herdr UI facultatifs (voir [Sans et avec herdr](#sans-et-avec-herdr)). `setup/30-gnome.sh` signale ce qui manque.
@@ -1259,7 +1259,7 @@ après un redémarrage.
 **Fichiers** : `plugins/herdr-session/` (`hooks/hooks.json`, `setup.sh` : `status` note
 l'absence du script herdr) ; hors du plugin, le script
 `~/.claude/hooks/herdr-agent-state.sh`, généré et réécrit par herdr (non versionné), et le
-ménage de `setup/20-herdr.sh`. **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
+ménage de `setup/20-herdr.sh`. **Activé dans** : tous les profils.
 
 **Prérequis** : herdr avec son intégration Claude (`herdr integration install claude`,
 version ≥ 6 pour la reprise ; `herdr integration status` → `claude: current`). Sans le
@@ -1467,7 +1467,7 @@ hors du plugin, les liens `~/.local/bin/review-watch`,
 (non versionnés), et le profil Herdr UI facultatif
 `~/.config/agent-launcher/agents/custom-reviewer/prompt.md` (voir
 [Profil Herdr UI](#profil-herdr-ui)). **Activé dans** :
-le profil de référence (pas `lean` ni `vidal`).
+le profil de référence et `vidal` (pas `lean`).
 
 **Prérequis** : `git`, `python3` ; `gh` authentifié (`/review:pr`, `/review:feedback`) ;
 plugin [`gh-watch`](#gh-watch) (dépendance déclarée, installé automatiquement : mécanique
