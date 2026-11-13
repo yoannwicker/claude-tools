@@ -34,7 +34,8 @@ export function afterRequest(name: string, req: Run): { exit: boolean; isBackgro
   return { exit: false, isBackground: req.exitCode === 4, text }
 }
 
-// One line of `claude-profile show`: under `plugins :`, a plugin (`+` on, `-` off, `?`
+// One line of `claude-profile show`: under `plugins :` (or `plugins de la base :`, those of a
+// profile's base), a plugin (`+` on, `-` off, `?`
 // installed but not in the profile, so off); under `MCP :`, a server (`+` on, `-` cut; its
 // name may hold spaces, its notes in parentheses follow); any other line, as text.
 export type ShowLine =
@@ -51,7 +52,7 @@ export function parseShow(stdout: string): ShowLine[] {
       if (m?.[2]) return { mcp: m[2], isOn: m[1] === '+', note: m[3]?.trim() ?? '' }
     }
     const m = /^ {2}([+?-]) (\S+)/.exec(line)
-    return section === 'plugins :' && m?.[2] ? { plugin: m[2], isOn: m[1] === '+', isListed: m[1] !== '?' } : { text: line }
+    return /^plugins( de la base)? :$/.test(section) && m?.[2] ? { plugin: m[2], isOn: m[1] === '+', isListed: m[1] !== '?' } : { text: line }
   })
 }
 

@@ -50,10 +50,14 @@ profils) ne distingue pas les profils : couper un MCP par profil passe par
 `claude-profile mcp` ou `/profile show`. Une modification commune (un
 réglage, la statusline) se fait donc une fois, dans le profil de référence.
 
-Profils versionnés : `vidal` (config complète : tous les plugins du dépôt sauf `pr-comments`,
-plus `superpowers`, à installer une fois dans Claude Code :
-`/plugin install superpowers@claude-plugins-official`) et `lean` (le même sans
-`superpowers` ni [`review`](#review), mais seuls les MCP `claude.ai Atlassian MCP` et
+Un profil peut aussi partir d'une **base** plutôt que du profil de référence : la config que
+produit l'installeur d'un autre dépôt (section `base`, voir
+[Profil avec base](#profil-avec-base)).
+
+Profils versionnés : `vidal` (base [harnais](https://github.com/softwarevidal/harnais), la
+config Claude Code de l'équipe VIDAL, telle quelle : ses plugins, hooks, `CLAUDE.md`, skills
+et statusline, plus [`profiles`](#profiles) pour `/profile`, seul plugin de ce dépôt) et `lean` (tous les plugins du dépôt sauf
+`pr-comments`, [`review`](#review) et `superpowers`, mais seuls les MCP `claude.ai Atlassian MCP` et
 `plugin:intellij:intellij` restent allumés, les autres connecteurs claude.ai étant coupés par
 url dans `deniedMcpServers`). Aucun profil par défaut à l'installation : `claude` part sur le
 profil de référence (tous les plugins du dépôt sauf `pr-comments`).
@@ -215,7 +219,7 @@ d'une PR seulement quand elle a changé, après une écriture, ou toutes les dix
 
 **Rôle** : serveur MCP IntelliJ et consigne d'usage de ses outils, ensemble.
 
-**Fichiers** : `plugins/intellij/`. **Activé dans** : tous les profils.
+**Fichiers** : `plugins/intellij/`. **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
 
 **Prérequis** : IntelliJ ouvert avec le serveur MCP actif, sinon `claude mcp list` le montre
 déconnecté.
@@ -243,12 +247,14 @@ ignorerait celui du plugin — et `on_status` le signale en erreur s'il est enco
 `claude-profile` et commande `/profile`.
 
 **Fichiers** : `plugins/profiles/` (`bin/claude-profile`, mod `/profile` dans `hooks/`,
-`shell/claude-profile.sh`, `setup.sh`) ; hors du plugin, les liens
+`shell/claude-profile.sh`, `tests/`, `setup.sh`) ; hors du plugin, les liens
 `~/.local/bin/claude-profile` et `~/.config/shell/claude-profile.sh` posés par
 `./install.sh plugin profiles`. **Activé dans** : tous les profils
 (`profiles@claude-tools` doit y rester activé, sinon pas de `/profile` ; `generate` prévient).
 
-**Prérequis** : `jq`. Tests : `claude plugin test plugins/profiles`.
+**Prérequis** : `jq` ; pour un profil avec base, `git` et ce que demande son installeur.
+Tests : `claude plugin test plugins/profiles` (mod) et `bash plugins/profiles/tests/base.test.sh`
+(profils avec base, hors ligne : faux dépôt de base, faux `claude`).
 
 #### Installation hors de ce dépôt
 
@@ -275,7 +281,8 @@ exemples. Ensuite, `/profile show <nom>` pour choisir ses plugins, et au besoin
 #### Dossiers de profil
 
 Chaque profil est généré en un dossier de config, `~/.claude-profiles/<nom>/` (non
-versionné), copie de `~/.claude` où **seul `settings.json` diffère**, sur lequel Claude est
+versionné), copie de `~/.claude` où **seul `settings.json` diffère** (un profil avec base
+prend aussi la config de sa base, voir [Profil avec base](#profil-avec-base)), sur lequel Claude est
 lancé avec `CLAUDE_CONFIG_DIR`. Le profil de référence n'a pas de dossier : c'est `~/.claude`, sans la
 variable (nom réservé `reference`).
 
@@ -312,6 +319,55 @@ variable (nom réservé `reference`).
   un profil généré) : `./install.sh link` relie `~/.claude/settings.json` au profil de référence ;
   tant que ce n'est pas fait, `generate` le signale.
 
+#### Profil avec base
+
+Un profil peut partir de la config d'un autre dépôt, telle que son installeur la produit
+(ex. `vidal` et harnais), au lieu du profil de référence :
+
+```json
+{
+  "description": "…",
+  "base": { "repo": "<url git>", "install": "install.sh", "disabledPlugins": ["<plugin>@<marketplace>"] },
+  "enabledPlugins": { "<plugin>@<marketplace>": true }
+}
+```
+
+- **Base** : `claude-profile base <nom> update` clone le dépôt (ou `git pull`) dans
+  `~/.claude-profiles/.bases/<nom>/repo`, puis lance `bash <install>` avec
+  `HOME=~/.claude-profiles/.bases/<nom>/home` : ce que l'installeur écrit dans `~/.claude`
+  (plugins, hooks, `CLAUDE.md`, skills, statusline) va dans ce HOME à part, jamais dans
+  `~/.claude`. Son `settings.json` est alors retenu comme base
+  (`~/.claude-profiles/.bases/<nom>/settings.json`), et ce qui a changé est affiché (plugins
+  ajoutés ou retirés, réglages modifiés). Relancer `update` pour suivre le dépôt ; ses plugins
+  se mettent aussi à jour seuls, si leur marketplace a l'auto-update.
+- **Outils de la machine** : dans ce HOME, `.local`, `.cache`, `.npm`, `.plannotator`,
+  `.sonar` sont des liens vers ceux du vrai HOME (créés au besoin), comme `.gitconfig`,
+  `.ssh`, `.volta`, `.config/gh` s'ils existent. L'installeur trouve donc les outils déjà
+  installés, ou les installe une seule fois pour toute la machine (dans `~/.local/bin`, déjà
+  dans le PATH) ; la base ne garde que sa config (~50 Mo pour harnais). Les dépôts GitHub en
+  https passent par `gh auth git-credential` pendant `update`. Pour les mises à jour
+  automatiques des plugins d'un dépôt privé pendant les sessions, git doit savoir s'identifier
+  seul : `gh auth setup-git`, une fois.
+- **Dossier du profil** : sa config vient de la base seule — `settings.json`, et `CLAUDE.md`,
+  `skills/`, `plugins/`, `hooks/`, `rules/`, `agents/`, `commands/`, `output-styles/`,
+  `dev-mods/` de la base s'ils y sont, jamais ceux de `~/.claude`, plus ce que la base est seule
+  à avoir (ex. `RTK.md`, `harnais/`). Le reste de `~/.claude` reste commun : identifiants,
+  `.claude.json`, transcripts (`projects/`), historique, état.
+- **`settings.json`** : celui de la base, plus les marketplaces ajoutées depuis pour les
+  plugins du profil, les sections du profil (`deniedMcpServers`, `disableClaudeAiConnectors`)
+  et les plugins :
+  - **plugins de la base** : ceux que l'installeur a activés, et leurs dépendances (lues dans
+    le `plugin.json` installé : une dépendance ajoutée par une mise à jour est donc active
+    d'elle-même), **actifs par défaut** ; `base.disabledPlugins` liste ceux à couper ;
+  - **plugins du profil** : `enabledPlugins`, comme pour un autre profil, ajoutés à ceux de la
+    base ; installés dans la base (`plugins/` à part) depuis la marketplace que `~/.claude`
+    connaît pour eux, à l'activation ou au `update`.
+- **Avertissements** à la génération : plugin du profil déjà actif dans la base (à retirer de
+  `enabledPlugins`) ou pas installé, plugin de `base.disabledPlugins` que la base n'a plus,
+  dépendance coupée d'un plugin actif (il ne se chargera pas).
+- Base absente (`update` jamais lancé) : `generate`, `switch` et `run` sur ce profil
+  échouent, avec la commande à lancer.
+
 #### `claude-profile`
 
 Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le terminal,
@@ -331,17 +387,23 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
   `.gitignore` s'il est resté tel que généré) ; refusé dans `$HOME` ;
 - `claude-profile show [<nom>]` : ce qui est actif sur un profil (celui de la session par
   défaut) — plugins activés (`+`) ou non (`-`, ou `?` pour un plugin installé que le profil
-  ne mentionne pas), avec `(référence : activé|désactivé)` quand la référence diffère ;
+  ne mentionne pas), avec `(référence : activé|désactivé)` quand la référence diffère ; pour un
+  profil avec base, la base (dépôt, version), `plugins de la base :` (`(dépendance)`,
+  `(coupé par le profil)`), puis `plugins :` ceux du profil, sans comparaison à la référence ;
   MCP actifs (`+`) ou coupés (`-`), en tête `claude.ai` pour tous les connecteurs, avec
   `(référence : …)` quand la référence diffère (serveurs : cache de `mcp-scan`, plus ceux
   des `.mcp.json` des plugins activés) ; modèle, et la liste des plugins différents du
   profil de référence ;
 - `claude-profile new <nom> [description…]` : crée `profiles/<nom>.json` avec les plugins
   du profil de référence (noms réservés : `reference`, `default`, `project`, `show`, `create`,
-  `stop`, `cancel`) ;
+  `stop`, `cancel`, `base`) ;
 - `claude-profile plugin <nom> <plugin>@<marketplace> on|off` : active ou désactive un plugin
   dans `enabledPlugins` du profil, puis le régénère ; `reference` l'écrit dans
-  `~/.claude/settings.json`, à travers le lien (donc dans le dépôt) ;
+  `~/.claude/settings.json`, à travers le lien (donc dans le dépôt). Profil avec base : un
+  plugin de la base est retiré de `base.disabledPlugins` (`on`) ou y est ajouté (`off`) ; un
+  autre va dans `enabledPlugins`, et `on` l'installe dans la base s'il n'y est pas ;
+- `claude-profile base <nom> [update]` : la base d'un profil (dépôt, version, date, plugins),
+  ou sa mise à jour (voir [Profil avec base](#profil-avec-base)) ;
 - `claude-profile mcp <nom> <serveur|url|claude.ai> on|off` : coupe ou réactive un MCP
   dans le profil, puis le régénère ; vaut à la session suivante. Un nom donne une entrée
   `{serverName}` de `deniedMcpServers`, une url (`http(s)://…`, jokers `*` admis) une entrée
@@ -360,9 +422,9 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
   connexions, sans relevé incrémental ni par profil : pas utile pour l'instant, à ajouter
   plus tard si besoin ;
 - `claude-profile check <nom>` : vérifie un profil (objet JSON, seulement des clés
-  surchargeables) ;
+  surchargeables, `base` bien formée) ;
 - `claude-profile generate <nom>|--all` : (re)génère le dossier (liens à jour, orphelins
-  retirés, `settings.json` refait depuis le profil de référence et le profil) ;
+  retirés, `settings.json` refait depuis le profil de référence, ou la base, et le profil) ;
 - `claude-profile switch <nom> [arguments claude…]` : régénère puis lance
   `CLAUDE_CONFIG_DIR=~/.claude-profiles/<nom> claude …` (`reference` : `claude` sans la
   variable) ; deux terminaux peuvent tourner sur deux profils ;
@@ -442,8 +504,7 @@ branche après son merge ([ménage après un merge](#ménage-après-un-merge)).
 `bin/{gpr,gbr,worktree-scan}`, `lib/git-tools.sh`, `shell/git-tools.sh`,
 `hooks/{hooks.json,merge-watch.py}`, `tests/{merge-watch,gbr-cleanup}.test.sh`, `setup.sh`) ; hors
 du plugin, les liens `~/.local/bin/{gpr,gbr}` et `~/.config/shell/git-tools.sh` (fonctions
-shell `gpr`/`gbr`, alias) posés par `./install.sh plugin git-nav`. **Activé dans** : tous
-les profils.
+shell `gpr`/`gbr`, alias) posés par `./install.sh plugin git-nav`. **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
 
 **Prérequis** : `git` ; `gh` authentifié (`/pr`, ménage après un merge, facultatif pour
 `/br`) ; Linux pour `/worktree` et le ménage après un merge (`/proc`) ; `python3` (hook).
@@ -651,7 +712,7 @@ hors du plugin, le lien `~/.local/bin/gh-watch` posé par `setup.sh`, la config
 `gh-watch set`) et l'état `~/.local/state/claude-tools/gh-watch/` (`state.json` : lignes
 écartées ; `catchup.json` : dernier rattrapage). Les watchers se déclarent dans
 `~/.config/claude-tools/watchers.d/<nom>` (lien vers leur script, posé par le `setup.sh` de
-leur plugin). **Activé dans** : tous les profils (avec `review` ou `git-tidy`).
+leur plugin). **Activé dans** : le profil de référence et `lean`, avec `review` ou `git-tidy` (pas `vidal`, profil harnais).
 
 **Prérequis** : `python3` ; systemd utilisateur (`systemctl --user list-timers -o json`,
 systemd ≥ 248) pour le prochain passage ; `gh` authentifié pour `board`. Tests :
@@ -874,7 +935,7 @@ auto) et n'écrivent rien hors du dépôt local sans accord.
 `~/.config/claude-tools/git-tidy.json` (non versionnés : approbations, relecteurs, statut
 JIRA de validation, environnement de test, et la section `watcher` de `tidy-watch` ; écrits
 par `tidy-watch`, `/git-tidy:approved-auto` et `/git-tidy:ready` sur accord) et l'état
-`~/.local/state/claude-tools/tidy-watch/`. **Activé dans** : tous les profils.
+`~/.local/state/claude-tools/tidy-watch/`. **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
 
 **Prérequis** : `git` ; `gh` authentifié (base de la PR, `/git-tidy:pr-sync`) ; pour JIRA, un
 MCP Atlassian connecté (`claude.ai Atlassian Rovo` ou `claude.ai Atlassian MCP`) ; sans lui,
@@ -1109,7 +1170,7 @@ gnome-terminal).
 `scripts/{notify.sh,notify-click.sh,claude-notify.py}`, `setup.sh`) ; hors du plugin, le lien
 `~/.local/bin/claude-notify-click` posé par `./install.sh plugin notify` pour l'extension GNOME
 `claude-notify@ywicker` ([TOOLS.md](TOOLS.md#extension-gnome-claude-notifyywicker)).
-**Activé dans** : tous les profils.
+**Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
 
 **Prérequis** : GNOME Shell + gnome-terminal (X11 : `xprop`), `python3-gi` avec
 `Notify 0.7`, `gdbus`, `jq` ; herdr et Herdr UI facultatifs (voir [Sans et avec herdr](#sans-et-avec-herdr)). `setup/30-gnome.sh` signale ce qui manque.
@@ -1198,7 +1259,7 @@ après un redémarrage.
 **Fichiers** : `plugins/herdr-session/` (`hooks/hooks.json`, `setup.sh` : `status` note
 l'absence du script herdr) ; hors du plugin, le script
 `~/.claude/hooks/herdr-agent-state.sh`, généré et réécrit par herdr (non versionné), et le
-ménage de `setup/20-herdr.sh`. **Activé dans** : tous les profils.
+ménage de `setup/20-herdr.sh`. **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
 
 **Prérequis** : herdr avec son intégration Claude (`herdr integration install claude`,
 version ≥ 6 pour la reprise ; `herdr integration status` → `claude: current`). Sans le
@@ -1252,7 +1313,7 @@ réduite) — consigne d'usage et garde-fou qui refuse un Gradle brut.
 
 **Fichiers** : `plugins/build-brief/` (`instructions.md`, `hooks/hooks.json`,
 `hooks/gradle-guard.py`, `tests/gradle-guard.test.sh`, `setup.sh` : `status` note
-`build-brief` absent du PATH). **Activé dans** : tous les profils.
+`build-brief` absent du PATH). **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
 
 **Prérequis** : `build-brief` dans le PATH (sans lui, le garde-fou laisse tout passer) ;
 `python3`. Tests : `bash plugins/build-brief/tests/gradle-guard.test.sh` (hook commande,
@@ -1312,7 +1373,7 @@ d'amélioration. Les deux skills ne se lancent qu'à la demande
 `bin/agentsview-up`, `bin/session-analysis-collect`, `setup.sh` : installe AgentsView,
 `status` note s'il manque ou ne tourne pas) ; hors du plugin, le binaire `agentsview`
 (`~/.local/bin`, ou `/usr/local/bin` s'il est inscriptible) et ses données
-(`~/.agentsview/`). **Activé dans** : tous les profils.
+(`~/.agentsview/`). **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
 
 **Prérequis** : `python3`, `curl` (installation d'AgentsView) ; Linux ou macOS. Les
 transcripts lus sont ceux de Claude Code ; les autres agents (Copilot…) ne sont vus qu'à
@@ -1406,7 +1467,7 @@ hors du plugin, les liens `~/.local/bin/review-watch`,
 (non versionnés), et le profil Herdr UI facultatif
 `~/.config/agent-launcher/agents/custom-reviewer/prompt.md` (voir
 [Profil Herdr UI](#profil-herdr-ui)). **Activé dans** :
-le profil de référence et `vidal` (pas `lean`).
+le profil de référence (pas `lean` ni `vidal`).
 
 **Prérequis** : `git`, `python3` ; `gh` authentifié (`/review:pr`, `/review:feedback`) ;
 plugin [`gh-watch`](#gh-watch) (dépendance déclarée, installé automatiquement : mécanique
@@ -1702,8 +1763,8 @@ dépôt garde son clone en mémoire.
   Claude attend une réponse (question, permission) : rien n'est alors tapé dans la question,
   et la notification « Nouvelle activité » le dit (critique). L'événement est marqué traité
   dans les deux cas : `/review:feedback` relit de toute façon les fils avant d'agir.
-- `claude` (réglage `claude` de la config, ex. `"claude-profile switch vidal"`) : le profil
-  utilisé doit activer le plugin `review` (profil de référence, `vidal` ; pas `lean`).
+- `claude` (réglage `claude` de la config, ex. `"claude-profile switch reference"`) : le profil
+  utilisé doit activer le plugin `review` (profil de référence ; pas `lean` ni `vidal`).
 
 Config : section `watcher` de `~/.config/claude-tools/review.json` (un fichier par plugin ; le
 reste est libre pour les skills) : `{"watcher": {"repos": {"*": {"on_review_requested": "off",

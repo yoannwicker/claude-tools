@@ -70,6 +70,19 @@ test('claude-profile show parsed: the reference state of a plugin left out of it
   ])
 })
 
+test('claude-profile show parsed: a profile with a base, its plugins then the profile own', () => {
+  const out = 'base : git@x:t/h.git (abc1234, 2 days ago)\nplugins de la base :\n  + h@h\n  + d@h (dépendance)\n  - b@h (coupé par le profil)\nplugins :\n  + a@m\n'
+  expect(parseShow(out)).toEqual([
+    { text: 'base : git@x:t/h.git (abc1234, 2 days ago)' },
+    { text: 'plugins de la base :' },
+    { plugin: 'h@h', isOn: true, isListed: true },
+    { plugin: 'd@h', isOn: true, isListed: true },
+    { plugin: 'b@h', isOn: false, isListed: true },
+    { text: 'plugins :' },
+    { plugin: 'a@m', isOn: true, isListed: true },
+  ])
+})
+
 test('a draft holds only the plugins changed: flipped back, dropped', () => {
   const once = toggleDraft({}, 'a@m', true)
   expect(once).toEqual({ 'a@m': false })

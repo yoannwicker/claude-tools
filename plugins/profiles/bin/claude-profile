@@ -6,10 +6,14 @@
 #   claude-profile default [<nom>|--unset] : profil par défaut (celui des nouvelles sessions de run), affiché ou changé
 #   claude-profile project [<nom>|--unset] : profil du projet courant (.claude/profile.local), prioritaire sur le défaut
 #   claude-profile switch <nom> [arguments claude…] | run [arguments claude…] | request <nom> <session>
+#   claude-profile base <nom> [update] : base d'un profil (dépôt et son installeur), affichée ou mise à jour
 #   Profil de référence (reference) : ~/.claude/settings.json, ~/.claude sans profil.
 #   Profil : profiles/<nom>.json du dépôt, { description, enabledPlugins, deniedMcpServers,
 #   disableClaudeAiConnectors } ; son settings.json est le profil de référence avec chacune de ces
 #   sections remplacée en entier par celle du profil.
+#   Profil avec base ({ base: { repo, install, disabledPlugins }, … }) : part de la config que
+#   l'installeur du dépôt produit dans un HOME à part (~/.claude-profiles/.bases/<nom>/), pas de la
+#   référence ; ses plugins actifs le restent sauf ceux de disabledPlugins, enabledPlugins s'y ajoute.
 #   Dossier généré : ~/.claude-profiles/<nom>/ (tout le reste en liens vers ~/.claude).
 #   switch/run lancent claude dans une boucle : /profile <nom> (plugin profiles) y dépose une
 #   demande (request) puis quitte, et la boucle relance la même session dans <nom>. run hors
@@ -29,7 +33,17 @@ project_ignore=$'# claude-profile project : profil local à ce projet, non versi
 # Dernier profil de chaque session, « <session> <profil> » par ligne (claude-profile remember).
 sessions_file=$out_root/.sessions
 # Clés qu'un profil peut porter : les sections surchargées (remplacées en entier) et sa description.
-overridable='["description", "enabledPlugins", "deniedMcpServers", "disableClaudeAiConnectors"]'
+overridable='["description", "base", "enabledPlugins", "deniedMcpServers", "disableClaudeAiConnectors"]'
+# Bases des profils : <nom>/repo (clone), <nom>/home (HOME de l'installeur, sa config dans
+# home/.claude), <nom>/settings.json (son settings.json juste après l'installeur : les plugins de la base).
+bases_root=$out_root/.bases
+# Config de ~/.claude qu'un profil avec base ne reprend pas : elle vient de la base. Le reste
+# (identifiants, historique, transcripts, état) reste commun.
+own_config="settings.json CLAUDE.md skills rules agents commands hooks plugins output-styles dev-mods"
+# Outils de la machine, liés dans le HOME de la base : l'installeur les trouve ou les installe une
+# seule fois, dans le vrai HOME. Dossiers créés au besoin ; fichiers et réglages liés s'ils existent.
+shared_home_dirs=".local .cache .npm .plannotator .sonar"
+shared_home_links=".gitconfig .ssh .volta .config/gh"
 # Serveurs MCP connus (nom, url), relevés par claude mcp list (mcp-scan).
 mcp_cache=$out_root/.mcp-servers.json
 # jq : motif serverUrl (jokers *) en expression régulière ; serveur s ({name, url}) coupé par la
@@ -40,7 +54,7 @@ jq_mcp='
   def denied($s; $d): any($d[]; .serverName == $s.name or urlmatch(.serverUrl; $s.url));
 '
 
-usage() { sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "$*" >&2; exit 2; }
 
 names() { local f; for f in "$profiles_dir"/*.json; do [ -e "$f" ] && basename "$f" .json; done; }
@@ -52,6 +66,50 @@ check() {
   jq -e 'type == "object"' "$f" >/dev/null 2>&1 || die "profil invalide (objet JSON attendu) : $f"
   bad=$(jq -r --argjson ok "$overridable" 'keys - $ok | join(", ")' "$f")
   [ -z "$bad" ] || die "profil $1 : seules $(jq -r 'join(", ")' <<< "$overridable") sont surchargeables (en trop : $bad) : $f"
+  jq -e '.base == null or ((.base | type) == "object" and (.base.repo | type) == "string"
+         and ((.base.disabledPlugins // []) | type == "array" and all(type == "string")))' "$f" >/dev/null \
+    || die "profil $1 : base attendue { repo, install, disabledPlugins: [plugin…] } : $f"
+}
+
+# Profil avec base (section base de profiles/<nom>.json).
+has_base() { [ "$1" != reference ] && jq -e '.base != null' "$profiles_dir/$1.json" >/dev/null 2>&1; }
+base_dir() { echo "$bases_root/$1"; }
+# Config produite par l'installeur de la base.
+base_conf() { echo "$bases_root/$1/home/.claude"; }
+# Plugins installés que voit un profil : ceux de sa base, sinon ceux de ~/.claude.
+plugins_file() {
+  if has_base "$1"; then echo "$(base_conf "$1")/plugins/installed_plugins.json"; else echo "$base/plugins/installed_plugins.json"; fi
+}
+
+# Dépendances déclarées par les plugins activés de $1 ({plugin: bool}), installés selon $2
+# (installed_plugins.json), en JSON [{plugin, dep}] ; une dépendance sans marketplace est dans celle
+# du plugin.
+plugin_deps() {
+  local p dir out='[]'
+  for p in $(jq -r 'to_entries[] | select(.value) | .key' <<< "$1"); do
+    dir=$(jq -r --arg p "$p" '.plugins[$p][0].installPath // empty' "$2" 2>/dev/null)
+    [ -n "$dir" ] && [ -f "$dir/.claude-plugin/plugin.json" ] || continue
+    out=$(jq -c --argjson out "$out" --arg p "$p" --arg m "${p#*@}" '$out + [(.dependencies // [])[]
+      | {plugin: $p, dep: (if type == "string" then (if test("@") then . else "\(.)@\($m)" end) else "\(.name)@\(.marketplace // $m)" end)}]' \
+      "$dir/.claude-plugin/plugin.json" 2>/dev/null || echo "$out")
+  done
+  echo "$out"
+}
+
+# Plugins de la base d'un profil, en JSON {plugin: bool} : ceux que l'installeur a activés, leurs
+# dépendances (une dépendance ajoutée par une mise à jour du plugin y entre ainsi d'elle-même), et à
+# false ceux de base.disabledPlugins, dont les dépendances ne sont pas suivies.
+base_plugins() {
+  local off on deps i
+  off=$(jq -c '.base.disabledPlugins // []' "$profiles_dir/$1.json")
+  on=$(jq -c --argjson off "$off" '.enabledPlugins // {} | with_entries(select(.value and (.key | IN($off[]) | not)))' "$(base_dir "$1")/settings.json")
+  for i in 1 2 3 4 5; do
+    deps=$(plugin_deps "$on" "$(plugins_file "$1")" | jq -c --argjson on "$on" --argjson off "$off" \
+      '[.[].dep | select($on[.] == null and (IN($off[]) | not))] | unique')
+    [ "$deps" = '[]' ] && break
+    on=$(jq -c --argjson d "$deps" '. + ($d | map({(.): true}) | add)' <<< "$on")
+  done
+  jq -c --argjson off "$off" '. + ($off | map({(.): false}) | add // {})' <<< "$on"
 }
 
 # Le profil de référence, lu pour générer un profil : un objet JSON, pas un ancien lien vers un profil généré.
@@ -153,8 +211,39 @@ resumed_session() {
 }
 
 # settings.json d'un profil : le profil de référence, ses sections surchargées remplacées par celles du profil.
+# Avec base : le settings.json de la base (marketplaces : aussi celles ajoutées depuis pour les plugins
+# du profil), les sections du profil, et ses plugins ajoutés à ceux de la base.
 merged() {
-  if [ "$1" = reference ]; then jq . "$main"; else jq -s '.[0] + (.[1] | del(.description))' "$main" "$profiles_dir/$1.json"; fi
+  if [ "$1" = reference ]; then jq . "$main"
+  elif has_base "$1"; then
+    jq -n --argjson bp "$(base_plugins "$1")" --slurpfile s "$(base_dir "$1")/settings.json" \
+       --slurpfile live "$(base_conf "$1")/settings.json" --slurpfile p "$profiles_dir/$1.json" '
+      $s[0] + {extraKnownMarketplaces: (($s[0].extraKnownMarketplaces // {}) + ($live[0].extraKnownMarketplaces // {}))}
+      + ($p[0] | del(.description, .base, .enabledPlugins))
+      + {enabledPlugins: ($bp + ($p[0].enabledPlugins // {}))}'
+  else jq -s '.[0] + (.[1] | del(.description))' "$main" "$profiles_dir/$1.json"; fi
+}
+
+# Avertissements d'un profil avec base : plugin du profil déjà actif dans la base ou pas installé,
+# plugin coupé que la base n'a plus, dépendance coupée d'un plugin actif (qui ne se chargera pas).
+base_warnings() {
+  local bp snap pf
+  bp=$(base_plugins "$1")
+  snap=$(base_dir "$1")/settings.json
+  pf=$(plugins_file "$1")
+  jq -r --argjson bp "$bp" --slurpfile s "$snap" --argjson deps "$(plugin_deps "$bp" "$pf")" \
+     --argjson installed "$(jq -c '.plugins // {} | keys' "$pf" 2>/dev/null || echo '[]')" --arg name "$1" '
+    (.enabledPlugins // {}) as $own
+    | (($s[0].enabledPlugins // {}) | with_entries(select(.value)) | keys) as $snap
+    | ($own | to_entries[] | select(.value) | .key
+       | if $bp[.] == true then "attention : \(.) est déjà actif dans la base de \($name), à retirer de enabledPlugins"
+         elif IN($installed[]) | not then "attention : \(.) n'\''est pas installé dans la base de \($name) : claude-profile base \($name) update"
+         else empty end),
+      ((.base.disabledPlugins // [])[] | select(IN($snap[]) | not)
+       | "attention : \(.) (base.disabledPlugins) n'\''est plus dans la base de \($name)"),
+      ($deps[] | select($bp[.dep] == false)
+       | "attention : \(.plugin) dépend de \(.dep), coupé dans \($name) : il ne se chargera pas")
+  ' "$profiles_dir/$1.json" >&2
 }
 
 # Identifiants : lien vers ceux de la base. Claude Code réécrit le fichier par renommage,
@@ -170,31 +259,53 @@ repair_credentials() {
   fi
 }
 
+# Lien $2 -> $1 (cible résolue), sauf sur un vrai dossier, gardé.
+link_entry() {
+  if [ -d "$2" ] && [ ! -L "$2" ]; then
+    echo "conservé (dossier propre au profil) : $2" >&2
+    return
+  fi
+  rm -f "$2"
+  ln -s "$(readlink -f "$1")" "$2"
+}
+
 generate() {
-  local name=$1 dir=$out_root/$1 e n target tmp
+  local name=$1 dir=$out_root/$1 e n withbase="" conf=""
   check "$name"
   [ "$name" = reference ] && return 0
   check_main
+  if has_base "$name"; then
+    withbase=1
+    conf=$(base_conf "$name")
+    [ -f "$(base_dir "$name")/settings.json" ] \
+      || { echo "base absente pour $name : claude-profile base $name update" >&2; return 2; }
+  fi
   mkdir -p "$dir"
   repair_credentials "$dir"
   for e in "$base"/* "$base"/.[!.]*; do
     [ -e "$e" ] || [ -L "$e" ] || continue
     n=${e##*/}
     [ "$n" = settings.json ] && continue
-    target=$(readlink -f "$e")
-    if [ -d "$dir/$n" ] && [ ! -L "$dir/$n" ]; then
-      echo "conservé (dossier propre au profil) : $dir/$n" >&2
-      continue
-    fi
-    rm -f "$dir/$n"
-    ln -s "$target" "$dir/$n"
+    [ -n "$withbase" ] && [[ " $own_config " == *" $n "* ]] && { [ -L "$dir/$n" ] && rm -f "$dir/$n"; continue; }
+    link_entry "$e" "$dir/$n"
   done
+  # Avec base : sa config (celle que ~/.claude ne donne pas, et ce qu'elle seule a).
+  if [ -n "$withbase" ]; then
+    for e in "$conf"/* "$conf"/.[!.]*; do
+      [ -e "$e" ] || continue
+      n=${e##*/}
+      case "$n" in settings.json|settings.json.*) continue ;; esac
+      [[ " $own_config " == *" $n "* ]] || [ ! -e "$base/$n" ] || continue
+      link_entry "$e" "$dir/$n"
+    done
+  fi
   rm -f "$dir/.claude.json"
   ln -s "$HOME/.claude.json" "$dir/.claude.json"
   find "$dir" -maxdepth 1 -xtype l -delete
   tmp=$(mktemp "$dir/.settings.XXXXXX")
   merged "$name" > "$tmp" \
     && chmod 644 "$tmp" && mv "$tmp" "$dir/settings.json" || { rm -f "$tmp"; die "lecture impossible : $profiles_dir/$name.json"; }
+  [ -n "$withbase" ] && base_warnings "$name"
   jq -e '.enabledPlugins["profiles@claude-tools"] == true' "$dir/settings.json" >/dev/null \
     || echo "attention : $name n'active pas profiles@claude-tools, /profile n'y sera pas disponible" >&2
 }
@@ -249,6 +360,100 @@ cmd_request() {
   fi
 }
 
+# Commande lancée avec HOME = celui de la base de $1 (git y passe par gh pour les dépôts https de GitHub).
+in_base() {
+  local h
+  h=$(base_dir "$1")/home
+  shift
+  if command -v gh >/dev/null 2>&1; then
+    env HOME="$h" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.https://github.com.helper \
+      GIT_CONFIG_VALUE_0='!gh auth git-credential' "$@"
+  else
+    env HOME="$h" "$@"
+  fi
+}
+
+# HOME de la base : les outils de la machine liés depuis le vrai HOME.
+prepare_base_home() {
+  local n
+  mkdir -p "$1/.config"
+  for n in $shared_home_dirs; do mkdir -p "$HOME/$n" && link_entry "$HOME/$n" "$1/$n"; done
+  for n in $shared_home_links; do [ -e "$HOME/$n" ] && link_entry "$HOME/$n" "$1/$n"; done
+  return 0
+}
+
+# Installe dans la base les plugins activés du profil qui n'y sont pas, depuis la marketplace que
+# ~/.claude connaît pour eux, puis remet les plugins de la base dans son settings.json (claude plugin
+# install les y ajoute : ils ne sont pas de la base).
+install_profile_plugins() {
+  local name=$1 conf p m src
+  conf=$(base_conf "$name")
+  for p in $(jq -r '.enabledPlugins // {} | to_entries[] | select(.value) | .key' "$profiles_dir/$name.json"); do
+    jq -e --arg p "$p" '.plugins[$p]' "$conf/plugins/installed_plugins.json" >/dev/null 2>&1 && continue
+    m=${p#*@}
+    if ! jq -e --arg m "$m" 'has($m)' "$conf/plugins/known_marketplaces.json" >/dev/null 2>&1; then
+      src=$(jq -r --arg m "$m" '.[$m].source | .path // .repo // .url // empty' "$base/plugins/known_marketplaces.json" 2>/dev/null)
+      [ -n "$src" ] || { echo "marketplace $m inconnue de ~/.claude : $p non installé" >&2; continue; }
+      in_base "$name" claude plugin marketplace add "$src" >&2 || { echo "marketplace $m : ajout impossible" >&2; continue; }
+    fi
+    in_base "$name" claude plugin install "$p" >&2 || echo "installation impossible : $p" >&2
+  done
+  jq --slurpfile s "$(base_dir "$name")/settings.json" '.enabledPlugins = ($s[0].enabledPlugins // {})' "$conf/settings.json" \
+    > "$conf/settings.json.tmp" && mv "$conf/settings.json.tmp" "$conf/settings.json"
+}
+
+# Base d'un profil : affichée, ou mise à jour (update) : clone ou git pull du dépôt, son installeur
+# lancé avec le HOME de la base, settings.json qu'il produit retenu comme base, plugins du profil
+# installés, ce qui a changé, puis profil régénéré.
+cmd_base() {
+  { [ $# -eq 1 ] || { [ $# -eq 2 ] && [ "$2" = update ]; }; } || die "usage : claude-profile base <nom> [update]"
+  check "$1"
+  has_base "$1" || die "profil sans base : $1"
+  local name=$1 d f repo install old rc
+  d=$(base_dir "$name")
+  f=$profiles_dir/$name.json
+  repo=$(jq -r '.base.repo' "$f")
+  install=$(jq -r '.base.install // "install.sh"' "$f")
+  if [ $# -eq 1 ]; then
+    echo "base de $name : $repo ($install)"
+    echo "dossier : ${d/#$HOME/\~}"
+    if [ -d "$d/repo/.git" ]; then echo "version : $(git -C "$d/repo" log -1 --format='%h %s (%cr)')"
+    else echo "version : pas encore installée (claude-profile base $name update)"; fi
+    if [ -f "$d/settings.json" ]; then
+      echo "mise à jour : $(date -r "$d/settings.json" '+%F %T')"
+      echo "plugins de la base :"
+      jq -r '.enabledPlugins // {} | to_entries[] | "  \(if .value then "+" else "-" end) \(.key)"' "$d/settings.json"
+    fi
+    return
+  fi
+  mkdir -p "$d"
+  if [ -d "$d/repo/.git" ]; then
+    git -C "$d/repo" pull -q --ff-only || die "git pull impossible : $d/repo"
+  else
+    git clone -q "$repo" "$d/repo" || die "clone impossible : $repo"
+  fi
+  prepare_base_home "$d/home"
+  echo "installeur de la base : $install (HOME=${d/#$HOME/\~}/home)"
+  (cd "$d/repo" && in_base "$name" bash "$install" < /dev/null)
+  rc=$?
+  jq -e 'type == "object"' "$d/home/.claude/settings.json" >/dev/null 2>&1 \
+    || die "l'installeur n'a pas produit de settings.json lisible : $d/home/.claude/settings.json"
+  old=$(cat "$d/settings.json" 2>/dev/null || echo null)
+  cp "$d/home/.claude/settings.json" "$d/settings.json"
+  install_profile_plugins "$name"
+  jq -rn --argjson old "$old" --slurpfile new "$d/settings.json" '
+    if $old == null then "base installée"
+    else
+      def on($s): $s.enabledPlugins // {} | with_entries(select(.value)) | keys;
+      [(on($new[0]) - on($old) | .[] | "  + \(.)"), (on($old) - on($new[0]) | .[] | "  - \(.)"),
+       ([($old + $new[0]) | keys[] | select(. != "enabledPlugins" and $old[.] != $new[0][.])]
+        | select(length > 0) | "  réglages modifiés : \(join(", "))")]
+      | if . == [] then "base inchangée" else "base modifiée :", .[] end
+    end'
+  generate "$name" && echo "généré : $name ($out_root/$name)"
+  [ "$rc" -eq 0 ] || { echo "l'installeur a signalé des échecs (code $rc) : voir ci-dessus, puis claude-profile base $name update" >&2; return 1; }
+}
+
 cmd_list() {
   local cur def proj n state
   cur=$(current)
@@ -271,7 +476,7 @@ cmd_list() {
 # diffère, modèle.
 cmd_show() {
   [ $# -le 1 ] || die "usage : claude-profile show [<nom>]"
-  local name=${1:-$(current)} def f state installed settings
+  local name=${1:-$(current)} def f state installed settings pf based=false bp='{}' own='{}' snapon='[]' baseline=""
   check "$name"
   [ "$name" = reference ] || check_main
   def=$(default_profile)
@@ -283,37 +488,59 @@ cmd_show() {
     if [ -f "$out_root/$name/settings.json" ]; then state=généré; else state="non généré"; fi
     [ "$name" = "$def" ] && state="$state, par défaut"
   fi
+  if has_base "$name"; then
+    [ -f "$(base_dir "$name")/settings.json" ] || die "base absente pour $name : claude-profile base $name update"
+    based=true
+    bp=$(base_plugins "$name")
+    own=$(jq -c '.enabledPlugins // {}' "$f")
+    snapon=$(jq -c '.enabledPlugins // {} | with_entries(select(.value)) | keys' "$(base_dir "$name")/settings.json")
+    baseline="$(jq -r '.base.repo' "$f") ($(git -C "$(base_dir "$name")/repo" log -1 --format='%h, %cr' 2>/dev/null || echo 'version inconnue'))"
+  fi
   settings=$(merged "$name") || die "lecture impossible : $f"
-  installed=$(jq -c '.plugins // {} | keys' "$base/plugins/installed_plugins.json" 2>/dev/null || echo '[]')
+  pf=$(plugins_file "$name")
+  installed=$(jq -c '.plugins // {} | keys' "$pf" 2>/dev/null || echo '[]')
   [ -f "$mcp_cache" ] || mcp_scan >/dev/null 2>&1
   jq -r --arg name "$name" --arg cur "$(current)" --arg state "$state" --arg file "${f/#$HOME/\~}" \
      --arg desc "$([ "$name" = reference ] || jq -r '.description // ""' "$f")" --argjson installed "$installed" \
-     --argjson servers "$(mcp_servers "$settings")" \
+     --argjson servers "$(mcp_servers "$settings" "$pf")" --argjson based "$based" --argjson bp "$bp" \
+     --argjson own "$own" --argjson snapon "$snapon" --arg baseline "$baseline" \
      --slurpfile ref "$main" "$jq_mcp"'
     (.enabledPlugins // {}) as $on
     | ($ref[0].enabledPlugins // {}) as $main
-    | def reference($k): if $name == "reference" or ($on[$k] // false) == ($main[$k] // false) then ""
+    # Pas de comparaison au profil de référence pour lui-même, ni pour un profil avec base.
+    | ($name == "reference" or $based) as $noref
+    | def reference($k): if $noref or ($on[$k] // false) == ($main[$k] // false) then ""
         else " (référence : \(if $main[$k] then "activé" else "désactivé" end))" end;
     "profil : \($name)\(if $name == $cur then " (actuel)" else "" end) [\($state)]",
       (if $desc != "" then "  \($desc)" else empty end),
       "réglages : \($file)",
-      "plugins :",
-      ($on | to_entries[] | "  \(if .value then "+" else "-" end) \(.key)\(if .value then "" else " (désactivé)" end)\(reference(.key))"),
-      ($installed - ($on | keys) | .[] | "  ? \(.) (installé, absent du profil : inactif)\(reference(.))"),
+      (if $based then
+        "base : \($baseline)",
+        "plugins de la base :",
+        ($bp | to_entries[] | "  \(if .value then "+" else "-" end) \(.key)\(if .value | not then " (coupé par le profil)"
+          elif .key | IN($snapon[]) then "" else " (dépendance)" end)"),
+        "plugins :",
+        ($own | to_entries[] | "  \(if .value then "+" else "-" end) \(.key)\(if .value then "" else " (désactivé)" end)"),
+        ($installed - ($bp | keys) - ($own | keys) | .[] | "  ? \(.) (installé, absent du profil : inactif)")
+      else
+        "plugins :",
+        ($on | to_entries[] | "  \(if .value then "+" else "-" end) \(.key)\(if .value then "" else " (désactivé)" end)\(reference(.key))"),
+        ($installed - ($on | keys) | .[] | "  ? \(.) (installé, absent du profil : inactif)\(reference(.))")
+      end),
       "MCP :",
       ((.deniedMcpServers // []) as $d | ($ref[0].deniedMcpServers // []) as $rd
        | (.disableClaudeAiConnectors // false) as $all | ($ref[0].disableClaudeAiConnectors // false) as $rall
        | def off($s; $d; $all): denied($s; $d) or ($all and ($s.name | startswith("claude.ai ")));
-         def refnote($s; $isoff): if $name == "reference" or $isoff == off($s; $rd; $rall) then ""
+         def refnote($s; $isoff): if $noref or $isoff == off($s; $rd; $rall) then ""
            else " (référence : \(if $isoff then "actif" else "coupé" end))" end;
          (if $all then "  - claude.ai (tous les connecteurs coupés)" else "  + claude.ai (tous les connecteurs)" end)
-           + (if $name == "reference" or $all == $rall then "" else " (référence : \(if $rall then "coupés" else "actifs" end))" end),
+           + (if $noref or $all == $rall then "" else " (référence : \(if $rall then "coupés" else "actifs" end))" end),
          ($servers[] | off(.; $d; $all) as $isoff
            | "  \(if $isoff then "-" else "+" end) \(.name)\(if denied(.; $d) then " (coupé)" elif $isoff then " (coupé : tous les connecteurs)" else "" end)\(refnote(.; $isoff))"),
          ($d[] | . as $e | select(any($servers[]; ($e.serverName == .name) or urlmatch($e.serverUrl; .url)) | not)
            | "  - \(.serverName // .serverUrl // tojson) (coupé)")),
       "modèle : \(.model // "par défaut")",
-      (if $name == "reference" then empty else
+      (if $noref then empty else
         [($on + $main) | keys[] | select(($on[.] // false) != ($main[.] // false))] as $diff
         | "plugins différents du profil de référence : \(if $diff == [] then "aucun" else $diff | join(", ") end)"
        end)
@@ -336,11 +563,12 @@ mcp_scan() {
 }
 
 # Serveurs MCP connus pour un settings.json ($1) : le cache de mcp-scan, plus ceux des .mcp.json des
-# plugins qu'il active (plugin:<plugin>:<serveur>), en JSON [{name, url}].
+# plugins qu'il active (plugin:<plugin>:<serveur>), installés selon $2 (installed_plugins.json, celui de
+# ~/.claude par défaut), en JSON [{name, url}].
 mcp_servers() {
-  local p dir extra='[]'
+  local p dir extra='[]' pf=${2:-$base/plugins/installed_plugins.json}
   for p in $(jq -r '.enabledPlugins // {} | to_entries[] | select(.value) | .key' <<< "$1"); do
-    dir=$(jq -r --arg p "$p" '.plugins[$p][0].installPath // empty' "$base/plugins/installed_plugins.json" 2>/dev/null)
+    dir=$(jq -r --arg p "$p" '.plugins[$p][0].installPath // empty' "$pf" 2>/dev/null)
     [ -f "$dir/.mcp.json" ] || continue
     extra=$(jq -c --argjson extra "$extra" --arg p "${p%@*}" \
       '$extra + [(.mcpServers // .) | to_entries[] | {name: "plugin:\($p):\(.key)", url: (.value.url // null)}]' "$dir/.mcp.json" 2>/dev/null || echo "$extra")
@@ -353,7 +581,7 @@ cmd_new() {
   [ $# -ge 1 ] || die "usage : claude-profile new <nom> [description…]"
   local name=$1 f
   shift
-  case "$name" in reference|default|project|show|create|stop|cancel) die "nom réservé : $name" ;; esac
+  case "$name" in reference|default|project|show|create|stop|cancel|base) die "nom réservé : $name" ;; esac
   [[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "nom invalide : $name (minuscules, chiffres, tirets)"
   f=$profiles_dir/$name.json
   [ -e "$f" ] && die "existe déjà : $f"
@@ -371,13 +599,23 @@ cmd_new() {
 cmd_plugin() {
   [ $# -eq 3 ] && [[ $3 =~ ^(on|off)$ ]] || die "usage : claude-profile plugin <nom> <plugin>@<marketplace> on|off"
   check "$1"
-  local f tmp
+  local f tmp inbase=false
   if [ "$1" = reference ]; then f=$main; else f=$profiles_dir/$1.json; fi
+  # Profil avec base : un plugin de la base se coupe par base.disabledPlugins, les autres sont ceux du profil.
+  if has_base "$1"; then
+    [ -f "$(base_dir "$1")/settings.json" ] || die "base absente pour $1 : claude-profile base $1 update"
+    inbase=$(jq --arg p "$2" 'has($p)' <<< "$(base_plugins "$1")")
+  fi
   tmp=$(mktemp "$profiles_dir/.plugin.XXXXXX" 2>/dev/null || mktemp)
-  jq --arg p "$2" --argjson on "$([ "$3" = on ] && echo true || echo false)" '.enabledPlugins[$p] = $on' "$f" > "$tmp" \
+  jq --arg p "$2" --argjson on "$([ "$3" = on ] && echo true || echo false)" --argjson inbase "$inbase" '
+    if $inbase then
+      .base.disabledPlugins = ((.base.disabledPlugins // []) - [$p] + (if $on then [] else [$p] end))
+      | if .enabledPlugins | has($p) then del(.enabledPlugins[$p]) else . end
+    else .enabledPlugins[$p] = $on end' "$f" > "$tmp" \
     && cat "$tmp" > "$f" && rm -f "$tmp" || { rm -f "$tmp"; die "écriture impossible : $f"; }
   [ "$2" = profiles@claude-tools ] && [ "$3" = off ] \
     && echo "attention : sans profiles@claude-tools, /profile ne sera pas disponible dans $1" >&2
+  [ "$inbase" = false ] && [ "$3" = on ] && has_base "$1" && install_profile_plugins "$1"
   generate "$1"
   echo "$2 : $([ "$3" = on ] && echo activé || echo désactivé) dans $1"
 }
@@ -476,6 +714,7 @@ case "${1:-}" in
   new)      shift; cmd_new "$@" ;;
   plugin)   shift; cmd_plugin "$@" ;;
   mcp)      shift; cmd_mcp "$@" ;;
+  base)     shift; cmd_base "$@" ;;
   mcp-scan) mcp_scan && jq -r '.[] | "\(.name)\(if .url then "  \(.url)" else "" end)"' "$mcp_cache" ;;
   check)    [ $# -eq 2 ] || die "usage : claude-profile check <nom>"; check "$2" ;;
   request)  shift; cmd_request "$@" ;;

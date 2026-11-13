@@ -63,7 +63,8 @@ demander une déconnexion/reconnexion de session.
   faire évoluer, `cl --setup` pour refaire la sélection.
 - Profils : `~/.claude/settings.json` est le profil de référence
   (`home/.claude/settings.json`) ; un profil (`profiles/<profil>.json`) n'en surcharge que les plugins
-  actifs et les MCP coupés. `claude-profile switch <profil>` (ou `cl -P <profil> <projet>`) lance Claude sur
+  actifs et les MCP coupés, ou part d'une base, la config qu'installe un autre dépôt (`vidal` :
+  harnais, `claude-profile base vidal update`). `claude-profile switch <profil>` (ou `cl -P <profil> <projet>`) lance Claude sur
   `~/.claude-profiles/<profil>/`, généré depuis `~/.claude` ; `claude` seul part sur le
   profil du projet s'il y en a un (`claude-profile project <profil>`, `/profile project` :
   `.claude/profile.local`, non versionné), sinon sur le profil par défaut s'il y en a un
@@ -152,7 +153,7 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
                     review/ (agent reviewer, skills /review:diff, :pr, :feedback, :pr-auto et :feedback-auto,
                     bin/{review-post,review-watch}, timer systemd review-watch, profil Herdr UI)
-profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — vidal, lean —, voir `claude-profile`)
+profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — lean — ou d'une base — vidal : harnais —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),
                     pistes-amelioration/ (pistes préfixées par leur priorité 1, 2, 3)

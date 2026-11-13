@@ -1,16 +1,11 @@
 {
-  "description": "Config complète : superpowers, MCP IntelliJ",
+  "description": "harnais, la config Claude Code de l'équipe VIDAL",
+  "base": {
+    "repo": "git@github.com:softwarevidal/harnais.git",
+    "install": "install.sh",
+    "disabledPlugins": []
+  },
   "enabledPlugins": {
-    "intellij@claude-tools": true,
-    "profiles@claude-tools": true,
-    "git-nav@claude-tools": true,
-    "git-tidy@claude-tools": true,
-    "gh-watch@claude-tools": true,
-    "notify@claude-tools": true,
-    "herdr-session@claude-tools": true,
-    "build-brief@claude-tools": true,
-    "session-analysis@claude-tools": true,
-    "review@claude-tools": true,
-    "superpowers@claude-plugins-official": true
+    "profiles@claude-tools": true
   }
 }
