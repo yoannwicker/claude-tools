@@ -1,2 +1,3 @@
 [tools]
+"github:static-var/build-brief" = "latest"
 jq = "latest"

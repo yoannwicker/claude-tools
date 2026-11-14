@@ -1315,7 +1315,8 @@ réduite) — consigne d'usage et garde-fou qui refuse un Gradle brut.
 `hooks/gradle-guard.py`, `tests/gradle-guard.test.sh`, `setup.sh` : `status` note
 `build-brief` absent du PATH). **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
 
-**Prérequis** : `build-brief` dans le PATH (sans lui, le garde-fou laisse tout passer) ;
+**Prérequis** : `build-brief` dans le PATH, installé par mise (`./setup/10-mise.sh`, voir
+[TOOLS.md](TOOLS.md#mise)) ; sans lui, le garde-fou laisse tout passer ;
 `python3`. Tests : `bash plugins/build-brief/tests/gradle-guard.test.sh` (hook commande,
 pas un mod : `claude plugin test` ne s'applique pas).
 

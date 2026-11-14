@@ -140,7 +140,8 @@ Si le plugin `review` est installé, `20-herdr.sh` propose aussi son profil de r
 
 **Rôle** : installation d'outils en espace utilisateur (pas de sudo sur la machine pro).
 
-**Fichiers** : `home/.config/mise/config.toml` — outils globaux : `jq`.
+**Fichiers** : `home/.config/mise/config.toml` — outils globaux : `jq`, `build-brief`
+(releases GitHub de `static-var/build-brief`, pour le plugin [`build-brief`](CLAUDE-CODE.md#build-brief)).
 
 **Installation** : `./setup/10-mise.sh` (`curl https://mise.run | sh` si absent, puis
 `mise install`). L'activation shell (`eval "$(mise activate bash)"`) reste dans le
