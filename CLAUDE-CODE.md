@@ -1455,8 +1455,8 @@ y compris par [`review-watch`](#review-watch-reviewpr-auto-reviewfeedback-auto),
 (`/review:pr-auto`) ou au retour de revue reçu sur mes PR (`/review:feedback-auto`).
 
 **Fichiers** : `plugins/review/` (`agents/reviewer.md`,
-`skills/{diff,pr,feedback,pr-auto,feedback-auto}/SKILL.md`, `validation.md` et `ticket.md`
-communs aux skills, `auto.md` commun à `pr-auto` et `feedback-auto`,
+`skills/{diff,pr,feedback,pr-auto,feedback-auto}/SKILL.md`, `pr-expectations.md`, `validation.md` et
+`ticket.md` communs aux skills, `auto.md` commun à `pr-auto` et `feedback-auto`,
 `bin/{review-post,review-watch}`, `systemd/review-watch.{service,timer}`,
 `tests/{review-post,review-watch}.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
 hors du plugin, les liens `~/.local/bin/review-watch`,
@@ -1495,20 +1495,34 @@ Le mode auto (`review-watch`) demande en plus ses liens hors du plugin (commande
 `~/.local/bin`, unités systemd) : passer par un clone, `./install.sh plugin review`, puis
 `review-watch enable` (ou `/review:pr-auto`, qui le propose).
 
+#### PR expectations
+
+Ce qu'on attend d'une PR, commun aux trois skills (`pr-expectations.md`) : conforme à la
+demande, conforme aux normes en vigueur (code, tests, commits, PR), sûre, et en un seul
+sujet. Le skill rassemble les normes du dépôt et de la session, sans viser un outil
+particulier, et les transmet à l'agent ; le dépôt l'emporte. La branche est jugée comme du
+travail en cours : diff d'ensemble, commits `fixup!` acceptés.
+
 #### Agent `reviewer`
 
 Lancé par `/review:diff` et `/review:pr` (`review:reviewer`), en lecture seule (Bash
 limité par consigne à `git`/`gh` en lecture). Rend du JSON : résumé, proposition de
-découpage éventuelle, conformité au ticket, constats (`fichier:ligne` côté nouveau, conseil, gravité,
-catégorie `bug`/`securite`/`conformite`/`lisibilite`/`refactoring`/`coherence`, scénario d'échec,
+découpage éventuelle, conformité au ticket, écarts aux normes de commit et de PR, constats
+(`fichier:ligne` côté nouveau, conseil, gravité, catégorie `bug`/`securite`/`tests`/`conformite`/`lisibilite`/`refactoring`/`coherence`, scénario d'échec,
 suggestion, à approfondir ou non), remarques non ancrées. Chaque constat est revérifié
-contre le code par le skill avant d'être montré.
+contre le code par le skill avant d'être montré. Juge contre [les PR expectations](#pr-expectations), avec
+le bloc « Normes » transmis par le skill.
 
 - **Périmètre** : seulement les lignes ajoutées ou modifiées ; le code autour sert à
   comprendre, jamais de cible.
-- **Règles du dépôt cible** : `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING*` (racine et
-  dossiers touchés) ; une règle explicite enfreinte (doc à mettre à jour, fichier à ne
-  jamais versionner, convention) est un constat `conformite` indispensable.
+- **Normes en vigueur** : le bloc « Normes », complété par les `AGENTS.md`, `CLAUDE.md`,
+  `CONTRIBUTING*` des dossiers touchés ; une règle explicite enfreinte (doc à mettre à
+  jour, fichier à ne jamais versionner, convention) est un constat `conformite`
+  indispensable.
+- **Sûr** : comportement ajouté ou modifié sans test (ou test affaibli) → constat
+  `tests` ; contrat, données ou vérification de CI touchés sans précaution.
+- **Commits et PR** : écarts aux normes de commit et de PR, rendus dans `messages` et
+  montrés comme des points (`commit <sha>` ou `PR`).
 - **Conformité au ticket** : si `/review:diff` ou `/review:pr` a trouvé un ticket
   (`ticket.md` : clé JIRA ou issue GitHub dans la branche, le titre, la description de la
   PR ou les commits ; lu avec ses commentaires et l'US parente), le diff est comparé à la
@@ -1586,8 +1600,15 @@ PR, commentaire du ticket, message de commit), rien n'est posté.
 `suggestion` pour un remplacement exact). Un écart au ticket non justifié devient une
 demande de justification à l'auteur (sur sa ligne, sinon dans le corps de la review). Les
 commentaires validés sont **postés
-directement**, en une review `COMMENT` (jamais d'approbation ni de demande de
-changements), par `review-post`.
+directement**, en une review `COMMENT` (jamais de demande de changements), par
+`review-post`.
+
+**Approbation** : quand plus aucun point gardé n'est indispensable ni recommandé (ni
+découpage gardé, ni fil à moi encore ouvert sur un tel point à la reprise), que la PR
+n'est pas en brouillon et que la relecture humaine requise, s'il y en a une, est faite,
+le skill propose d'approuver (CI citée ; rouge, il recommande de commenter seulement). Les
+points optionnels et les questions partent avec l'approbation ; rien de retenu donne une
+approbation sans commentaire.
 
 **Relecture humaine** : si le risque alloué à la PR — dans sa description ou un de ses
 commentaires, posé par un bot ou un humain — demande une relecture humaine et qu'aucun
@@ -1616,7 +1637,7 @@ modifié, avec pour chacun **résoudre**, **répondre** (texte tel qu'il sera po
 **laisser**. Après validation, réponses (`addPullRequestReviewThreadReply`) et
 résolutions (`resolveReviewThread`) sont faites en plus de la review des nouveaux points.
 
-`review-post <pr> <review.json> [--replace-pending] [--dry-run]` (`bin/`, dans le PATH de
+`review-post <pr> <review.json> [--approve] [--replace-pending] [--dry-run]` (`bin/`, dans le PATH de
 l'outil Bash) évite les deux échecs vus en publiant par `gh api` (constat 2 de
 [l'analyse du 23/10](docs/analyses-sessions/2026-10-23.md)) :
 
@@ -1626,6 +1647,9 @@ l'outil Bash) évite les deux échecs vus en publiant par `gh api` (constat 2 de
 - une review en attente à soi sur la PR (qui bloque toute nouvelle review) arrête le
   script (code 3, avec son lien) ; le skill demande alors de la garder ou de la supprimer
   (`--replace-pending`).
+
+`--approve` publie une approbation (`APPROVE`) au lieu d'un commentaire, corps et
+commentaires facultatifs.
 
 Dernière étape, seulement si un worktree ou une branche a été créé pour la revue (par
 Herdr UI, [`/git-nav:pr`](#git-nav), `gh pr checkout`, à la main…) : un worktree lié à la
@@ -1643,7 +1667,8 @@ tourne, les deux sont lancés détachés en dernier (échecs dans
 
 `/review:feedback [numéro]` : une de mes PR, par défaut celle de la branche courante. Fils de
 review non résolus (GraphQL `reviewThreads`, même requête que `pr-comments`), chacun
-analysé avec son code (fils obsolètes revérifiés) et classé par conseil, avec une suite :
+analysé avec son code (fils obsolètes revérifiés) et classé par conseil selon
+[les PR expectations](#pr-expectations) et les normes rassemblées, avec une suite :
 **solution** (correctif précis), **options** (2-3, compromis, recommandation), **à
 discuter** (arbitrage métier, désaccord, impact large : ce qui fait hésiter et une
 réponse proposée) ou **déjà fait**, plus la réponse prévue sur le fil. Options et « à

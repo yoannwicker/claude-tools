@@ -47,12 +47,18 @@ dernier mot est gardé mais marqué `↩ répondu` (souvent en attente du relect
 
 ## 3. L'analyse
 
+Lire `${CLAUDE_SKILL_DIR}/../../pr-expectations.md` et rassembler les normes en vigueur
+(*Rassembler les normes*, à la version de `baseRefName`) ; le tri et les corrections
+suivent *Dans `/review:feedback`*.
+
 Pour chaque fil : lire toute la conversation et le code concerné (version actuelle ;
 `isOutdated` → vérifier si le point tient encore). Puis lui donner :
 
 - un **conseil** (voir `${CLAUDE_SKILL_DIR}/../../validation.md`) : indispensable si le
-  relecteur a raison sur un bug, une faille, une règle du dépôt ; discutable si elle se
-  défend mais que l'actuel aussi ; très contestable si la demande est de goût ou va contre une règle ou une décision documentée ;
+  relecteur a raison sur un bug, une faille, une norme en vigueur ou une des *PR expectations*
+  (la citer dans la réponse) ; discutable si elle se défend mais que l'actuel aussi, ou si
+  c'est du goût sans conséquence concrète ; très contestable si la demande va contre une
+  norme du dépôt ou une décision documentée (la réponse cite la norme plutôt qu'un avis) ;
 - une **suite**, selon le cas :
   - **solution** : le correctif précis (fichier, changement), quand il n'y a qu'une
     bonne réponse ;
@@ -97,10 +103,12 @@ relire les fils tout de suite : avant l'étape 5, les nouveaux fils rejoignent l
 pendant ou après, comme ci-dessus.
 
 1. **Corrections** (seulement sur la branche de la PR) : appliquer les solutions et
-   options retenues. Un commit `git commit --fixup=<sha>` par commit corrigé (le commit
-   qui a introduit les lignes : `git log -L` ou `git blame` sur la base de la PR) ;
-   correction qui n'en vise aucun (ajout demandé) → commit normal au message à la
-   convention du dépôt. Vérifier que ça compile et que les tests touchés passent quand le
+   options retenues, selon les *PR expectations* : un bug signalé est corrigé avec un test qui le
+   couvre ; une demande qui fait sortir du ticket est signalée avec la justification à
+   ajouter (description de la PR ou ticket). Un commit `git commit --fixup=<sha>` par
+   commit corrigé (le commit qui a introduit les lignes : `git log -L` ou `git blame` sur
+   la base de la PR) ; correction qui n'en vise aucun (ajout demandé) → commit normal au
+   message selon les normes de commit rassemblées. Vérifier que ça compile et que les tests touchés passent quand le
    dépôt a une commande pour ça (Gradle : via `build-brief`).
 2. **Push** (si validé) : `git push` simple (les fixups s'ajoutent, pas de réécriture) ;
    proposer `/git-tidy:commits` plus tard pour les fondre avant merge.

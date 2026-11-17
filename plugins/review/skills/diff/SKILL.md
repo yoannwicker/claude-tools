@@ -22,19 +22,23 @@ ajouté ou modifié.
 - `--refacto "<piste>"` : piste de refactoring à faire évaluer par l'agent.
 - Le ticket : lire `${CLAUDE_SKILL_DIR}/../../ticket.md` et le suivre (branche courante,
   PR de la branche s'il y en a une, commits de la plage).
+- Les normes : lire `${CLAUDE_SKILL_DIR}/../../pr-expectations.md` et rassembler les normes en
+  vigueur (*Rassembler les normes* ; base = la base retenue ci-dessus).
 
 ## 2. La revue
 
 Lancer l'agent `review:reviewer` (outil Agent) avec : la plage, « working tree inclus »,
 les fichiers non suivis à lire en entier, la piste `--refacto` s'il y en a une, le
-ticket s'il y en a un. Il rend du JSON.
+ticket s'il y en a un, le bloc « Normes », et la PR de la branche s'il y en a une (numéro,
+titre, brouillon ou non). Il rend du JSON.
 
 Puis **vérifier chaque constat** contre le code (lire la ligne et son contexte) : écarter
 les faux positifs, ceux qui ne portent pas sur une ligne ajoutée ou modifiée (hors
 renommage du cas D, voir l'agent), et au-delà de 3 refactorings. Écart au ticket donné
 comme non justifié : vérifier qu'aucune justification n'existe vraiment (description de
 la PR, commentaires du ticket, commits). Dire combien ont été écartés et pourquoi, en une
-ligne.
+ligne. Écart de `messages` : vérifier la norme citée et que le commit n'est pas un
+`fixup!`/`squash!`/`amend!`.
 
 ## 3. La validation
 
@@ -42,7 +46,9 @@ Lire `${CLAUDE_SKILL_DIR}/../../validation.md` et le suivre. En tête, avant la 
 le résumé de l'agent, la couverture du ticket et ses écarts justifiés (pour information,
 avec la source), et la proposition de découpage s'il y en a une (point `🔎`). Chaque écart
 non justifié est un point `🔎` : écart voulu → justification à écrire, sinon → code à
-corriger (faire ce qui manque, retirer l'ajout, revenir à la demande).
+corriger (faire ce qui manque, retirer l'ajout, revenir à la demande). Chaque écart de
+`messages` est un point (`commit <sha>` ou `PR` à la place de `fichier:ligne`), avec le
+message ou le texte corrigé.
 Rien de retenu : le dire et s'arrêter.
 
 ## 4. L'exécution
@@ -63,5 +69,8 @@ Rien de retenu : le dire et s'arrêter.
   justification, la rédiger (ce qui change par rapport au ticket et pourquoi) et dire où
   la mettre : description de la PR, commentaire du ticket, et/ou message du commit
   concerné (`/git-tidy:commits` s'il faut le reformuler). Ne rien poster soi-même.
+- Écart de `messages` : montrer le message corrigé et proposer `/git-tidy:commits` pour
+  reformuler le commit ; pour la PR, le titre ou la description corrigés à reporter. Ne
+  rien réécrire ni poster soi-même.
 - Fin : liste des fichiers modifiés et des points écartés, puis rappeler de relire le
   diff (`git diff`).

@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""review-post — publie une review GitHub (event COMMENT) sans les échecs habituels de
+"""review-post — publie une review GitHub (event COMMENT, ou APPROVE) sans les échecs habituels de
 `gh api` : ligne hors du diff (« Line could not be resolved ») et review en attente déjà
 présente (« User can only have one pending review per pull request »).
 
-  review-post <pr> <review.json> [--replace-pending] [--dry-run]
+  review-post <pr> <review.json> [--approve] [--replace-pending] [--dry-run]
 
 review.json : {"body": "texte général", "comments": [{"path": "…", "line": 42, "body": "…"}]}
   - `line` : ligne du côté nouveau (RIGHT). Un commentaire dont la ligne n'est dans aucun
     hunk du diff de la PR passe dans le corps de la review (`path:line` — texte).
   - Une review en attente (PENDING) à soi sur la PR bloque toute nouvelle review : refus
     (code 3) sans --replace-pending, suppression de celle-ci avec.
+  - --approve : publie une approbation (event APPROVE) au lieu d'un commentaire ; body et
+    comments peuvent alors être vides.
   - --dry-run : écrit la requête qui serait envoyée, sans rien publier ni supprimer.
 
 Dépôt : celui du dossier courant (placeholders {owner}/{repo} de `gh api`).
@@ -26,7 +28,7 @@ def die(msg, code=1):
 
 
 def gh(*args, data=None):
-    r = subprocess.run(["gh", "api", *args], input=None if data is None else json.dumps(data),
+    r = subprocess.run(["gh", "api", *args], input="" if data is None else json.dumps(data),
                        capture_output=True, text=True)
     if r.returncode:
         die(f"gh api {' '.join(args)} : {r.stderr.strip() or r.stdout.strip()}")
@@ -75,6 +77,7 @@ def main():
     p = argparse.ArgumentParser(add_help=False)
     p.add_argument("pr", type=int)
     p.add_argument("review")
+    p.add_argument("--approve", action="store_true")
     p.add_argument("--replace-pending", action="store_true")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("-h", "--help", action="store_true")
@@ -87,7 +90,7 @@ def main():
         review = json.load(f)
     body = (review.get("body") or "").strip()
     comments = review.get("comments") or []
-    if not body and not comments:
+    if not body and not comments and not a.approve:
         die("rien à publier (ni body ni comments)")
 
     base = f"repos/{{owner}}/{{repo}}/pulls/{a.pr}"
@@ -98,7 +101,7 @@ def main():
     if outside:
         body += ("\n\n" if body else "") + "\n".join(
             f"- `{c['path']}:{c['line']}` — {c['body']}" for c in outside)
-    if not body:
+    if not body and not a.approve:
         body = f"{len(inline)} commentaire(s)."
 
     me = gh("user")["login"]
@@ -109,7 +112,8 @@ def main():
             "la soumettre ou la supprimer sur GitHub, ou relancer avec --replace-pending "
             "(elle sera supprimée)", 3)
 
-    payload = {"commit_id": pr["head"]["sha"], "event": "COMMENT", "body": body, "comments": inline}
+    payload = {"commit_id": pr["head"]["sha"], "event": "APPROVE" if a.approve else "COMMENT",
+               "body": body, "comments": inline}
     if a.dry_run:
         print(json.dumps({"delete_pending": [r["id"] for r in pending], "review": payload,
                           "moved_to_body": len(outside)}, ensure_ascii=False, indent=2))

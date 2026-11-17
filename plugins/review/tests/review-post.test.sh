@@ -69,5 +69,10 @@ check "publication : DELETE puis POST" "DELETE POST" \
 echo '{"body": "", "comments": []}' > "$tmp/empty.json"
 "$bin" 7 "$tmp/empty.json" --dry-run >/dev/null 2>&1
 check "rien à publier → erreur" 1 $?
+echo '[]' > "$tmp/reviews"
+check "--approve sans rien : APPROVE, corps vide" "APPROVE|" \
+  "$("$bin" 7 "$tmp/empty.json" --approve --dry-run | jq -r '"\(.review.event)|\(.review.body)"')"
+check "--approve avec commentaires" "APPROVE 5" \
+  "$("$bin" 7 "$tmp/review.json" --approve --dry-run | jq -r '"\(.review.event) \(.review.comments | length)"')"
 
 [ "$fails" -eq 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

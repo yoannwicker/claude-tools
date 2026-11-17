@@ -19,7 +19,8 @@ conseil puis gravité :
 
 1. Tableau numéroté, une ligne par point : `n°`, conseil, `fichier:ligne`, constat en une
    ligne, proposition en une ligne (`ticket` au lieu de `fichier:ligne` pour un écart au
-   ticket sans ligne). Les points `à approfondir` sont marqués `🔎` et restent dans la
+   ticket sans ligne, `commit <sha>` ou `PR` pour un écart aux normes de commit ou de
+   PR). Les points `à approfondir` sont marqués `🔎` et restent dans la
    liste.
 2. Une seule question (`AskUserQuestion`, header « Points ») :
    - **Tout sauf « très contestable » (Recommandé)** ;

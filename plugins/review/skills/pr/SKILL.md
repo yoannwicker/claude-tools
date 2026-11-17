@@ -1,9 +1,9 @@
 ---
 name: pr
-description: Relire la PR d'un collègue — ou plusieurs PR liées ensemble (pile de PR, même sujet), avec la cohérence entre elles — avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub (COMMENT) par PR, et enfin supprimer les worktrees et branches créés pour la revue s'il y en a
+description: Relire la PR d'un collègue — ou plusieurs PR liées ensemble (pile de PR, même sujet), avec la cohérence entre elles — avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub par PR (COMMENT, ou approbation proposée quand plus rien d'indispensable ni de recommandé ne reste), et enfin supprimer les worktrees et branches créés pour la revue s'il y en a
 argument-hint: "<numéro… | recherche> [--refacto \"<piste>\"] [--prepare]"
 disable-model-invocation: true
-allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree
+allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree
 ---
 
 Arguments : `$ARGUMENTS`
@@ -16,8 +16,9 @@ relisent ensemble : chacune pour elle-même, plus la cohérence entre elles.
 répondre) : aucune question (`AskUserQuestion`) ni rien de posté. Étape 1 sans proposer la
 pile (la citer en une ligne si elle existe), étape 2, l'alerte de relecture humaine
 de l'étape 3 s'il y en a une (sans la question), puis le tableau de l'étape 3
-(commentaires tels qu'ils seront postés, points `🔎` listés sans les trancher) ; finir par
-« Prêt pour la validation » et s'arrêter. À la reprise de la session (« Reprends à la
+(commentaires tels qu'ils seront postés, points `🔎` listés sans les trancher), et si
+l'approbation serait proposée (étape 3, *Approbation*) ; finir par « Prêt pour la
+validation » et s'arrêter. À la reprise de la session (« Reprends à la
 validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalement.
 
 ## 1. Les PR
@@ -72,11 +73,14 @@ validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalem
 - Le ticket : lire `${CLAUDE_SKILL_DIR}/../../ticket.md` et le suivre pour chaque PR
   (`headRefName`, titre et description de la PR, messages de ses commits) ; un ticket
   commun n'est lu qu'une fois.
+- Les normes : lire `${CLAUDE_SKILL_DIR}/../../pr-expectations.md` et rassembler les normes en
+  vigueur (*Rassembler les normes*, à la version de `baseRefName`), une fois pour le lot.
 
 ## 2. La revue
 
 Lancer l'agent `review:reviewer` (outil Agent) avec : « PR #<n> », `headRefOid`, la piste
-`--refacto` s'il y en a une, le ticket s'il y en a un. Il rend du JSON. Reprise : lui
+`--refacto` s'il y en a une, le ticket s'il y en a un, le bloc « Normes », et si la PR
+est en brouillon (`isDraft`). Il rend du JSON. Reprise : lui
 donner aussi le commit de ma dernière review (« déjà relue à <oid> : ne rapporter que ce
 qui a changé depuis, et ce que je n'avais pas vu de bloquant ») et mes fils non résolus
 (pour ne pas les redire).
@@ -91,7 +95,9 @@ renommage du cas D), et au-delà de 3 refactorings par PR. Constat de croisement
 aussi l'autre côté (`autre`) et vérifier que le conflit ou la dépendance existe vraiment ;
 doublon d'un constat d'une PR → n'en garder qu'un. Écart au ticket donné comme non
 justifié : vérifier qu'aucune justification n'existe vraiment (description, commentaires
-du ticket, commits). Dire combien ont été écartés et pourquoi, en une ligne.
+du ticket, commits). Écart de `messages` : vérifier la norme citée et que le commit
+n'est pas un `fixup!`/`squash!`/`amend!`. Dire combien ont été écartés et pourquoi, en une
+ligne.
 
 ## 3. La validation
 
@@ -107,6 +113,8 @@ source), et la proposition de découpage s'il y en a une. Chaque écart non just
 un point `🔎` : demander à l'auteur de le justifier (ce qui change par rapport au ticket et
 pourquoi, dans la description de la PR ou en commentaire du ticket) ou de revenir à la
 demande — en commentaire sur sa ligne s'il en a une, sinon dans le corps de la review.
+Chaque écart de `messages` est un point (`commit <sha>` ou `PR` à la place de
+`fichier:ligne`), posté dans le corps de la review avec la norme et la correction proposée.
 
 Pour chaque point, montrer **le commentaire tel qu'il sera posté** (pas le constat brut) : rédigé pour l'auteur, dans la
 langue de la PR, court, factuel, avec la suggestion (bloc ```` ```suggestion ```` quand
@@ -128,21 +136,38 @@ convainc), **répondre** (texte tel qu'il sera posté : désaccord argumenté, p
 fil : y répondre dans le corps de la review s'ils m'attendent. Valider fil par fil comme
 les points (`validation.md`).
 
-Rien de retenu (ni nouveau point, ni action sur mes fils) : le dire et s'arrêter (rien
-n'est posté).
+**Approbation**, une fois la validation finie, PR par PR : proposée seulement si
+- aucun point gardé n'est `indispensable` ni `recommandé` (nouveau point, écart au ticket,
+  écart aux normes de commit ou de PR), et aucun découpage n'est gardé ;
+- reprise : aucun de mes fils ne reste ouvert sur un point indispensable ou recommandé
+  (après les résolutions validées) ;
+- la PR n'est pas en brouillon ;
+- relecture humaine requise (étape 1) : seulement si j'ai répondu **Je l'ai faite**.
+
+Alors demander (`AskUserQuestion`, header « Approuver »), en citant l'état de la CI
+(`gh pr checks <n>` : vert, en cours, ou rouge avec les checks en échec) :
+**Approuver (Recommandé)** — les points gardés (optionnels, questions) partent avec
+l'approbation — / **Commenter seulement**. CI rouge : **Commenter seulement** passe en
+premier et devient la recommandation. Sinon, pas de question : la review reste un
+commentaire.
+
+Rien de retenu (ni nouveau point, ni action sur mes fils) : proposer l'approbation si les
+conditions ci-dessus sont remplies (approbation sans commentaire) ; sinon, ou si elle est
+déclinée, le dire et s'arrêter (rien n'est posté).
 
 ## 4. La publication
 
 Une fois la validation finie, **poster directement** (la validation vaut accord), une
-review par PR qui a des points gardés (lot : de bas en haut de la pile) :
+review par PR qui a des points gardés ou dont l'approbation a été choisie (lot : de bas en haut de la pile) :
 
 - Écrire `review.json` dans le scratchpad : `{"body": "<synthèse : résumé, écarts au ticket
-  gardés sans ligne, découpage proposé s'il est gardé (partie par partie : commit, PR, tâche sur l'US ou US
+  gardés sans ligne, écarts aux normes de commit et de PR gardés, découpage proposé s'il est gardé (partie par partie : commit, PR, tâche sur l'US ou US
   séparée), remarques générales gardées ; lot : « Relue avec #84 (pile / même sujet) » et
   les points de croisement sans ligne>", "comments": [{"path", "line", "body"}…]}`
   (lot : `review-<n>.json`).
 - `review-post <n> <review.json>` (dans le `bin/` du plugin, dans le PATH) : publie une
-  review `COMMENT` — jamais `APPROVE` ni `REQUEST_CHANGES`. Un commentaire dont la ligne
+  review `COMMENT` ; avec `--approve` quand l'approbation a été choisie (étape 3), une
+  approbation (`body` et `comments` peuvent alors être vides). Jamais `REQUEST_CHANGES`. Un commentaire dont la ligne
   n'est pas dans le diff passe dans le corps au lieu d'échouer.
 - Code 3 (une review en attente à moi existe déjà) : le dire avec son lien et demander
   (`AskUserQuestion`, header « En attente ») : **La garder, ne rien poster** / **La
@@ -158,7 +183,8 @@ review par PR qui a des points gardés (lot : de bas en haut de la pile) :
 
   et pour chaque fil **résoudre** (je suis le relecteur : c'est à moi de le faire) :
   `gh api graphql -f query='mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }' -F id=<thread id>`.
-- Fin : l'URL de chaque review, le nombre de commentaires inline et passés dans le corps ;
+- Fin : l'URL de chaque review (approuvée ou non), le nombre de commentaires inline et
+  passés dans le corps ;
   reprise : les fils répondus et résolus ; relecture humaine requise et répondue « Je la
   ferai après » : le rappeler en une ligne, avec le lien de la PR.
 
