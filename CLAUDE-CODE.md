@@ -1702,8 +1702,11 @@ Puis, au choix : *Corriger, répondre et pousser* (recommandé), *Corriger et r�
 pousser*, *Corriger seulement*. Corrections seulement sur la branche de la PR (sinon
 proposé : `/git-nav:pr <n>`), en un commit `--fixup` par commit visé (commit normal pour
 un ajout), `git push` simple (à fondre plus tard avec `/git-tidy:commits`), puis réponses
-sur les fils (`addPullRequestReviewThreadReply`). Aucun fil n'est résolu : c'est au
-relecteur, ou à [`pr-comments`](#pr-comments).
+sur les fils (`addPullRequestReviewThreadReply`). Les fils **traités** sont ensuite
+résolus (`resolveReviewThread`) : corrigés et poussés, ou déjà faits. Ceux où l'on
+conteste, explique sans changer le code ou pose une question restent ouverts pour le
+relecteur, comme tous les fils si rien n'a été poussé. Une norme du dépôt qui réserve la
+résolution au relecteur l'emporte.
 
 Retours arrivés en cours de session (une deuxième review après l'analyse) : les fils sont
 relus au début de l'exécution puis juste avant la relance. Un fil absent de l'analyse (ou

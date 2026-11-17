@@ -1,6 +1,6 @@
 ---
 name: feedback
-description: Traiter les retours reçus sur sa PR — chaque fil de review non résolu analysé, priorisé avec un conseil, avec une solution, des options ou « à discuter » — puis, après validation, corrections en commits fixup, réponses sur les fils et push sur accord, et relance des relecteurs qui n'ont pas validé une fois tout pris en compte
+description: Traiter les retours reçus sur sa PR — chaque fil de review non résolu analysé, priorisé avec un conseil, avec une solution, des options ou « à discuter » — puis, après validation, corrections en commits fixup, réponses sur les fils, push sur accord et résolution des fils traités, et relance des relecteurs qui n'ont pas validé une fois tout pris en compte
 argument-hint: "[numéro de PR] [--prepare]"
 disable-model-invocation: true
 allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh api user:*), Bash(gh api graphql:*)
@@ -77,7 +77,8 @@ Options et « à discuter » sont `🔎` (validés un par un).
 
 Suivre `${CLAUDE_SKILL_DIR}/../../validation.md`. Pour chaque fil, ce qui sera fait :
 corriger (solution ou option choisie) et répondre, répondre seulement (contester,
-expliquer, déjà fait), ou ne rien faire maintenant. Ensuite une question
+expliquer, déjà fait), ou ne rien faire maintenant ; et si le fil sera **résolu** (voir
+5.3). Ensuite une question
 (`AskUserQuestion`, header « Envoi ») : **Corriger, répondre et pousser (Recommandé)** /
 **Corriger et répondre, sans pousser** / **Corriger seulement, rien sur GitHub**. La
 description de la première dit si les relecteurs seront relancés ensuite (étape 5.4) : tous
@@ -121,7 +122,19 @@ pendant ou après, comme ci-dessus.
      -F id=<thread id> -f body=<texte>
    ```
 
-   Ne jamais résoudre un fil : c'est au relecteur (ou au plugin `pr-comments`).
+   Puis **résoudre les fils traités**, chacun juste après sa réponse :
+
+   ```
+   gh api graphql -f query='mutation($id: ID!) {
+     resolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }' -F id=<thread id>
+   ```
+
+   Traité = la demande est satisfaite sans attendre le relecteur : **corrigé** (correction
+   commitée **et poussée**) ou **déjà fait / obsolète**. Restent ouverts, pour que le
+   relecteur tranche : réponse qui conteste, explique sans changer le code, pose une
+   question, ou option « à discuter » ; et tout fil quand le push n'a pas eu lieu (envoi
+   *sans pousser*) ou que la réponse a échoué. Une norme du dépôt qui réserve la résolution
+   au relecteur l'emporte : aucun fil résolu, le dire.
 4. **Relance des relecteurs** (automatique, sans question) : seulement si l'envoi retenu
    est *Corriger, répondre et pousser*, que push et réponses ont réussi, et que **tous** les
    fils non résolus, **relus à cet instant** (aucun nouveau fil, voir plus haut), sont pris
@@ -132,6 +145,7 @@ pendant ou après, comme ci-dessus.
    hors bots (`[bot]`) et hors ceux déjà dans `reviewRequests` (relance déjà en attente).
    Puis `gh pr edit <n> --add-reviewer <login1>,<login2>` (redemande la review, ce qui les
    notifie). Personne à relancer → le dire.
-5. Fin : tableau fil → suite → commit / lien de la réponse ; fils laissés de côté ;
+5. Fin : tableau fil → suite → commit / lien de la réponse → résolu ou laissé ouvert
+   (pourquoi) ; fils laissés de côté ;
    nouveaux fils arrivés en cours de session ; relecteurs relancés (ou pourquoi aucune
    relance).
