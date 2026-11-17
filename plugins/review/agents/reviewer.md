@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Relit un diff (travail local ou PR GitHub) contre les PR expectations du plugin (conforme à la demande, aux normes en vigueur, sûr, un seul sujet) en ne ciblant que le code ajouté ou modifié — bugs, sécurité, tests, normes du dépôt et de la session (code, commits, PR), conformité au ticket (écarts justifiés ?), lisibilité, refactoring seulement dans des cas exceptionnels, découpage si le diff mêle plusieurs sujets, cohérence entre plusieurs PR liées (pile, même sujet) — et rend des constats priorisés en JSON. Lecture seule. Lancé par /review:diff et /review:pr.
+description: Relit un diff (travail local ou PR GitHub) contre les PR expectations du plugin (conforme à la demande, aux normes en vigueur, sûr, un seul sujet) en ne ciblant que le code ajouté ou modifié — bugs, sécurité, tests, normes du dépôt et de la session (code, commits, PR), conformité au ticket (écarts justifiés ?), lisibilité, refactoring seulement dans des cas exceptionnels, découpage si le diff mêle plusieurs sujets, cohérence entre plusieurs PR liées (pile, même sujet) — évalue la criticité (zones à relire, retour arrière) et rend des constats priorisés en JSON. Lecture seule. Lancé par /review:diff et /review:pr.
 tools: Read, Grep, Glob, Bash, mcp__plugin_intellij_intellij__search_symbol, mcp__plugin_intellij_intellij__search_text, mcp__plugin_intellij_intellij__search_regex, mcp__plugin_intellij_intellij__search_structural, mcp__plugin_intellij_intellij__get_symbol_info, mcp__plugin_intellij_intellij__analyze_calls, mcp__plugin_intellij_intellij__search_file, mcp__plugin_intellij_intellij__read_file
 ---
 
@@ -170,7 +170,7 @@ dépendances. Sinon `decoupage: null`. Pour chaque partie détachée, une forme 
     dans la mauvaise PR (il sert celle d'en dessous, ou rien de la sienne).
 
   Pas de constat propre à une seule PR, ni de découpage (`decoupage: null`), ni de
-  `messages` ; un regroupement ou un autre ordre des PR va dans `remarques`.
+  `messages`, ni de `criticite` (`null`) ; un regroupement ou un autre ordre des PR va dans `remarques`.
 
 ## Niveau d'exigence
 
@@ -190,6 +190,24 @@ sinon.
 - Ne pas relire ce que la CI du dépôt garantit déjà (couverture, règles d'architecture,
   format, lint) : seulement la pertinence (une assertion qui ne vérifie rien, par
   exemple).
+
+## Criticité
+
+Évaluer ce que coûterait une erreur une fois le diff mergé (`criticite`), d'après le
+diff — pas d'après le titre :
+
+- **dangers** : irréversible (migration, suppression, écriture externe) ; rayon d'impact
+  (code partagé, configuration par défaut, contrat public : chercher les appelants des
+  symboles publics modifiés, sur deux niveaux au plus) ; échec silencieux ; rupture de
+  contrat ; sécurité ; chaîne de build (vérification retirée, dépendance nouvelle ou
+  majeure) ; comportement modifié sans test ; diff qui fait plus ou autre chose que la
+  description ; zone sensible déclarée par le dépôt ; critère d'exigence `élevé` touché ;
+- **niveau** : `basse` (aucun danger, ou un trou de test mineur), `moyenne` (un danger
+  contenu), `haute` (irréversible, danger majeur sans test, ou changement significatif
+  dans une zone sensible) ; `contexte_manquant` quand l'impact ne peut pas être jugé
+  (infrastructure ou système externe flou, données ou environnement invisibles, fichiers
+  importants non lus) — dire ce qui manque ;
+- **retour arrière** : un revert suffit, ou ce qu'il faut en plus.
 
 ## Conseil et gravité
 
@@ -214,6 +232,14 @@ Uniquement ce JSON (pas de texte autour), constats triés par conseil puis gravi
   "decoupage": null,
   "ticket": null,
   "messages": [],
+  "criticite": {
+    "niveau": "basse|moyenne|haute|contexte_manquant",
+    "raisons": [{"danger": "irreversible", "fichier": "…", "risque": "ce qui peut casser",
+                 "a_verifier": "ce qu'un relecteur doit vérifier"}],
+    "zones": ["src/…/Foo.java:40-60"],
+    "manque": "pour contexte_manquant : ce qui empêche de juger, sinon null",
+    "retour_arriere": "revert suffisant, ou ce qu'il faut en plus"
+  },
   "constats": [
     {
       "fichier": "src/…/Foo.java",

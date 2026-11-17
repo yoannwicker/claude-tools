@@ -72,6 +72,37 @@ créer), pour qu'ils deviennent déclarés. Rien ne s'écrit dans le dépôt san
 - **Le pourquoi se cite** : un commentaire sur un critère `élevé` peut reprendre la
   raison déclarée (« exigence élevée : la version validée part chez les clients »).
 
+## La criticité
+
+Ce que coûterait une erreur une fois la PR mergée — distincte de l'exigence, qui dit à quel
+point on insiste sur un critère. Elle décide si une **relecture humaine attentive** est
+requise.
+
+- **Niveaux** : `basse`, `moyenne`, `haute`, ou **contexte manquant** quand l'impact ne
+  peut pas être jugé : interaction avec l'infrastructure ou un système externe floue
+  (configuration, déploiement, API ou données tierces), comportement qui dépend de données
+  ou d'un environnement invisibles dans le dépôt, fichiers importants non lus.
+- **Ce qui la fait monter** : irréversible (migration, suppression, écriture externe) ;
+  rayon d'impact (code partagé, configuration par défaut, contrat public) ; échec
+  silencieux ; rupture de contrat ; sécurité ; chaîne de build ; comportement modifié sans
+  test ; diff qui fait plus ou autre chose que ce qu'annonce la PR ; zone sensible déclarée
+  par le dépôt (quel que soit le titre de la section) ; critère d'exigence `élevé` touché.
+- **Ce qu'elle donne** : le niveau, les zones à relire d'abord (`fichier:lignes`, avec ce
+  qui peut casser), et ce qu'il faut pour revenir en arrière (un revert suffit, ou
+  restauration de données, migration en deux temps, coordination…).
+- **Relecture humaine requise** : `haute` ou contexte manquant.
+
+**D'où elle vient**, dans cet ordre :
+
+1. **Déjà donnée** : la PR (description, commentaire, corps d'une review) ou un message
+   (commit, ticket) donne déjà un niveau de risque ou de criticité, posé par un bot ou un
+   humain (le dernier en date l'emporte) → on le reprend, sans rien publier de plus.
+   L'évaluation de l'agent n'apparaît alors que si elle est plus haute, en remarque.
+2. **Un skill de la session** qui évalue le risque d'une PR, s'il y en a un, quel qu'il
+   soit : lancé à la publication (il peut publier lui-même), jamais avant la validation.
+3. **L'évaluation de l'agent** (`criticite`) sinon, en quelques lignes : niveau, zones,
+   retour arrière.
+
 ## Rassembler les normes (le skill, pas l'agent)
 
 L'agent part d'un contexte neuf : il ne voit pas les instructions de la session. Le skill

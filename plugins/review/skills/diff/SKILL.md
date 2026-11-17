@@ -3,7 +3,7 @@ name: diff
 description: Relire son propre travail avant commit ou PR (commits de la branche depuis sa base + modifications non commitées) avec l'agent reviewer — code ajouté seulement, points priorisés et validés, puis corrections appliquées sans commit
 argument-hint: "[base] [--refacto \"<piste>\"]"
 disable-model-invocation: true
-allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(gh issue view:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent
+allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(gh issue view:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, Skill
 ---
 
 Arguments : `$ARGUMENTS`
@@ -22,6 +22,10 @@ ajouté ou modifié.
 - `--refacto "<piste>"` : piste de refactoring à faire évaluer par l'agent.
 - Le ticket : lire `${CLAUDE_SKILL_DIR}/../../ticket.md` et le suivre (branche courante,
   PR de la branche s'il y en a une, commits de la plage).
+- La criticité (*La criticité* de `pr-expectations.md`) : déjà donnée si la PR de la
+  branche (`gh pr view --json body,comments`), un message de commit ou le ticket donne un
+  niveau de risque ou de criticité ; sinon noter si un skill de la session évalue le
+  risque d'une PR.
 - Les normes : lire `${CLAUDE_SKILL_DIR}/../../pr-expectations.md` et rassembler les normes en
   vigueur et les niveaux d'exigence (*Rassembler les normes* ; base = la base retenue
   ci-dessus).
@@ -45,8 +49,10 @@ ligne. Écart de `messages` : vérifier la norme citée et que le commit n'est p
 ## 3. La validation
 
 Lire `${CLAUDE_SKILL_DIR}/../../validation.md` et le suivre. En tête, avant la liste :
-les exigences appliquées (critères `élevé` et `faible`, chacun déclaré ou déduit avec
-sa source ; « tous normal » sinon), le résumé de l'agent, la couverture du ticket et ses écarts justifiés (pour information,
+la criticité (donnée, avec sa source, ou celle de l'agent : niveau, zones, retour arrière,
+ce qui manque pour un contexte manquant), les exigences appliquées (critères `élevé` et
+`faible`, chacun déclaré ou déduit avec sa source ; « tous normal » sinon), le résumé de
+l'agent, la couverture du ticket et ses écarts justifiés (pour information,
 avec la source), et la proposition de découpage s'il y en a une (point `🔎`). Chaque écart
 non justifié est un point `🔎` : écart voulu → justification à écrire, sinon → code à
 corriger (faire ce qui manque, retirer l'ajout, revenir à la demande). Chaque écart de
@@ -75,6 +81,14 @@ Rien de retenu : le dire et s'arrêter.
 - Écart de `messages` : montrer le message corrigé et proposer `/git-tidy:commits` pour
   reformuler le commit ; pour la PR, le titre ou la description corrigés à reporter. Ne
   rien réécrire ni poster soi-même.
+- Criticité, si rien ne la donnait, quel que soit son niveau : donner le risque de la PR
+  pour sa description.
+  - Un skill de la session évalue le risque d'une PR → proposer de le lancer (s'il
+    publie sur une PR, seulement sur accord) ; c'est son résultat qui sert.
+  - Sinon, l'évaluation de l'agent : proposer le paragraphe à mettre dans la description
+    de la PR (« Criticité : <niveau> », zones à relire et ce qui peut y casser, retour
+    arrière ; pour `haute` ou `contexte_manquant`, « relecture humaine conseillée » et ce
+    qui manque), sans l'écrire.
 - Niveaux d'exigence déduits : proposer le texte à ajouter à la section d'exigences du
   dépôt (ou de la créer), sans l'écrire sans accord.
 - Fin : liste des fichiers modifiés et des points écartés, puis rappeler de relire le

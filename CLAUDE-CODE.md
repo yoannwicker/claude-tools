@@ -1514,6 +1514,19 @@ critère : en `faible`, seul un défaut avéré compte (pas de `[nit]`) ; en `é
 cherche activement et tout manque de garde-fou est indispensable. Ce que la CI garantit
 déjà n'est pas relu.
 
+**Criticité** : ce que coûterait une erreur une fois mergée, `basse`, `moyenne`, `haute`
+ou *contexte manquant* (infrastructure ou système externe flou, données ou environnement
+invisibles, fichiers non lus) ; elle donne les zones à relire et le retour arrière.
+Relecture humaine requise si `haute` ou contexte manquant. D'où elle vient : déjà donnée
+par la PR ou un message (repris, rien de plus n'est publié) ; sinon un skill de la session
+qui évalue le risque d'une PR, lancé à la publication ; sinon l'évaluation de l'agent.
+`/review:pr` la met en tête de la validation (alerte de relecture humaine) et, si la PR
+n'en donnait pas et sans skill, en tête du corps de la review ; `/review:diff`, si rien
+ne la donnait, donne le risque de la PR pour sa description, quel que soit le niveau :
+il propose de lancer le skill de la session, sinon le paragraphe « Criticité » tiré de
+l'évaluation de l'agent (niveau, zones, retour arrière, et « relecture humaine
+conseillée » quand elle est haute ou le contexte manquant).
+
 #### Agent `reviewer`
 
 Lancé par `/review:diff` et `/review:pr` (`review:reviewer`), en lecture seule (Bash
@@ -1621,12 +1634,12 @@ le skill propose d'approuver (CI citée ; rouge, il recommande de commenter seul
 points optionnels et les questions partent avec l'approbation ; rien de retenu donne une
 approbation sans commentaire.
 
-**Relecture humaine** : si le risque alloué à la PR — dans sa description ou un de ses
-commentaires, posé par un bot ou un humain — demande une relecture humaine et qu'aucun
-humain autre que l'auteur ne l'a encore faite (review approuvée ou avec demande de
+**Relecture humaine** : si la [criticité](#pr-expectations) — donnée par la PR (bot ou
+humain, dans sa description ou un commentaire), sinon évaluée par l'agent — demande une
+relecture humaine et qu'aucun humain autre que l'auteur ne l'a encore faite (review approuvée ou avec demande de
 changements, ou commentaire qui le dit ; hors bots et hors mes reviews faites avec ce
-skill), la validation commence par une alerte (risque, source, zones du diff à regarder
-d'abord) et demande de relire soi-même : faite, à faire après (rappel en fin de
+skill), la validation commence par une alerte (niveau, source, zones du diff à regarder
+d'abord, ce qui manque pour un contexte manquant) et demande de relire soi-même : faite, à faire après (rappel en fin de
 publication) ou arrêter sans rien poster. En `--prepare`, l'alerte est seulement affichée.
 
 Plusieurs PR (`/review:pr 83 84 85`, ou plusieurs choisies parmi les résultats de la

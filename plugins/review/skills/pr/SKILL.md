@@ -3,7 +3,7 @@ name: pr
 description: Relire la PR d'un collègue — ou plusieurs PR liées ensemble (pile de PR, même sujet), avec la cohérence entre elles — avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub par PR (COMMENT, ou approbation proposée quand plus rien d'indispensable ni de recommandé ne reste), et enfin supprimer les worktrees et branches créés pour la revue s'il y en a
 argument-hint: "<numéro… | recherche> [--refacto \"<piste>\"] [--prepare]"
 disable-model-invocation: true
-allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree
+allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree, Skill
 ---
 
 Arguments : `$ARGUMENTS`
@@ -61,15 +61,19 @@ validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalem
     garder les fils `isResolved: false` dont le premier message est de moi ;
   - **les commentaires de l'auteur** sur la PR postés après ma dernière review ;
   - **le commit de ma dernière review** (`reviews[].commit.oid`) : ce qui a changé depuis.
-- **Relecture humaine** : le risque alloué à la PR, s'il y en a un, est indiqué dans sa
-  description ou dans un de ses commentaires (`comments`, ou le corps d'une `reviews`),
-  posé par un bot d'analyse ou par un humain (niveau de risque, case cochée, « relecture
-  humaine requise »…). Retenir pour chaque PR : **relecture humaine requise** si ce risque
-  la demande (le dernier en date l'emporte), avec la source (lien du commentaire, ou
-  « description ») ; **déjà faite** si un humain autre que l'auteur l'a déjà relue
-  (review `APPROVED` ou `CHANGES_REQUESTED`, ou commentaire qui dit l'avoir faite — hors
-  bots et hors mes reviews précédentes, faites avec ce skill). Seul cas retenu : requise et
-  pas déjà faite. Pas de risque indiqué → ne rien dire.
+- **Criticité** (*La criticité* de `${CLAUDE_SKILL_DIR}/../../pr-expectations.md`) : le
+  risque ou la criticité alloués à la PR, s'il y en a, sont indiqués dans sa description
+  ou dans un de ses commentaires (`comments`, ou le corps d'une `reviews`), posés par un
+  bot d'analyse ou par un humain (niveau de risque, case cochée, « relecture humaine
+  requise »…). Retenir pour chaque PR :
+  - **criticité donnée** : le niveau (le dernier en date l'emporte) et sa source (lien du
+    commentaire, ou « description ») ; **relecture humaine requise** si elle la demande ou
+    si le niveau est haut ;
+  - sinon **pas de criticité donnée** : c'est celle de l'agent (étape 2) qui décidera, et
+    noter si un skill de la session évalue le risque d'une PR (lancé à l'étape 4) ;
+  - **relecture déjà faite** si un humain autre que l'auteur l'a déjà relue (review
+    `APPROVED` ou `CHANGES_REQUESTED`, ou commentaire qui dit l'avoir faite — hors bots et
+    hors mes reviews précédentes, faites avec ce skill).
 - Le ticket : lire `${CLAUDE_SKILL_DIR}/../../ticket.md` et le suivre pour chaque PR
   (`headRefName`, titre et description de la PR, messages de ses commits) ; un ticket
   commun n'est lu qu'une fois.
@@ -98,16 +102,21 @@ doublon d'un constat d'une PR → n'en garder qu'un. Écart au ticket donné com
 justifié : vérifier qu'aucune justification n'existe vraiment (description, commentaires
 du ticket, commits). Écart de `messages` : vérifier la norme citée et que le commit
 n'est pas un `fixup!`/`squash!`/`amend!`. Conseil qui ne suit pas le niveau d'exigence
-de son critère (*Le niveau d'exigence*) : le corriger. Dire combien ont été écartés et pourquoi, en une
-ligne.
+de son critère (*Le niveau d'exigence*) : le corriger. `criticite` : vérifier que ses zones
+existent dans le diff et que ses dangers tiennent. Dire combien ont été écartés et
+pourquoi, en une ligne.
 
 ## 3. La validation
 
-Lire `${CLAUDE_SKILL_DIR}/../../validation.md` et le suivre. Tout en tête, si une PR
-demande une relecture humaine pas encore faite (étape 1) : `⚠️ Relecture humaine requise
-pour #<n> (<risque>, <source>) et pas encore faite : relis toi-même le diff avant de
-poster` — en citant les fichiers ou zones les plus sensibles du diff à regarder d'abord —,
-puis demander (`AskUserQuestion`, header « Relecture ») : **Je l'ai faite, continuer** /
+Lire `${CLAUDE_SKILL_DIR}/../../validation.md` et le suivre. Tout en tête, la criticité de
+chaque PR en une ligne (niveau et source : donnée par la PR, ou évaluée par l'agent ;
+l'évaluation de l'agent en remarque si elle est plus haute que celle donnée). **Relecture
+humaine requise** si la criticité donnée la demande ou est haute, ou, sans criticité
+donnée, si celle de l'agent est `haute` ou `contexte_manquant`. Requise et pas déjà faite
+(étape 1) : `⚠️ Relecture humaine requise pour #<n> (<niveau>, <source>) et pas encore
+faite : relis toi-même le diff avant de poster` — avec les zones à regarder d'abord
+(`criticite.zones` et ce qui peut y casser) et, pour un contexte manquant, ce qui
+manque —, puis demander (`AskUserQuestion`, header « Relecture ») : **Je l'ai faite, continuer** /
 **Je la ferai après, continuer** / **Arrêter ici** (rien n'est posté, passer au ménage).
 Puis : les exigences appliquées (critères `élevé` et `faible`, chacun déclaré ou déduit avec
 sa source ; « tous normal » sinon), le résumé de l'agent, la couverture du ticket et ses écarts justifiés (pour information, avec la
@@ -144,7 +153,7 @@ les points (`validation.md`).
 - reprise : aucun de mes fils ne reste ouvert sur un point indispensable ou recommandé
   (après les résolutions validées) ;
 - la PR n'est pas en brouillon ;
-- relecture humaine requise (étape 1) : seulement si j'ai répondu **Je l'ai faite**.
+- relecture humaine requise (étape 3) : seulement si j'ai répondu **Je l'ai faite**.
 
 Alors demander (`AskUserQuestion`, header « Approuver »), en citant l'état de la CI
 (`gh pr checks <n>` : vert, en cours, ou rouge avec les checks en échec) :
@@ -160,13 +169,19 @@ déclinée, le dire et s'arrêter (rien n'est posté).
 ## 4. La publication
 
 Une fois la validation finie, **poster directement** (la validation vaut accord), une
-review par PR qui a des points gardés ou dont l'approbation a été choisie (lot : de bas en haut de la pile) :
+review par PR qui a des points gardés, une criticité à publier (ci-dessous, sans skill)
+ou dont l'approbation a été choisie (lot : de bas en haut de la pile) :
 
 - Écrire `review.json` dans le scratchpad : `{"body": "<synthèse : résumé, écarts au ticket
   gardés sans ligne, écarts aux normes de commit et de PR gardés, découpage proposé s'il est gardé (partie par partie : commit, PR, tâche sur l'US ou US
   séparée), remarques générales gardées ; lot : « Relue avec #84 (pile / même sujet) » et
   les points de croisement sans ligne>", "comments": [{"path", "line", "body"}…]}`
   (lot : `review-<n>.json`).
+- **Criticité**, si la PR n'en donnait pas : un skill de la session évalue le risque d'une
+  PR (étape 1) → le lancer sur la PR après la review (il publie son évaluation lui-même) ;
+  sinon ajouter en tête du corps de la review : `Criticité : <niveau>` — zones à relire
+  (`chemin:lignes` — ce qui peut casser), retour arrière, et pour un contexte manquant ce
+  qui manque. Criticité donnée par la PR : rien de plus.
 - `review-post <n> <review.json>` (dans le `bin/` du plugin, dans le PATH) : publie une
   review `COMMENT` ; avec `--approve` quand l'approbation a été choisie (étape 3), une
   approbation (`body` et `comments` peuvent alors être vides). Jamais `REQUEST_CHANGES`. Un commentaire dont la ligne
