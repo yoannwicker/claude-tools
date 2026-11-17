@@ -1,6 +1,6 @@
 ---
 name: feedback
-description: Traiter les retours reçus sur sa PR — chaque fil de review non résolu analysé, priorisé avec un conseil, avec une solution, des options ou « à discuter » — puis, après validation, corrections en commits fixup, réponses sur les fils, push sur accord et résolution des fils traités, et relance des relecteurs qui n'ont pas validé une fois tout pris en compte
+description: Traiter les retours reçus sur sa PR — chaque fil de review non résolu analysé, priorisé avec un conseil, avec une solution, des options ou « à discuter » — puis, après validation, corrections en commits fixup, réponses sur les fils (avec leur statut : corrigé, justifié, reporté), push sur accord et résolution des fils traités, relance des relecteurs qui n'ont pas validé une fois tous les fils traités, et compte rendu lisible de ce qui a été demandé et traité
 argument-hint: "[numéro de PR] [--prepare]"
 disable-model-invocation: true
 allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh api user:*), Bash(gh api graphql:*)
@@ -23,14 +23,14 @@ avec ses questions, puis 5 normalement.
 
 - Argument numérique → cette PR ; sinon celle de la branche courante (`gh pr view`) ;
   sinon demander (`AskUserQuestion`, header « PR »).
-- `gh pr view <n> --json number,url,state,author,headRefName,baseRefName`. PR fermée ou
+- `gh pr view <n> --json id,number,url,state,author,headRefName,baseRefName`. PR fermée ou
   mergée → s'arrêter. PR qui n'est pas à moi → le signaler et proposer `/review:pr`.
 - Branche de la PR qui n'est pas la branche courante → l'analyse peut se faire, mais pas
   les corrections : le dire d'emblée et proposer `/git-nav:pr <n>` pour s'y placer.
 - Modifications non commitées : le signaler (les fixups ne prendront que les fichiers
   corrigés).
 
-## 2. Les fils non résolus
+## 2. Les fils non résolus et les suivis
 
 `gh repo view --json owner,name`, puis :
 
@@ -38,12 +38,21 @@ avec ses questions, puis 5 normalement.
 gh api graphql -f query='query($owner: String!, $repo: String!, $n: Int!) {
   repository(owner: $owner, name: $repo) { pullRequest(number: $n) {
     reviewThreads(first: 100) { nodes { id isResolved isOutdated path line originalLine
-      comments(first: 50) { nodes { author { login } body url diffHunk createdAt } } } } } } }' \
+      comments(first: 50) { nodes { author { login } body url diffHunk createdAt } } } }
+    suivi: comments(first: 100) { nodes { author { login } body url } } } } }' \
   -F owner=<owner> -F repo=<repo> -F n=<n>
 ```
 
-Garder les fils `isResolved: false`. Aucun → le dire et s'arrêter. Un fil dont j'ai le
-dernier mot est gardé mais marqué `↩ répondu` (souvent en attente du relecteur).
+Garder les fils `isResolved: false`. Un fil dont j'ai le dernier mot est gardé mais
+marqué `↩ répondu` (souvent en attente du relecteur).
+
+**Les suivis** (*Le suivi des points* de `pr-expectations.md`) : dans `suivi`, les
+commentaires qui commencent par `<!-- review:suivi -->`, écrits par un autre que moi (un
+par relecteur). Chaque fil y reprend son conseil (bloquant, recommandé…) ; les points
+**sans fil** (écart dans le corps de la review) encore ouverts ou en discussion sont
+traités comme des fils (réponse dans un commentaire de la PR, étape 5.3).
+
+Aucun fil non résolu ni point de suivi ouvert → le dire et s'arrêter.
 
 ## 3. L'analyse
 
@@ -69,7 +78,12 @@ Pour chaque fil : lire toute la conversation et le code concerné (version actue
   - **déjà fait / obsolète** : le code actuel règle déjà le point → réponse qui le dit
     (commit à l'appui).
 - le **texte de réponse** prévu sur le fil (dans la langue du fil, court : ce qui a été
-  fait et où, ou l'argument si on ne fait pas).
+  fait et où, ou l'argument si on ne fait pas), qui commence par le **statut** annoncé
+  au relecteur : « ✅ Corrigé dans `<sha>` » (le commit poussé, connu à l'étape 5),
+  « 💬 » + la justification pour garder l'actuel, « 📌 Reporté : <lien> ». Reporter
+  exige le lien d'un ticket ou d'une issue : sans lien, proposer le brouillon du ticket
+  (titre, description, PR d'origine) et demander le lien à la validation ; sans lien, le
+  point n'est pas reporté (ne rien faire maintenant, ou une autre suite).
 
 Options et « à discuter » sont `🔎` (validés un par un).
 
@@ -130,22 +144,41 @@ pendant ou après, comme ci-dessus.
    ```
 
    Traité = la demande est satisfaite sans attendre le relecteur : **corrigé** (correction
-   commitée **et poussée**) ou **déjà fait / obsolète**. Restent ouverts, pour que le
+   commitée **et poussée**), **déjà fait / obsolète**, ou **reporté** avec le lien du
+   ticket. Restent ouverts, pour que le
    relecteur tranche : réponse qui conteste, explique sans changer le code, pose une
    question, ou option « à discuter » ; et tout fil quand le push n'a pas eu lieu (envoi
    *sans pousser*) ou que la réponse a échoué. Une norme du dépôt qui réserve la résolution
    au relecteur l'emporte : aucun fil résolu, le dire.
+
+   Points de suivi sans fil : une seule réponse pour tous, en commentaire de la PR (un
+   point par ligne, avec son statut) :
+   `gh api graphql -f query='mutation($id: ID!, $body: String!) { addComment(input: { subjectId: $id, body: $body }) { commentEdge { node { url } } } }' -F id=<id de la PR> -f body=<texte>`.
 4. **Relance des relecteurs** (automatique, sans question) : seulement si l'envoi retenu
    est *Corriger, répondre et pousser*, que push et réponses ont réussi, et que **tous** les
    fils non résolus, **relus à cet instant** (aucun nouveau fil, voir plus haut), sont pris
    en compte — corrigés ou répondus pendant cette exécution, ou déjà `↩ répondu` ; un seul fil laissé de côté (« ne rien faire maintenant », « à
-   discuter » non tranché) ou un échec → pas de relance, le dire. Relecteurs à relancer :
+   discuter » non tranché) ou un échec → pas de relance, le dire. Il en va de même des
+   points de suivi sans fil : tous traités (corrigés ou répondus), sinon pas de relance.
+   Relecteurs à relancer :
    `gh pr view <n> --json latestReviews,reviewRequests` → auteurs des `latestReviews` dont
    l'état n'est pas `APPROVED` (`CHANGES_REQUESTED`, `COMMENTED`, `DISMISSED`), hors moi,
    hors bots (`[bot]`) et hors ceux déjà dans `reviewRequests` (relance déjà en attente).
    Puis `gh pr edit <n> --add-reviewer <login1>,<login2>` (redemande la review, ce qui les
    notifie). Personne à relancer → le dire.
-5. Fin : tableau fil → suite → commit / lien de la réponse → résolu ou laissé ouvert
-   (pourquoi) ; fils laissés de côté ;
-   nouveaux fils arrivés en cours de session ; relecteurs relancés (ou pourquoi aucune
-   relance).
+5. **Compte rendu** : un tableau, une ligne par **sujet** (fils qui portent sur la même
+   chose regroupés), lisible par un humain :
+
+   | Sujet | Conseil | Statut | Comment |
+   |---|---|---|---|
+   | Null non géré dans `api.ts` | bloquant | ✅ corrigé | garde ajoutée + test (`e4f5a6b`) |
+   | Index manquant | recommandé | 📌 reporté | [#312](<lien>) |
+   | Renommer `tmp` | optionnel | ❌ rejeté | nom imposé par l'API externe |
+   | Cache invalide ? | question | 💬 répondu | invalidé au push (fil laissé ouvert) |
+
+   Statuts : ✅ corrigé, ✔️ déjà fait, 📌 reporté (lien du ticket ou de l'issue),
+   💬 répondu (explication, précision), ❌ rejeté (on garde l'actuel, argument donné),
+   ⏸️ laissé de côté (rien fait maintenant), 🆕 nouveau (arrivé en cours de session, non
+   traité) ; « fil résolu » ou « laissé ouvert » dans la colonne *Comment*. Puis, en une
+   ligne chacun : les liens des réponses, et les relecteurs relancés ou pourquoi aucune
+   relance.

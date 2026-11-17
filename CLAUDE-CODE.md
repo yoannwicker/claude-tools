@@ -1527,6 +1527,14 @@ il propose de lancer le skill de la session, sinon le paragraphe « Criticité �
 l'évaluation de l'agent (niveau, zones, retour arrière, et « relecture humaine
 conseillée » quand elle est haute ou le contexte manquant).
 
+**Suivi des points** : chaque point posté par `/review:pr` a un statut — ⏳ ouvert,
+✅ corrigé (vérifié dans le code), 💬 justifié, ☑️ accepté tel quel (optionnel ou
+discutable décliné), 📌 reporté (seulement avec le lien d'un ticket ou d'une issue),
+🗨️ en discussion —, tenu dans un commentaire de la PR par relecteur
+(`<!-- review:suivi -->`), avec ce qui reste par conseil. Le relecteur fait foi : il le
+crée à sa première relecture et le maintient à chacune des suivantes ; l'auteur annonce ses statuts dans ses réponses de
+fil (`/review:feedback`), que la reprise vérifie.
+
 #### Agent `reviewer`
 
 Lancé par `/review:diff` et `/review:pr` (`review:reviewer`), en lecture seule (Bash
@@ -1628,7 +1636,9 @@ directement**, en une review `COMMENT` (jamais de demande de changements), par
 `review-post`.
 
 **Approbation** : quand plus aucun point gardé n'est indispensable ni recommandé (ni
-découpage gardé, ni fil à moi encore ouvert sur un tel point à la reprise), que la PR
+découpage gardé, ni point de mon suivi encore ouvert ou en discussion sur un tel point à
+la reprise, ni retour d'un autre relecteur encore ouvert et bloquant, indispensable ou
+recommandé — fils non résolus, suivis, demande de changements non suivie), que la PR
 n'est pas en brouillon et que la relecture humaine requise, s'il y en a une, est faite,
 le skill propose d'approuver (CI citée ; rouge, il recommande de commenter seulement). Les
 points optionnels et les questions partent avec l'approbation ; rien de retenu donne une
@@ -1657,9 +1667,22 @@ de l'autre PR y renvoie. Le ménage final couvre les worktrees et branches de ch
 **Reprise** d'une PR déjà relue (lancée par `review-watch` quand l'auteur a réagi, ou
 redemandée) : l'agent ne rapporte que ce qui a changé depuis le commit de ma dernière
 review, et la validation commence par mes fils non résolus — réponse de l'auteur ou code
-modifié, avec pour chacun **résoudre**, **répondre** (texte tel qu'il sera posté) ou
-**laisser**. Après validation, réponses (`addPullRequestReviewThreadReply`) et
-résolutions (`resolveReviewThread`) sont faites en plus de la review des nouveaux points.
+modifié, avec pour chacun le statut proposé et l'action qui va avec : **résoudre**
+(statut réglé), **répondre** (texte tel qu'il sera posté ; en discussion) ou **laisser**
+(ouvert) ; les points de mon suivi sans fil suivent la même règle. Après validation,
+réponses (`addPullRequestReviewThreadReply`) et résolutions (`resolveReviewThread`) sont
+faites en plus de la review des nouveaux points.
+
+**Retours des autres** : les fils non résolus et suivis des autres relecteurs sont lus
+à chaque relecture, avec leur conseil (celui de leur suivi, sinon leur préfixe, sinon
+évalué) ; montrés pour information à la validation, donnés à l'agent pour ne pas les
+redire, et pris en compte pour l'approbation.
+
+**Suivi** : après chacune de mes relectures qui publie quelque chose (review,
+approbation, réponses ou résolutions), le commentaire de [suivi](#pr-expectations) est
+créé (`addComment`) ou mis à jour (`updateIssueComment`) : anciens points avec leurs
+statuts validés, nouveaux points ouverts, chacun relié à son fil, et ce qui reste (une
+approbation sans point le dit). Le compte rendu donne son lien.
 
 `review-post <pr> <review.json> [--approve] [--replace-pending] [--dry-run]` (`bin/`, dans le PATH de
 l'outil Bash) évite les deux échecs vus en publiant par `gh api` (constat 2 de
@@ -1708,6 +1731,14 @@ conteste, explique sans changer le code ou pose une question restent ouverts pou
 relecteur, comme tous les fils si rien n'a été poussé. Une norme du dépôt qui réserve la
 résolution au relecteur l'emporte.
 
+Les **suivis** des relecteurs (commentaires `<!-- review:suivi -->`, voir
+[PR expectations](#pr-expectations)) donnent le conseil de chaque fil, et leurs points
+sans fil encore ouverts sont traités comme des fils (réponse groupée en commentaire de la
+PR). Chaque réponse commence par le statut annoncé : « ✅ Corrigé dans `<sha>` », « 💬 »
+et la justification, ou « 📌 Reporté : <lien> » — reporter exige le lien d'un ticket ou
+d'une issue (le brouillon du ticket est proposé, le lien demandé à la validation) ; un
+fil reporté avec son lien est résolu.
+
 Retours arrivés en cours de session (une deuxième review après l'analyse) : les fils sont
 relus au début de l'exécution puis juste avant la relance. Un fil absent de l'analyse (ou
 un fil analysé qui a reçu un nouveau commentaire d'un relecteur) arrête l'exécution, qui
@@ -1718,7 +1749,14 @@ Relance automatique : avec *Corriger, répondre et pousser*, une fois **tous** l
 résolus pris en compte (corrigés ou répondus, aucun laissé de côté, aucun échec), la review
 est redemandée (`gh pr edit --add-reviewer`) aux relecteurs dont la dernière review n'est
 pas une approbation (changements demandés, commentaires, review écartée), hors bots et hors
-demandes déjà en attente. Sinon, aucune relance, et le compte rendu dit pourquoi.
+demandes déjà en attente. Sinon, aucune relance, et le compte rendu dit pourquoi. Les
+points de suivi sans fil comptent comme des fils : tous traités, sinon pas de relance.
+
+Compte rendu : un tableau lisible par un humain, une ligne par sujet — conseil, statut
+(✅ corrigé, ✔️ déjà fait, 📌 reporté avec le lien du ticket ou de l'issue, 💬 répondu,
+❌ rejeté, ⏸️ laissé de côté, 🆕 nouveau), comment (ce qui a changé et le commit,
+l'argument, fil résolu ou laissé ouvert) —, puis les liens des réponses et la relance (ou
+pourquoi aucune).
 
 #### `review-watch`, `/review:pr-auto`, `/review:feedback-auto`
 

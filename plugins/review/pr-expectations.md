@@ -103,6 +103,48 @@ requise.
 3. **L'évaluation de l'agent** (`criticite`) sinon, en quelques lignes : niveau, zones,
    retour arrière.
 
+## Le suivi des points
+
+Chaque point d'une review publiée par `/review:pr` a un **statut**, tenu dans un
+commentaire de suivi de la PR, un par relecteur, créé à sa première relecture et
+maintenu à chacune des suivantes.
+
+| Statut | Quand | Fil |
+|---|---|---|
+| ⏳ ouvert | ni correction ni réponse qui le règle | ouvert |
+| ✅ corrigé | correction poussée, **vérifiée** dans le code de la tête de la PR (commit cité) | résolu |
+| 💬 justifié | l'auteur explique pourquoi garder l'actuel, et le relecteur est convaincu | résolu |
+| ☑️ accepté tel quel | point `optionnel` ou `discutable` (ou critère d'exigence `faible`) que l'auteur décline | résolu |
+| 📌 reporté | traité hors de la PR, avec le **lien d'un ticket ou d'une issue** ; sans lien, il reste ouvert | résolu |
+| 🗨️ en discussion | l'auteur a répondu, le relecteur n'est pas convaincu (ou attend une précision) | ouvert |
+
+- **Le relecteur fait foi** : `/review:pr` établit les statuts, à la première review puis à
+  chaque reprise. L'auteur ne peut pas modifier le commentaire d'un autre ; il annonce ses
+  statuts dans ses réponses de fil (`/review:feedback` : « ✅ Corrigé dans `<sha>` »,
+  « 💬 … », « 📌 Reporté : <lien> »), que la reprise vérifie.
+- **Réglé** = corrigé, justifié, accepté tel quel ou reporté. **Reste** = ouvert ou en
+  discussion, compté par conseil (bloquant, recommandé, autres).
+- **Le commentaire**, dans la langue de la PR, commence par `<!-- review:suivi -->` (et
+  est écrit par le relecteur : c'est ainsi qu'on retrouve le sien) :
+
+  ```
+  <!-- review:suivi -->
+  **Suivi de la review** — à `<sha court de la tête>`, <date>
+  | # | Point | Conseil | Statut |
+  |---|---|---|---|
+  | 1 | [`api.ts:42`](<lien du fil>) null non géré | bloquant | ✅ corrigé (`e4f5a6b`) |
+  | 2 | Message du commit `a1b2c3d` | recommandé | ⏳ ouvert |
+  **Reste** : 1 recommandé — approbation dès qu'aucun bloquant ni recommandé ne reste.
+  ```
+
+  Un point sans fil (écart dans le corps de la review) renvoie à la review. Rien ne reste :
+  « **Reste** : rien ».
+- **Approbation** (`/review:pr`) : pas tant qu'un point bloquant, indispensable ou
+  recommandé reste ouvert ou en discussion — dans mon suivi comme dans les retours des
+  autres relecteurs (leurs fils non résolus, leurs suivis).
+- **Relance côté auteur** (`/review:feedback`) : pas tant que tous les fils et points de
+  suivi ne sont pas traités (corrigés ou répondus).
+
 ## Rassembler les normes (le skill, pas l'agent)
 
 L'agent part d'un contexte neuf : il ne voit pas les instructions de la session. Le skill
