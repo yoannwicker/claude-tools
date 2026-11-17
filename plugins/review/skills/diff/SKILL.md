@@ -23,13 +23,14 @@ ajouté ou modifié.
 - Le ticket : lire `${CLAUDE_SKILL_DIR}/../../ticket.md` et le suivre (branche courante,
   PR de la branche s'il y en a une, commits de la plage).
 - Les normes : lire `${CLAUDE_SKILL_DIR}/../../pr-expectations.md` et rassembler les normes en
-  vigueur (*Rassembler les normes* ; base = la base retenue ci-dessus).
+  vigueur et les niveaux d'exigence (*Rassembler les normes* ; base = la base retenue
+  ci-dessus).
 
 ## 2. La revue
 
 Lancer l'agent `review:reviewer` (outil Agent) avec : la plage, « working tree inclus »,
 les fichiers non suivis à lire en entier, la piste `--refacto` s'il y en a une, le
-ticket s'il y en a un, le bloc « Normes », et la PR de la branche s'il y en a une (numéro,
+ticket s'il y en a un, les blocs « Normes » et « Exigences », et la PR de la branche s'il y en a une (numéro,
 titre, brouillon ou non). Il rend du JSON.
 
 Puis **vérifier chaque constat** contre le code (lire la ligne et son contexte) : écarter
@@ -38,12 +39,14 @@ renommage du cas D, voir l'agent), et au-delà de 3 refactorings. Écart au tick
 comme non justifié : vérifier qu'aucune justification n'existe vraiment (description de
 la PR, commentaires du ticket, commits). Dire combien ont été écartés et pourquoi, en une
 ligne. Écart de `messages` : vérifier la norme citée et que le commit n'est pas un
-`fixup!`/`squash!`/`amend!`.
+`fixup!`/`squash!`/`amend!`. Conseil qui ne suit pas le niveau d'exigence de son critère
+(*Le niveau d'exigence*) : le corriger.
 
 ## 3. La validation
 
 Lire `${CLAUDE_SKILL_DIR}/../../validation.md` et le suivre. En tête, avant la liste :
-le résumé de l'agent, la couverture du ticket et ses écarts justifiés (pour information,
+les exigences appliquées (critères `élevé` et `faible`, chacun déclaré ou déduit avec
+sa source ; « tous normal » sinon), le résumé de l'agent, la couverture du ticket et ses écarts justifiés (pour information,
 avec la source), et la proposition de découpage s'il y en a une (point `🔎`). Chaque écart
 non justifié est un point `🔎` : écart voulu → justification à écrire, sinon → code à
 corriger (faire ce qui manque, retirer l'ajout, revenir à la demande). Chaque écart de
@@ -72,5 +75,7 @@ Rien de retenu : le dire et s'arrêter.
 - Écart de `messages` : montrer le message corrigé et proposer `/git-tidy:commits` pour
   reformuler le commit ; pour la PR, le titre ou la description corrigés à reporter. Ne
   rien réécrire ni poster soi-même.
+- Niveaux d'exigence déduits : proposer le texte à ajouter à la section d'exigences du
+  dépôt (ou de la créer), sans l'écrire sans accord.
 - Fin : liste des fichiers modifiés et des points écartés, puis rappeler de relire le
   diff (`git diff`).

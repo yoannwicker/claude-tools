@@ -48,7 +48,7 @@ dernier mot est gardé mais marqué `↩ répondu` (souvent en attente du relect
 ## 3. L'analyse
 
 Lire `${CLAUDE_SKILL_DIR}/../../pr-expectations.md` et rassembler les normes en vigueur
-(*Rassembler les normes*, à la version de `baseRefName`) ; le tri et les corrections
+et les niveaux d'exigence (*Rassembler les normes*, à la version de `baseRefName`) ; le tri et les corrections
 suivent *Dans `/review:feedback`*.
 
 Pour chaque fil : lire toute la conversation et le code concerné (version actuelle ;

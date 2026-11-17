@@ -1503,12 +1503,23 @@ sujet. Le skill rassemble les normes du dépôt et de la session, sans viser un 
 particulier, et les transmet à l'agent ; le dépôt l'emporte. La branche est jugée comme du
 travail en cours : diff d'ensemble, commits `fixup!` acceptés.
 
+**Niveau d'exigence** : le dépôt déclare dans ses instructions, critère par critère
+(fiabilité des données, contrat, réversibilité, sécurité, robustesse, performance,
+traçabilité, maintenabilité, tests, UX, documentation), un niveau `faible`, `normal` ou
+`élevé`, avec son pourquoi et des surcharges par chemin. Un critère non déclaré est
+déduit du reste du contexte (README, instructions, glossaire, ADR, ticket, session) sur un
+fait écrit, source citée, sinon `normal` ; les niveaux déduits sont montrés à la
+validation, et la revue propose le texte qui les déclarerait. Chaque constat porte son
+critère : en `faible`, seul un défaut avéré compte (pas de `[nit]`) ; en `élevé`, l'agent
+cherche activement et tout manque de garde-fou est indispensable. Ce que la CI garantit
+déjà n'est pas relu.
+
 #### Agent `reviewer`
 
 Lancé par `/review:diff` et `/review:pr` (`review:reviewer`), en lecture seule (Bash
 limité par consigne à `git`/`gh` en lecture). Rend du JSON : résumé, proposition de
 découpage éventuelle, conformité au ticket, écarts aux normes de commit et de PR, constats
-(`fichier:ligne` côté nouveau, conseil, gravité, catégorie `bug`/`securite`/`tests`/`conformite`/`lisibilite`/`refactoring`/`coherence`, scénario d'échec,
+(`fichier:ligne` côté nouveau, conseil, gravité, critère d'exigence, catégorie `bug`/`securite`/`tests`/`conformite`/`lisibilite`/`refactoring`/`coherence`, scénario d'échec,
 suggestion, à approfondir ou non), remarques non ancrées. Chaque constat est revérifié
 contre le code par le skill avant d'être montré. Juge contre [les PR expectations](#pr-expectations), avec
 le bloc « Normes » transmis par le skill.

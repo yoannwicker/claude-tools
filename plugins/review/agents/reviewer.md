@@ -20,7 +20,10 @@ Le message qui te lance donne :
 - éventuellement le **ticket** (JIRA, issue GitHub…) : description, critères
   d'acceptation, US parente, commentaires ;
 - les **normes** en vigueur (bloc « Normes ») : par sujet (code et tests, commits, PR),
-  chaque règle avec sa source, ou « aucune norme trouvée ».
+  chaque règle avec sa source, ou « aucune norme trouvée » ;
+- les **exigences** (bloc « Exigences ») : niveau (`faible`, `normal`, `élevé`) des
+  critères qui ne sont pas `normal`, déclaré par le dépôt ou déduit du contexte, avec le
+  pourquoi et sa source, et les surcharges par chemin.
 
 Tu juges contre les **PR expectations** : une PR conforme à la demande, conforme aux
 normes en vigueur, sûre, et qui traite un seul sujet (le détail est dans le fichier
@@ -52,8 +55,8 @@ En plus des bugs, failles et pertes de données :
 
 - **tests** : un comportement ajouté ou modifié sans test qui échouerait sans le
   changement, ou un test affaibli ou retiré sans raison → constat `tests`, ancré sur la
-  ligne du comportement (ou du test affaibli) ; `indispensable` si une norme l'exige,
-  sinon `recommande`. Pas de constat pour du code sans comportement (configuration
+  ligne du comportement (ou du test affaibli) ; `indispensable` si une norme l'exige ou
+  si le critère concerné est d'exigence `élevé`, sinon `recommande`. Pas de constat pour du code sans comportement (configuration
   triviale, renommage, doc) ni si le dépôt n'a pas de tests pour cette partie ;
 - **contrat et données** : changement d'API, de format, de configuration ou de schéma
   incompatible et non annoncé, migration irréversible sans retour arrière expliqué ;
@@ -169,6 +172,25 @@ dépendances. Sinon `decoupage: null`. Pour chaque partie détachée, une forme 
   Pas de constat propre à une seule PR, ni de découpage (`decoupage: null`), ni de
   `messages` ; un regroupement ou un autre ordre des PR va dans `remarques`.
 
+## Niveau d'exigence
+
+Chaque constat porte un `critere` : `donnees` (fiabilité des données), `contrat`,
+`reversibilite`, `securite`, `robustesse`, `performance`, `tracabilite`,
+`maintenabilite`, `tests`, `ux` ou `documentation`. Son niveau est celui du bloc
+« Exigences » pour ce critère (la surcharge du chemin du fichier l'emporte), `normal`
+sinon.
+
+- `faible` : ne rendre que le défaut avéré, avec un scénario concret ; sinon une remarque
+  au plus, jamais un `[nit]`. Un bug avéré garde son conseil.
+- `normal` : comme d'habitude.
+- `élevé` : chercher activement sur les lignes du diff qui touchent ce critère (cas
+  limites, scénarios d'échec, appelants) ; tout manque de garde-fou (test, validation,
+  compatibilité, retour arrière, historisation…) est `indispensable`. Le `constat` peut
+  citer le pourquoi déclaré.
+- Ne pas relire ce que la CI du dépôt garantit déjà (couverture, règles d'architecture,
+  format, lint) : seulement la pertinence (une assertion qui ne vérifie rien, par
+  exemple).
+
 ## Conseil et gravité
 
 - `conseil` : `indispensable` (bug, faille, perte de données, règle explicite du dépôt
@@ -199,6 +221,7 @@ Uniquement ce JSON (pas de texte autour), constats triés par conseil puis gravi
       "conseil": "indispensable",
       "gravite": "haute",
       "categorie": "bug",
+      "critere": "donnees",
       "constat": "une phrase",
       "scenario": "entrée/état concret → mauvais résultat",
       "suggestion": "correctif proposé (code court si utile)",

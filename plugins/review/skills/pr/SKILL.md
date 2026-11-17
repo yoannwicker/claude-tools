@@ -74,12 +74,13 @@ validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalem
   (`headRefName`, titre et description de la PR, messages de ses commits) ; un ticket
   commun n'est lu qu'une fois.
 - Les normes : lire `${CLAUDE_SKILL_DIR}/../../pr-expectations.md` et rassembler les normes en
-  vigueur (*Rassembler les normes*, à la version de `baseRefName`), une fois pour le lot.
+  vigueur et les niveaux d'exigence (*Rassembler les normes*, à la version de
+  `baseRefName`), une fois pour le lot.
 
 ## 2. La revue
 
 Lancer l'agent `review:reviewer` (outil Agent) avec : « PR #<n> », `headRefOid`, la piste
-`--refacto` s'il y en a une, le ticket s'il y en a un, le bloc « Normes », et si la PR
+`--refacto` s'il y en a une, le ticket s'il y en a un, les blocs « Normes » et « Exigences », et si la PR
 est en brouillon (`isDraft`). Il rend du JSON. Reprise : lui
 donner aussi le commit de ma dernière review (« déjà relue à <oid> : ne rapporter que ce
 qui a changé depuis, et ce que je n'avais pas vu de bloquant ») et mes fils non résolus
@@ -96,7 +97,8 @@ aussi l'autre côté (`autre`) et vérifier que le conflit ou la dépendance exi
 doublon d'un constat d'une PR → n'en garder qu'un. Écart au ticket donné comme non
 justifié : vérifier qu'aucune justification n'existe vraiment (description, commentaires
 du ticket, commits). Écart de `messages` : vérifier la norme citée et que le commit
-n'est pas un `fixup!`/`squash!`/`amend!`. Dire combien ont été écartés et pourquoi, en une
+n'est pas un `fixup!`/`squash!`/`amend!`. Conseil qui ne suit pas le niveau d'exigence
+de son critère (*Le niveau d'exigence*) : le corriger. Dire combien ont été écartés et pourquoi, en une
 ligne.
 
 ## 3. La validation
@@ -107,8 +109,8 @@ pour #<n> (<risque>, <source>) et pas encore faite : relis toi-même le diff ava
 poster` — en citant les fichiers ou zones les plus sensibles du diff à regarder d'abord —,
 puis demander (`AskUserQuestion`, header « Relecture ») : **Je l'ai faite, continuer** /
 **Je la ferai après, continuer** / **Arrêter ici** (rien n'est posté, passer au ménage).
-Puis : le résumé de
-l'agent, la couverture du ticket et ses écarts justifiés (pour information, avec la
+Puis : les exigences appliquées (critères `élevé` et `faible`, chacun déclaré ou déduit avec
+sa source ; « tous normal » sinon), le résumé de l'agent, la couverture du ticket et ses écarts justifiés (pour information, avec la
 source), et la proposition de découpage s'il y en a une. Chaque écart non justifié est
 un point `🔎` : demander à l'auteur de le justifier (ce qui change par rapport au ticket et
 pourquoi, dans la description de la PR ou en commentaire du ticket) ou de revenir à la
@@ -183,6 +185,8 @@ review par PR qui a des points gardés ou dont l'approbation a été choisie (lo
 
   et pour chaque fil **résoudre** (je suis le relecteur : c'est à moi de le faire) :
   `gh api graphql -f query='mutation($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { isResolved } } }' -F id=<thread id>`.
+- Niveaux d'exigence déduits : proposer le texte à ajouter à la section d'exigences du
+  dépôt (ou de la créer), sans rien écrire ni poster.
 - Fin : l'URL de chaque review (approuvée ou non), le nombre de commentaires inline et
   passés dans le corps ;
   reprise : les fils répondus et résolus ; relecture humaine requise et répondue « Je la
