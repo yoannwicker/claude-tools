@@ -25,7 +25,7 @@ ajouté ou modifié.
 - La criticité (*La criticité* de `pr-expectations.md`) : déjà donnée si la PR de la
   branche (`gh pr view --json body,comments`), un message de commit ou le ticket donne un
   niveau de risque ou de criticité ; sinon noter si un skill de la session évalue le
-  risque d'une PR.
+  risque d'une PR (proposé à l'étape 5).
 - Les normes : lire `${CLAUDE_SKILL_DIR}/../../pr-expectations.md` et rassembler les normes en
   vigueur et les niveaux d'exigence (*Rassembler les normes* ; base = la base retenue
   ci-dessus).
@@ -81,15 +81,21 @@ Rien de retenu : le dire et s'arrêter.
 - Écart de `messages` : montrer le message corrigé et proposer `/git-tidy:commits` pour
   reformuler le commit ; pour la PR, le titre ou la description corrigés à reporter. Ne
   rien réécrire ni poster soi-même.
-- Criticité, si rien ne la donnait, quel que soit son niveau : donner le risque de la PR
-  pour sa description.
-  - Un skill de la session évalue le risque d'une PR → proposer de le lancer (s'il
-    publie sur une PR, seulement sur accord) ; c'est son résultat qui sert.
-  - Sinon, l'évaluation de l'agent : proposer le paragraphe à mettre dans la description
-    de la PR (« Criticité : <niveau> », zones à relire et ce qui peut y casser, retour
-    arrière ; pour `haute` ou `contexte_manquant`, « relecture humaine conseillée » et ce
-    qui manque), sans l'écrire.
 - Niveaux d'exigence déduits : proposer le texte à ajouter à la section d'exigences du
   dépôt (ou de la créer), sans l'écrire sans accord.
 - Fin : liste des fichiers modifiés et des points écartés, puis rappeler de relire le
   diff (`git diff`).
+
+## 5. La criticité
+
+Une fois les retours traités, si rien ne donnait la criticité (étape 1), quel que soit
+son niveau : demander (`AskUserQuestion`, header « Criticité ») s'il faut évaluer le
+risque de la PR maintenant — **Évaluer (Recommandé)** / **Plus tard**. Sur accord :
+
+- un skill de la session évalue le risque d'une PR → le lancer (sur la PR de la branche
+  s'il en faut une ; s'il publie sur la PR, c'est son résultat qui sert) ;
+- sinon, l'évaluation du plugin : celle de l'agent (étape 2), mise à jour des
+  corrections appliquées (un danger levé par une correction n'y figure plus) — proposer
+  le paragraphe à mettre dans la description de la PR (« Criticité : <niveau> », zones à
+  relire et ce qui peut y casser, retour arrière ; pour `haute` ou `contexte_manquant`,
+  « relecture humaine conseillée » et ce qui manque), sans l'écrire.

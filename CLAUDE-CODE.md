@@ -1522,10 +1522,11 @@ par la PR ou un message (repris, rien de plus n'est publié) ; sinon un skill de
 qui évalue le risque d'une PR, lancé à la publication ; sinon l'évaluation de l'agent.
 `/review:pr` la met en tête de la validation (alerte de relecture humaine) et, si la PR
 n'en donnait pas et sans skill, en tête du corps de la review ; `/review:diff`, si rien
-ne la donnait, donne le risque de la PR pour sa description, quel que soit le niveau :
-il propose de lancer le skill de la session, sinon le paragraphe « Criticité » tiré de
-l'évaluation de l'agent (niveau, zones, retour arrière, et « relecture humaine
-conseillée » quand elle est haute ou le contexte manquant).
+ne la donnait, quel que soit le niveau, demande une fois les retours traités s'il faut
+évaluer le risque de la PR : par le skill de la session s'il y en a un, sinon par le
+plugin, avec le paragraphe « Criticité » tiré de l'évaluation de l'agent mise à jour des
+corrections (niveau, zones, retour arrière, et « relecture humaine conseillée » quand
+elle est haute ou le contexte manquant), à mettre dans la description de la PR.
 
 **Suivi des points** : chaque point posté par `/review:pr` a un statut — ⏳ ouvert,
 ✅ corrigé (vérifié dans le code), 💬 justifié, ☑️ accepté tel quel (optionnel ou
