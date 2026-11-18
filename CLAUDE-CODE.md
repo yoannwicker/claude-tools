@@ -1554,7 +1554,8 @@ le bloc « Normes » transmis par le skill.
 - **Sûr** : comportement ajouté ou modifié sans test (ou test affaibli) → constat
   `tests` ; contrat, données ou vérification de CI touchés sans précaution.
 - **Commits et PR** : écarts aux normes de commit et de PR, rendus dans `messages` et
-  montrés comme des points (`commit <sha>` ou `PR`).
+  montrés comme des points (`commit <sha>` ou `PR`), conseil recommandé au plus, jamais
+  bloquant pour l'approbation.
 - **Conformité au ticket** : si `/review:diff` ou `/review:pr` a trouvé un ticket
   (`ticket.md` : clé JIRA ou issue GitHub dans la branche, le titre, la description de la
   PR ou les commits ; lu avec ses commentaires et l'US parente), le diff est comparé à la
@@ -1642,7 +1643,11 @@ recommandé — fils non résolus, suivis, demande de changements non suivie), q
 n'est pas en brouillon et que la relecture humaine requise, s'il y en a une, est faite,
 le skill propose d'approuver (CI citée ; rouge, il recommande de commenter seulement). Les
 points optionnels et les questions partent avec l'approbation ; rien de retenu donne une
-approbation sans commentaire.
+approbation sans commentaire. Les points sur le contenu des commits ou de la PR (message,
+titre, description) sont au plus recommandés et **ne bloquent pas** l'approbation (ni les
+miens, ni ceux des autres relecteurs, même marqués `[bloquant]`) : approuvée malgré
+eux, son message les rappelle (« à reprendre avant merge si possible »), et le suivi les
+compte à part comme non bloquants.
 
 **Relecture humaine** : si la [criticité](#pr-expectations) — donnée par la PR (bot ou
 humain, dans sa description ou un commentaire), sinon évaluée par l'agent — demande une
@@ -1719,7 +1724,9 @@ analysé avec son code (fils obsolètes revérifiés) et classé par conseil sel
 **solution** (correctif précis), **options** (2-3, compromis, recommandation), **à
 discuter** (arbitrage métier, désaccord, impact large : ce qui fait hésiter et une
 réponse proposée) ou **déjà fait**, plus la réponse prévue sur le fil. Options et « à
-discuter » sont validés un par un.
+discuter » sont validés un par un. Un retour sur le contenu des commits ou de la PR
+(message, titre, description) est recommandé au plus, même marqué `[bloquant]` par le
+relecteur.
 
 Puis, au choix : *Corriger, répondre et pousser* (recommandé), *Corriger et répondre, sans
 pousser*, *Corriger seulement*. Corrections seulement sur la branche de la PR (sinon

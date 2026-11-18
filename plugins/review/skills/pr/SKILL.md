@@ -1,6 +1,6 @@
 ---
 name: pr
-description: Relire la PR d'un collègue — ou plusieurs PR liées ensemble (pile de PR, même sujet), avec la cohérence entre elles — avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub par PR (COMMENT, ou approbation proposée quand plus rien d'indispensable ni de recommandé ne reste), tenir le commentaire de suivi des points (statut de chacun) à jour, et enfin supprimer les worktrees et branches créés pour la revue s'il y en a
+description: Relire la PR d'un collègue — ou plusieurs PR liées ensemble (pile de PR, même sujet), avec la cohérence entre elles — avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub par PR (COMMENT, ou approbation proposée quand plus rien d'indispensable ni de recommandé ne reste, hors messages de commit et de PR qui ne bloquent pas), tenir le commentaire de suivi des points (statut de chacun) à jour, et enfin supprimer les worktrees et branches créés pour la revue s'il y en a
 argument-hint: "<numéro… | recherche> [--refacto \"<piste>\"] [--prepare]"
 disable-model-invocation: true
 allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree, Skill
@@ -171,19 +171,24 @@ tableau relecteur → point (`chemin:ligne` ou « corps ») → conseil (et sa s
 préfixe, ou mon évaluation) → statut.
 
 **Approbation**, une fois la validation finie, PR par PR : proposée seulement si
-- aucun point gardé n'est `indispensable` ni `recommandé` (nouveau point, écart au ticket,
-  écart aux normes de commit ou de PR), et aucun découpage n'est gardé ;
+- aucun point gardé n'est `indispensable` ni `recommandé` (nouveau point, écart au
+  ticket), et aucun découpage n'est gardé ;
 - reprise : aucun point de mon suivi ni de mes fils ne reste (ouvert ou en discussion)
   sur un point indispensable ou recommandé, après les statuts validés ;
 - aucun retour des autres encore ouvert n'est bloquant, indispensable ni recommandé ;
   sinon le dire (relecteur et point) au lieu de proposer l'approbation ;
+- les points sur le contenu des commits ou de la PR (écarts aux normes de commit ou de
+  PR, les miens comme ceux des autres, même marqués `[bloquant]`) ne comptent
+  pas dans ces conditions (*Messages non bloquants* de `pr-expectations.md`) ;
 - la PR n'est pas en brouillon ;
 - relecture humaine requise (étape 3) : seulement si j'ai répondu **Je l'ai faite**.
 
 Alors demander (`AskUserQuestion`, header « Approuver »), en citant l'état de la CI
 (`gh pr checks <n>` : vert, en cours, ou rouge avec les checks en échec) :
-**Approuver (Recommandé)** — les points gardés (optionnels, questions) partent avec
-l'approbation — / **Commenter seulement**. CI rouge : **Commenter seulement** passe en
+**Approuver (Recommandé)** — les points gardés (optionnels, questions, messages de
+commit ou de PR) partent avec l'approbation, dont le message rappelle les points de
+message encore ouverts (« Approuvée — à reprendre avant merge si possible : commit
+`a1b2c3d` (…), titre de la PR (…) ») — / **Commenter seulement**. CI rouge : **Commenter seulement** passe en
 premier et devient la recommandation. Sinon, pas de question : la review reste un
 commentaire.
 

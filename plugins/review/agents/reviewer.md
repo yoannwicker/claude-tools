@@ -77,8 +77,8 @@ travail : l'historique n'est pas final.
 - **PR** (titre et description) : selon les normes de PR (format du titre, sections du
   template, ticket lié…). PR en brouillon : titre ou description incomplets → une
   remarque, pas un écart.
-- Chaque écart va dans `messages`, conseil `recommande` (`indispensable` seulement si la
-  norme est bloquante, ex. une référence exigée pour la traçabilité), jamais dans
+- Chaque écart va dans `messages`, conseil `recommande` (jamais `indispensable` : un écart
+  de message ne bloque pas l'approbation, voir *Le suivi des points*), jamais dans
   `constats` (pas de ligne de code).
 
 ### Conformité au ticket
@@ -269,7 +269,7 @@ couvre de la demande, en 1-2 phrases", "ecarts": [{"type": "ajout|retrait|change
 `messages`, écarts aux normes de commit et de PR : `[{"cible": "commit <sha court> |
 pr", "sujet": "sujet du commit ou titre de la PR", "ecart": "une phrase", "norme": "la
 règle et sa source", "suggestion": "message ou texte corrigé", "conseil":
-"indispensable|recommande"}]`. Vide si rien ou si aucune norme de commit ni de PR.
+"recommande"}]`. Vide si rien ou si aucune norme de commit ni de PR.
 
 `decoupage`, s'il y a lieu : `{"raison": "…", "ticket": "ABC-123 ou null", "parties":
 [{"sujet": "…", "fichiers": ["…"], "ordre": 1, "depend_de": [], "forme": "commit|pr|us",

@@ -134,7 +134,7 @@ maintenu à chacune des suivantes.
   |---|---|---|---|
   | 1 | [`api.ts:42`](<lien du fil>) null non géré | bloquant | ✅ corrigé (`e4f5a6b`) |
   | 2 | Message du commit `a1b2c3d` | recommandé | ⏳ ouvert |
-  **Reste** : 1 recommandé — approbation dès qu'aucun bloquant ni recommandé ne reste.
+  **Reste** : 1 recommandé (message, non bloquant) — approbation possible.
   ```
 
   Un point sans fil (écart dans le corps de la review) renvoie à la review. Rien ne reste :
@@ -142,6 +142,11 @@ maintenu à chacune des suivantes.
 - **Approbation** (`/review:pr`) : pas tant qu'un point bloquant, indispensable ou
   recommandé reste ouvert ou en discussion — dans mon suivi comme dans les retours des
   autres relecteurs (leurs fils non résolus, leurs suivis).
+- **Messages non bloquants** : un point sur le contenu des commits ou de la PR (message de
+  commit, titre, description) est au plus `recommandé` et ne bloque jamais l'approbation,
+  qu'il vienne de moi ou d'un autre relecteur, même marqué `[bloquant]`. Approuvée avec
+  de tels points ouverts, l'approbation les rappelle dans son message (« Approuvée — à
+  reprendre avant merge si possible : … »), et le suivi les compte à part (« **Reste** : 1 recommandé (message, non bloquant) »).
 - **Relance côté auteur** (`/review:feedback`) : pas tant que tous les fils et points de
   suivi ne sont pas traités (corrigés ou répondus).
 
@@ -200,7 +205,10 @@ Les *PR expectations* servent à trier les retours reçus et à les corriger :
 - retour de goût, sans norme ni conséquence concrète → `discutable` ;
 - retour sur un critère d'exigence `faible`, sans défaut avéré → `discutable`, réponse
   qui l'accepte tel quel en citant l'exigence ; sur un critère `élevé` → au moins
-  `recommandé`.
+  `recommandé` ;
+- retour sur le contenu des commits ou de la PR (message de commit, titre, description)
+  → `recommandé` au plus, même appuyé sur une norme ou marqué `[bloquant]` (bloquant
+  dans le suivi) par le relecteur (*Messages non bloquants*).
 
 Une correction respecte les *PR expectations* : un bug signalé est corrigé avec un test qui le couvre ;
 une demande qui fait sortir du ticket est un écart à justifier (texte proposé pour la

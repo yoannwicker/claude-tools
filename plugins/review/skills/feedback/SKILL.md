@@ -68,6 +68,9 @@ Pour chaque fil : lire toute la conversation et le code concerné (version actue
   (la citer dans la réponse) ; discutable si elle se défend mais que l'actuel aussi, ou si
   c'est du goût sans conséquence concrète ; très contestable si la demande va contre une
   norme du dépôt ou une décision documentée (la réponse cite la norme plutôt qu'un avis) ;
+  un retour sur le contenu des commits ou de la PR (message, titre, description) est
+  `recommandé` au plus, même marqué `[bloquant]` par le relecteur (*Messages non
+  bloquants* de `pr-expectations.md`) ;
 - une **suite**, selon le cas :
   - **solution** : le correctif précis (fichier, changement), quand il n'y a qu'une
     bonne réponse ;
