@@ -52,13 +52,20 @@ Mécanique commune (lancement, notifications, timer) : lib/watchlib.py du plugin
                                                écarter cet événement (gh-watch skip)
   review-watch resume [<owner/repo#n> [review_requested|feedback_received]]
                                                session préparée en fond
+  review-watch open [<owner/repo#n | n>] [--worktree]
+                                               ouvre /review:manual (relecture guidée) dans une
+                                               session séparée : pane herdr s'il tourne, sinon
+                                               terminal. Sans PR : la branche du dossier courant.
+                                               Dans le dépôt courant, ou son clone. --worktree :
+                                               worktree détaché sur la tête de la PR
+                                               (agent/review-<n>-…), pour naviguer dans le code
 
 Pris en charge seulement par le rattrapage (gh-watch board --missed, /gh-watch:board-auto),
 jamais par `poll` : l'état « answered » de gh-watch board (l'auteur d'une PR que j'ai relue
 a réagi : réponse dans un de mes fils, commentaire de la PR, fil de moi devenu obsolète),
 sous l'événement review_requested → /review:pr <n> (reprise de la relecture).
 """
-import json, os, sys
+import json, os, shlex, subprocess, sys
 
 # watchlib : plugin gh-watch (dépendance), à côté dans le même clone
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
@@ -160,6 +167,58 @@ def guess_kind(state, repo, n):
     return "feedback_received" if author["author"]["login"] == w.me(state) else "review_requested"
 
 
+def git_root(path="."):
+    r = subprocess.run(["git", "-C", path, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def open_manual(cfg, target, worktree=False):
+    """Ouvre /review:manual dans une session séparée et indépendante. Retourne une ligne."""
+    here = git_root()
+    if target:
+        with w.State() as state:
+            repo, n = w.split_target(target, state)
+            clone = here if here and (w.remote_repo(here) or "").lower() == repo.lower() \
+                else w.clone_path(cfg, state, repo)
+        if not clone:
+            w.die(f"clone introuvable : {repo} ({w.S.name} add {repo} --path <clone>)")
+        prompt, label, path = f"/review:manual {n}", f"manuelle #{n}", clone
+        if worktree:
+            pr = json.loads(w.run(["gh", "pr", "view", str(n), "--repo", repo, "--json", "title,headRefOid"]))
+            w.run(["git", "-C", clone, "fetch", "-q", "origin", f"pull/{n}/head"], check=False)
+            root = os.path.join(w.HOME, ".herdr", "worktrees") if w.herdr_running() else w.S.worktrees
+            path = w.ensure_worktree(clone, f"agent/review-{n}-{w.slug(pr['title'])}", pr["headRefOid"], root)
+    else:
+        if worktree:
+            w.die("--worktree : seulement avec une PR")
+        if not here:
+            w.die("dossier courant : pas un dépôt git")
+        prompt, label, clone, path = "/review:manual", "manuelle", here, here
+    argv = [*w.claude_cmd(cfg), prompt]
+    if w.herdr_running():
+        _, pane = w.herdr_open(clone, path, label)
+        w.run(["herdr", "pane", "run", pane, shlex.join(argv)])  # pas de JSON en retour
+        return f"{prompt} ouvert dans herdr ({path}, onglet « {label} »)"
+    cmd = w.terminal_cmd(cfg, path, argv)
+    if not cmd:
+        return f"pas de terminal trouvé : lancer dans {path} : {shlex.join(argv)}"
+    w.detach(cmd, cwd=path)
+    return f"{prompt} ouvert dans un terminal ({path})"
+
+
+def extend(sub):
+    o = sub.add_parser("open")
+    o.add_argument("target", nargs="?")
+    o.add_argument("--worktree", action="store_true")
+
+
+def handle(cfg, args):
+    if args.cmd == "open":
+        print(open_manual(cfg, args.target, args.worktree))
+        return True
+    return False
+
+
 w.configure(
     name="review-watch", env="REVIEW_WATCH", self_path=__file__,
     config="review.json",
@@ -185,4 +244,4 @@ w.configure(
 )
 
 if __name__ == "__main__":
-    w.main(__doc__, events)
+    w.main(__doc__, events, extend, handle)

@@ -3,7 +3,7 @@ name: diff
 description: Relire son propre travail avant commit ou PR (commits de la branche depuis sa base + modifications non commitées) avec l'agent reviewer — code ajouté seulement, points priorisés et validés, puis corrections appliquées sans commit
 argument-hint: "[base] [--refacto \"<piste>\"] [--decisions]"
 disable-model-invocation: true
-allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh issue view:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, Skill
+allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr edit:*), Bash(review-watch open:*), Bash(gh repo view:*), Bash(gh issue view:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, Skill
 ---
 
 Arguments : `$ARGUMENTS`
@@ -111,3 +111,17 @@ risque de la PR maintenant — **Évaluer (Recommandé)** / **Plus tard**. Sur a
   le paragraphe à mettre dans la description de la PR (« Criticité : <niveau> », zones à
   relire et ce qui peut y casser, retour arrière ; pour `haute` ou `contexte_manquant`,
   « relecture humaine conseillée » et ce qui manque), sans l'écrire.
+
+## 6. La relecture guidée
+
+Seulement si la branche a une PR et qu'une relecture humaine y est **requise**, selon la
+règle de `/review:pr` (étape 3) : la criticité donnée par la PR la demande ou est haute,
+ou, sans criticité donnée, celle de l'agent (étape 2, mise à jour des corrections) est
+`haute` ou `contexte_manquant`. Pas de PR, ou relecture non requise : ne rien proposer.
+Sinon, demander
+(`AskUserQuestion`, header « Relecture ») : **Ouvrir une relecture guidée (Recommandé)**
+— `/review:manual` sur la branche, dans une session séparée : carte du diff (endpoints,
+base, infra, fonctionnalités par risque), axes d'analyse et retours au fil de l'eau —
+/ **Non**. Sur accord : `review-watch open` (sans argument : la branche du dossier
+courant) ; absent ou en échec → donner la commande à lancer dans une nouvelle session
+(`/review:manual`).

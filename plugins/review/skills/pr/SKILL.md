@@ -3,7 +3,7 @@ name: pr
 description: Relire la PR d'un collègue — ou plusieurs PR liées ensemble (pile de PR, même sujet), avec la cohérence entre elles — avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub par PR (COMMENT, ou approbation proposée quand plus rien d'indispensable ni de recommandé ne reste, hors messages de commit et de PR qui ne bloquent pas), tenir le commentaire de suivi des points (statut de chacun) à jour, et enfin supprimer les worktrees et branches créés pour la revue s'il y en a
 argument-hint: "<numéro… | recherche> [--refacto \"<piste>\"] [--decisions] [--prepare]"
 disable-model-invocation: true
-allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree, Skill
+allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), Bash(review-watch open:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree, Skill
 ---
 
 Arguments : `$ARGUMENTS`
@@ -17,7 +17,8 @@ dans herdr avec `launch --background` : personne pour répondre) : aucune questi
 (`AskUserQuestion`) ni rien de posté. Étape 1 sans proposer la pile (la citer en une ligne si elle existe), étape 2, l'alerte de relecture humaine
 de l'étape 3 s'il y en a une (sans la question), puis le tableau de l'étape 3
 (commentaires tels qu'ils seront postés, points `🔎` listés sans les trancher), et si
-l'approbation serait proposée (étape 3, *Approbation*) ; finir par « Prêt pour la
+l'approbation serait proposée (étape 3, *Approbation* ; sinon pourquoi, relecture manuelle
+en attente comprise) ; finir par « Prêt pour la
 validation » et s'arrêter. À la reprise de la session (« Reprends à la
 validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalement.
 
@@ -68,13 +69,19 @@ validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalem
   réagi (réponse dans un de mes fils, commentaire de la PR, fil devenu obsolète), ou
   redemandée. Relever, pour l'étape 3 :
   - **mes fils non résolus** : les fils `isResolved: false` dont le premier message est
-    de moi ;
+    de moi, hors ceux des points de mon suivi manuel (ci-dessous : `/review:manual` les
+    reprend ; si l'auteur y a répondu, le dire avec « `/review:manual <n>` pour les
+    reprendre ») ;
   - **mon suivi** (*Le suivi des points* de `pr-expectations.md`) : dans `suivi`, le
     commentaire écrit par moi qui commence par `<!-- review:suivi -->` — son `id`, ses
     points et leurs statuts ; les points sans fil (corps de la review) encore ouverts s'y
     lisent aussi ;
   - **les commentaires de l'auteur** sur la PR postés après ma dernière review ;
   - **le commit de ma dernière review** (`reviews[].commit.oid`) : ce qui a changé depuis.
+- **Le suivi manuel** (*Le suivi de la revue manuelle* de `pr-expectations.md`) : dans
+  `suivi`, le commentaire écrit par moi qui commence par `<!-- review:suivi-manuel -->` —
+  son état (en cours, avec sa date ; terminée, avec ce qui reste ; abandonnée), pour
+  l'approbation.
 - **Criticité** (*La criticité* de `${CLAUDE_SKILL_DIR}/../../pr-expectations.md`) : le
   risque ou la criticité alloués à la PR, s'il y en a, sont indiqués dans sa description
   ou dans un de ses commentaires (`comments`, ou le corps d'une `reviews`), posés par un
@@ -142,7 +149,9 @@ donnée, si celle de l'agent est `haute` ou `contexte_manquant`. Requise et pas 
 faite : relis toi-même le diff avant de poster` — avec les zones à regarder d'abord
 (`criticite.zones` et ce qui peut y casser) et, pour un contexte manquant, ce qui
 manque —, puis demander (`AskUserQuestion`, header « Relecture ») : **Je l'ai faite, continuer** /
-**Je la ferai après, continuer** / **Arrêter ici** (rien n'est posté, passer au ménage).
+**Relecture guidée, continuer** (*Lancer la relecture manuelle* ci-dessous, puis la
+validation continue ; pas d'approbation) / **Je la ferai après, continuer** / **Arrêter
+ici** (rien n'est posté, passer au ménage).
 Puis : les exigences appliquées (critères `élevé` et `faible`, chacun déclaré ou déduit avec
 sa source ; « tous normal » sinon), le résumé de l'agent, la couverture du ticket et ses écarts justifiés (pour information, avec la
 source), et la proposition de découpage s'il y en a une. Chaque écart non justifié est
@@ -197,7 +206,12 @@ préfixe, ou mon évaluation) → statut.
   PR, les miens comme ceux des autres, même marqués `[bloquant]`) ne comptent
   pas dans ces conditions (*Messages non bloquants* de `pr-expectations.md`) ;
 - la PR n'est pas en brouillon ;
-- relecture humaine requise (étape 3) : seulement si j'ai répondu **Je l'ai faite**.
+- relecture humaine requise (étape 3) : seulement si j'ai répondu **Je l'ai faite** ;
+- pas de suivi manuel « en cours » (ni relecture manuelle lancée dans cette session), et
+  aucun point indispensable ou recommandé encore ouvert ou en discussion dans un suivi
+  manuel « terminé » ; sinon le dire (« ⏳ en attente de la relecture manuelle », avec son
+  âge si elle est en cours depuis plus d'un jour, et au-delà de 3 jours : la reprendre,
+  ou `/review:manual <n> --cancel` pour l'abandonner).
 
 Alors demander (`AskUserQuestion`, header « Approuver »), en citant l'état de la CI
 (`gh pr checks <n>` : vert, en cours, ou rouge avec les checks en échec) :
@@ -207,6 +221,20 @@ message encore ouverts (« Approuvée — à reprendre avant merge si possible :
 `a1b2c3d` (…), titre de la PR (…) ») — / **Commenter seulement**. CI rouge : **Commenter seulement** passe en
 premier et devient la recommandation. Sinon, pas de question : la review reste un
 commentaire.
+
+**Lancer la relecture manuelle** (`/review:manual` : carte de la PR et relecture guidée
+par axes, dans une session séparée et indépendante) :
+
+1. créer (ou repasser à « en cours ») mon suivi manuel tout de suite, pour bloquer
+   l'approbation partout : `<!-- review:suivi-manuel -->` « Relecture manuelle en cours —
+   pas d'approbation avant sa fin » et la date (`addComment`, ou `updateIssueComment`
+   s'il existe ; mutations de l'étape 4) ;
+2. `review-watch open <owner>/<repo>#<n>` : ouvre `/review:manual <n>` dans un pane
+   herdr s'il tourne, sinon dans un terminal ; absent ou en échec → donner la commande à
+   lancer dans une nouvelle session (`/review:manual <n>`).
+
+Elle n'est proposée que si une relecture humaine est requise (la question ci-dessus, et
+la fin de l'étape 4 si elle n'a été ni faite ni lancée).
 
 Rien de retenu (ni nouveau point, ni action sur mes fils) : proposer l'approbation si les
 conditions ci-dessus sont remplies (approbation sans commentaire) ; sinon, ou si elle est
@@ -218,7 +246,9 @@ Une fois la validation finie, **poster directement** (la validation vaut accord)
 review par PR qui a des points gardés, une criticité à publier (ci-dessous, sans skill)
 ou dont l'approbation a été choisie (lot : de bas en haut de la pile) :
 
-- Écrire `review.json` dans le scratchpad : `{"body": "<synthèse : résumé, écarts au ticket
+- Écrire `review.json` dans le scratchpad : `{"body": "<approbation bloquée par la
+  relecture manuelle : « ⏳ En attente de la relecture manuelle » et le lien de son suivi,
+  en tête ; synthèse : résumé, écarts au ticket
   gardés sans ligne, décisions gardées sans ligne, écarts aux normes de commit et de PR gardés, découpage proposé s'il est gardé (partie par partie : commit, PR, tâche sur l'US ou US
   séparée), remarques générales gardées ; lot : « Relue avec #84 (pile / même sujet) » et
   les points de croisement sans ligne>", "comments": [{"path", "line", "body"}…]}`
@@ -266,14 +296,17 @@ ou dont l'approbation a été choisie (lot : de bas en haut de la pile) :
     ```
 
     Approbation sans aucun point : le suivi le dit (« **Reste** : rien — approuvée à
-    `<sha>` »).
+    `<sha>` »). Approbation bloquée par la relecture manuelle : « **Reste** : … —
+    approbation en attente de la relecture manuelle ».
 - Niveaux d'exigence déduits : proposer le texte à ajouter à la section d'exigences du
   dépôt (ou de la créer), sans rien écrire ni poster.
 - Fin : l'URL de chaque review (approuvée ou non), le nombre de commentaires inline et
   passés dans le corps ;
   le lien du suivi et ce qui reste (par conseil) ; reprise : les fils répondus et
   résolus ; relecture humaine requise et répondue « Je la
-  ferai après » : le rappeler en une ligne, avec le lien de la PR.
+  ferai après » : le rappeler en une ligne, avec le lien de la PR. Dans ce cas, et seulement
+  s'il y a une relecture humaine requise : « Relecture guidée (carte de la PR, dans une
+  autre session) : `review-watch open <owner>/<repo>#<n>` ou `/review:manual <n>` ».
 
 ## 5. Le ménage (seulement si un worktree ou une branche a été créé pour la revue)
 

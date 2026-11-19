@@ -80,7 +80,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:auto-status`, `:board` et `:board-auto` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:decisions`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:auto-status`, `:board` et `:board-auto` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:decisions`, `:manual`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -1457,13 +1457,14 @@ session) — relire son propre diff (`/review:diff`), relire la PR d'un collègu
 PR liées ensemble (pile de PR, même sujet), et y poster les commentaires retenus
 (`/review:pr`), remettre en question les décisions d'une PR ou de son propre travail —
 architecture, fonctionnel, ticket — (`/review:decisions`, aussi proposée par les deux
-premiers), traiter les retours reçus sur sa PR (`/review:feedback`). Chaque point est priorisé avec un conseil et validé avant d'être
+premiers), relire soi-même une PR à l'aide d'une carte et de vues à la demande, dans une
+session séparée (`/review:manual`), traiter les retours reçus sur sa PR (`/review:feedback`). Chaque point est priorisé avec un conseil et validé avant d'être
 envoyé ou traité. Les skills ne se lancent qu'à la demande (`disable-model-invocation`),
 y compris par [`review-watch`](#review-watch-reviewpr-auto-reviewfeedback-auto), qui les lance d'office à la demande de review
 (`/review:pr-auto`) ou au retour de revue reçu sur mes PR (`/review:feedback-auto`).
 
-**Fichiers** : `plugins/review/` (`agents/{reviewer,challenger}.md`,
-`skills/{diff,pr,decisions,feedback,pr-auto,feedback-auto}/SKILL.md`, `pr-expectations.md`, `validation.md` et
+**Fichiers** : `plugins/review/` (`agents/{reviewer,challenger,mapper}.md`,
+`skills/{diff,pr,decisions,manual,feedback,pr-auto,feedback-auto}/SKILL.md`, `pr-expectations.md`, `validation.md` et
 `ticket.md` communs aux skills, `decisions.md` commun à `decisions`, `pr` et `diff`, `auto.md` commun à `pr-auto` et `feedback-auto`,
 `bin/{review-post,review-watch}`, `systemd/review-watch.{service,timer}`,
 `tests/{review-post,review-watch}.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
@@ -1543,6 +1544,12 @@ discutable décliné), 📌 reporté (seulement avec le lien d'un ticket ou d'un
 (`<!-- review:suivi -->`), avec ce qui reste par conseil. Le relecteur fait foi : il le
 crée à sa première relecture et le maintient à chacune des suivantes ; l'auteur annonce ses statuts dans ses réponses de
 fil (`/review:feedback`), que la reprise vérifie.
+
+**Suivi de la relecture manuelle** : `/review:manual` tient le sien, séparé
+(`<!-- review:suivi-manuel -->`), avec un état en plus — ⏳ en cours (posé dès le
+lancement), ✔️ terminée (remarques et statuts, ce qui reste), ✖️ abandonnée (`--cancel`).
+Tant qu'il est en cours, ou qu'un point indispensable ou recommandé y reste ouvert,
+l'approbation est bloquée (voir [`/review:manual`](#reviewmanual)).
 
 #### Agent `reviewer`
 
@@ -1636,7 +1643,9 @@ PR, commentaire du ticket, message de commit), rien n'est posté. `--decisions` 
 question au départ, *Code et décisions* recommandé s'il y a un ticket ou plus de 300
 lignes ajoutées) ajoute la [revue des décisions](#reviewdecisions) en mode auteur : agent
 `challenger` en parallèle, décisions présentées après la validation, corrections et
-choix assumés.
+choix assumés. Relecture humaine requise sur la PR de la branche (même règle que
+`/review:pr`) : la fin propose une [relecture guidée](#reviewmanual) de la branche dans une session
+séparée (`review-watch open`).
 
 #### `/review:pr`
 
@@ -1658,8 +1667,11 @@ directement**, en une review `COMMENT` (jamais de demande de changements), par
 découpage gardé, ni point de mon suivi encore ouvert ou en discussion sur un tel point à
 la reprise, ni retour d'un autre relecteur encore ouvert et bloquant, indispensable ou
 recommandé — fils non résolus, suivis, demande de changements non suivie), que la PR
-n'est pas en brouillon et que la relecture humaine requise, s'il y en a une, est faite,
-le skill propose d'approuver (CI citée ; rouge, il recommande de commenter seulement). Les
+n'est pas en brouillon, que la relecture humaine requise, s'il y en a une, est faite,
+et qu'aucune [relecture manuelle](#reviewmanual) n'est en cours ni ne laisse de point
+indispensable ou recommandé ouvert, le skill propose d'approuver (CI citée ; rouge, il
+recommande de commenter seulement). Bloquée par la relecture manuelle, la review commence
+par « ⏳ En attente de la relecture manuelle » et le suivi le dit. Les
 points optionnels et les questions partent avec l'approbation ; rien de retenu donne une
 approbation sans commentaire. Les points sur le contenu des commits ou de la PR (message,
 titre, description) sont au plus recommandés et **ne bloquent pas** l'approbation (ni les
@@ -1672,8 +1684,9 @@ humain, dans sa description ou un commentaire), sinon évaluée par l'agent — 
 relecture humaine et qu'aucun humain autre que l'auteur ne l'a encore faite (review approuvée ou avec demande de
 changements, ou commentaire qui le dit ; hors bots et hors mes reviews faites avec ce
 skill), la validation commence par une alerte (niveau, source, zones du diff à regarder
-d'abord, ce qui manque pour un contexte manquant) et demande de relire soi-même : faite, à faire après (rappel en fin de
-publication) ou arrêter sans rien poster. En `--prepare`, l'alerte est seulement affichée.
+d'abord, ce qui manque pour un contexte manquant) et demande de relire soi-même : faite,
+relecture guidée (lancée dans une session séparée, voir [`/review:manual`](#reviewmanual)),
+à faire après (rappel en fin de publication) ou arrêter sans rien poster. En `--prepare`, l'alerte est seulement affichée.
 
 Plusieurs PR (`/review:pr 83 84 85`, ou plusieurs choisies parmi les résultats de la
 recherche) forment un **lot** relu ensemble : une **pile** (base de l'une = tête d'une
@@ -1761,6 +1774,61 @@ en discuter : code, appelants, historique). Rien qui fasse sujet : une ligne.
   `$(git rev-parse --git-common-dir)/review-choices/<branche>.md`, que
   [`/git-tidy:pr-sync`](#git-tidypr-sync) et `/git-tidy:ready` reprennent dans la
   description à la création de la PR, puis suppriment.
+
+#### `/review:manual`
+
+`/review:manual [numéro | recherche] [--cancel]` : relecture humaine guidée, dans une
+**session séparée et indépendante** — de la PR d'un collègue (mode revue) ou de mon
+propre travail (mode auteur : ma PR ou ma branche). Lancée à la main, ou proposée
+**seulement quand une relecture humaine est requise sur la PR** : par `/review:pr`
+(question de relecture humaine, et ligne de fin si elle n'a été ni faite ni lancée) et
+par `/review:diff` (branche avec une PR, même règle). Elle décrit sans juger — le maximum d'information,
+concise et fidèle, pour que je repère moi-même ce qui ne va pas — et ne propose que ce
+qui a lieu d'être.
+
+- **La carte**, calculée une fois par l'agent `review:mapper` (lecture seule,
+  `agents/mapper.md`) : résumé (besoin, livré, pas fait, en plus), endpoints ajoutés ou
+  modifiés, base (migrations, colonnes, requêtes) et infra (entités, repositories,
+  config, services externes) ajoutées ou modifiées, fonctionnalités touchées triées par
+  risque — fonctionnel avant → après avec un exemple concret, technique, contrats, use
+  case (point d'entrée et chaîne des symboles modifiés), tests qui le couvrent et ce qui
+  n'est pas couvert, lignes, risques en faits, plages à lire, angles morts —,
+  refactorings (quoi, pourquoi et sa source, ce qu'ils touchent, ce qui montre que le
+  comportement est préservé), changements Hibernate / JPA par entité, chaque hunk classé
+  par nature (comportement, refactoring, déplacement, renommage, généré, format…) et par
+  couche (dont `sql` et `infra`), et la correspondance avec le ticket. Le skill vérifie le
+  bruit (`git diff -w -M`, `--color-moved`, `difft` s'il est installé) : au moindre
+  doute, un hunk reste visible.
+- **Le résumé** d'abord (taille, lignes à vraiment relire, endpoints, base, infra,
+  fonctionnalités par risque, ticket), suivi du **diff condensé** pour une petite PR
+  (moins de 150 lignes à relire), sinon des **axes d'analyse** qui ont lieu d'être.
+- **Le menu**, après chaque étape (`AskUserQuestion`) : 2 axes recommandés, *Autre axe*,
+  *Terminer*, et la case « Autre » pour **mes retours** — remarque notée avec
+  `fichier:ligne`, question à laquelle la session répond, ou numéro d'axe —, le menu
+  revenant après chacun.
+- **Les axes**, seulement s'ils ont du contenu : *Diff condensé* (code tel quel, bruit et
+  refactoring repliés), *une fonctionnalité* (la fiche), *Use case et tests* (chaîne
+  d'appels et tests, sans le code), *Refactoring* (quoi, pourquoi, ce que ça touche),
+  *Hors refactoring* (seulement ce qui change le comportement, diff algorithmique),
+  *SQL* (diff complet des migrations et requêtes, effet sur les données, réversibilité),
+  *Hibernate / infra* (diff simplifié : par entité, champ, colonne, `nullable`, relation,
+  `fetch`, `cascade`… avant → après ; repositories ; config), *Ticket*, *Exporter la carte*
+  (Markdown dans le scratchpad, grosse PR).
+- **Terminer** : en mode revue, mes remarques rédigées pour l'auteur, validées en liste,
+  postées en une review `COMMENT` (`review-post`), puis le suivi manuel « terminé » ; si
+  la revue de code est faite et que rien d'indispensable ni de recommandé ne reste, il
+  propose d'approuver. Relancé sur un suivi terminé avec des points ouverts : reprise de
+  ses fils (résoudre, répondre, laisser), que `/review:pr` lui laisse. `--cancel`
+  abandonne le suivi. En mode auteur : corrections dans le working tree (sans commit) ou
+  liste gardée.
+
+**Ouvrir la session** : `review-watch open [<owner/repo#n | n>] [--worktree]` lance
+`claude '/review:manual <n>'` dans un pane herdr s'il tourne (onglet « manuelle #n » du
+workspace du clone), sinon dans un terminal (réglage `terminal`, sinon `gnome-terminal`),
+dans le dépôt courant s'il est celui de la PR, sinon dans son clone (comme `launch`). Sans
+PR : `/review:manual` sur la branche du dossier courant. Pas de worktree par défaut (la
+relecture lit le diff et l'API) ; `--worktree` en crée un, détaché sur la tête de la PR
+(`agent/review-<n>-…`, retrouvé par le ménage), pour naviguer dans l'IDE.
 
 #### `/review:feedback`
 

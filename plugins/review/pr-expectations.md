@@ -1,4 +1,4 @@
-# PR expectations (commun à `/review:diff`, `/review:pr`, `/review:decisions` et `/review:feedback`)
+# PR expectations (commun à `/review:diff`, `/review:pr`, `/review:decisions`, `/review:manual` et `/review:feedback`)
 
 Ce qu'on attend d'une PR, et donc du développement qu'elle porte. La revue vérifie ces
 attentes de façon pragmatique, au **niveau d'exigence** que le dépôt déclare pour chaque
@@ -149,6 +149,37 @@ maintenu à chacune des suivantes.
   reprendre avant merge si possible : … »), et le suivi les compte à part (« **Reste** : 1 recommandé (message, non bloquant) »).
 - **Relance côté auteur** (`/review:feedback`) : pas tant que tous les fils et points de
   suivi ne sont pas traités (corrigés ou répondus).
+
+## Le suivi de la revue manuelle
+
+`/review:manual` (relecture humaine guidée, dans une session séparée) tient son propre
+suivi, séparé de celui de `/review:pr` : un commentaire de la PR écrit par le relecteur,
+qui commence par `<!-- review:suivi-manuel -->`. Mêmes statuts et même règle « le
+relecteur fait foi » que le suivi des points, plus un état :
+
+| État | Quand | Ce que dit le commentaire |
+|---|---|---|
+| ⏳ en cours | dès le lancement de la relecture manuelle (par `/review:manual`, ou par `/review:pr` quand je la choisis) | « Relecture manuelle en cours — pas d'approbation avant sa fin », avec la date |
+| ✔️ terminée | à la fin de chaque passage de `/review:manual` | les remarques postées avec leurs statuts, et ce qui reste ; « rien — relecture manuelle sans remarque » s'il n'y a rien |
+| ✖️ abandonnée | `/review:manual <n> --cancel` | une ligne : ne bloque plus l'approbation |
+
+```
+<!-- review:suivi-manuel -->
+**Suivi de la relecture manuelle** — terminée à `<sha court>`, <date>
+| # | Point | Conseil | Statut |
+|---|---|---|---|
+| 1 | [`api.ts:42`](<lien du fil>) cache non invalidé | recommandé | ⏳ ouvert |
+**Reste** : 1 recommandé.
+```
+
+- **Approbation** (`/review:pr` comme `/review:manual`) : pas tant que le suivi manuel est
+  « en cours », ni tant qu'un point indispensable ou recommandé y reste ouvert ou en
+  discussion. Le blocage se dit dans la review (« ⏳ En attente de la relecture
+  manuelle » et son lien) et dans le suivi des points (« approbation en attente de la
+  relecture manuelle »).
+- **Fils** : les fils des points du suivi manuel sont repris par `/review:manual`, pas par
+  `/review:pr`, qui les laisse de côté dans sa reprise (et le dit quand l'auteur y a
+  répondu : « `/review:manual <n>` pour les reprendre »).
 
 ## Choix assumés
 

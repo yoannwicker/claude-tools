@@ -43,6 +43,10 @@ cat > "$tmp/fakebin/claude" <<'EOF'
 printf '%s\n' "$PWD $*" >> "$FAKE/claude-calls"
 EOF
 printf '#!/usr/bin/env bash\necho inactive\nexit 3\n' > "$tmp/fakebin/systemctl"
+# Terminaux : jamais de vrai terminal ouvert (open, resume) ; appels notés
+for t in gnome-terminal x-terminal-emulator term; do
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$PWD $(basename "$0") $*" >> "$FAKE/term-calls"\n' > "$tmp/fakebin/$t"
+done
 chmod +x "$tmp/fakebin"/*
 export PATH=$tmp/fakebin:$PATH
 
@@ -263,5 +267,16 @@ check "migration : ancien fichier retiré, copie .bak" "absent présent" \
   "$([ -e "$XDG_CONFIG_HOME/claude-tools/review-watch.json" ] && echo présent || echo absent) $([ -e "$XDG_CONFIG_HOME/claude-tools/review-watch.json.bak" ] && echo présent || echo absent)"
 check "migration : état (dates, sessions, historique)" "2026-01-01T00:00:00Z o/r#1:review_requested o/r#1:review_requested review_requested" \
   "$(jq -r '"\(.review_requested["o/r#1"]) \(.sessions | keys[0]) \(.history[0].key) \(.history[0].kind)"' "$XDG_STATE_HOME/claude-tools/review-watch/state.json")"
+
+# 14. open : /review:manual dans une session séparée (herdr arrêté : terminal de la config)
+cfgf=$XDG_CONFIG_HOME/claude-tools/review.json
+"$bin" add o/r --path "$tmp/clone" >/dev/null
+jq '.watcher.terminal = "term"' "$cfgf" > "$cfgf.tmp" && mv "$cfgf.tmp" "$cfgf"
+term_last() { for _ in $(seq 50); do [ "$(wc -l < "$tmp/term-calls" 2>/dev/null || echo 0)" -ge "$1" ] && break; sleep 0.1; done; tail -1 "$tmp/term-calls"; }
+(cd "$tmp" && "$bin" open o/r#5 >/dev/null)
+check "open PR hors du dépôt → clone de la config" "$tmp/clone term claude /review:manual 5" "$(term_last 1)"
+(cd "$tmp/clone" && "$bin" open >/dev/null)
+check "open sans PR → branche du dossier courant" "$tmp/clone term claude /review:manual" "$(term_last 2)"
+check "open --worktree sans PR → refusé" 1 "$(cd "$tmp/clone" && "$bin" open --worktree >/dev/null 2>&1; echo $?)"
 
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }
