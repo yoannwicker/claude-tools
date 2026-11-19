@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""review-map-html — carte d'une PR (JSON de l'agent mapper) et son diff → page HTML locale.
+
+  review-map-html <carte.json> <diff.patch> <sortie.html>
+
+Lancé par /review:manual (axe « Exporter la carte »). Page autonome : résumé, endpoints,
+base, infra, une section par fonctionnalité (fiche, puis le diff de ses seuls hunks),
+refactorings, SQL, Hibernate, ticket, et le bruit replié. Les diffs sont rendus par
+diff2html (chargé depuis cdn.jsdelivr.net) ; sans réseau, ils restent lisibles en texte.
+Rien n'est publié : le fichier reste local.
+"""
+import html, json, re, sys
+
+D2H = "https://cdn.jsdelivr.net/npm/diff2html@3.4.48/bundles"
+NOISE = {"renommage", "deplacement", "genere", "format"}
+
+
+def esc(v):
+    return html.escape("" if v is None else str(v))
+
+
+def parse_diff(text):
+    """{chemin: {"head": [lignes d'en-tête], "hunks": [(ancien début, ancien nb, nouveau début, nouveau nb, [lignes])]}}"""
+    files, cur, path = {}, None, None
+    for line in text.splitlines():
+        if line.startswith("diff --git "):
+            m = re.match(r"diff --git a/(.*) b/(.*)", line)
+            path = m.group(2) if m else line
+            cur = files.setdefault(path, {"head": [line], "hunks": []})
+        elif cur is None:
+            continue
+        elif line.startswith("@@"):
+            m = re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
+            o, on, n, nn = (int(m.group(1)), int(m.group(2) or 1), int(m.group(3)), int(m.group(4) or 1)) if m else (0, 0, 0, 0)
+            cur["hunks"].append((o, on, n, nn, [line]))
+        elif cur["hunks"]:
+            cur["hunks"][-1][4].append(line)
+        else:
+            cur["head"].append(line)
+    return files
+
+
+def overlaps(hunk, h):
+    o, on, n, nn, _ = hunk
+    start, end = (o, o + max(on, 1) - 1) if h.get("ancien") else (n, n + max(nn, 1) - 1)
+    return not (h.get("fin", h.get("debut", 0)) < start or h.get("debut", 0) > end)
+
+
+def select(files, hunks):
+    """Diff unifié réduit aux hunks du diff qui recouvrent les hunks de la carte donnés."""
+    out = []
+    for path in dict.fromkeys(h["fichier"] for h in hunks):
+        f = files.get(path)
+        if not f:
+            continue
+        mine = [h for h in hunks if h["fichier"] == path]
+        kept = [hk for hk in f["hunks"] if any(overlaps(hk, h) for h in mine)]
+        if kept:
+            out += f["head"] + [l for hk in kept for l in hk[4]]
+    return "\n".join(out) + ("\n" if out else "")
+
+
+class Page:
+    def __init__(self):
+        self.parts, self.diffs = [], []
+
+    def add(self, s):
+        self.parts.append(s)
+
+    def diff(self, text, title=""):
+        if not text.strip():
+            return
+        i = len(self.diffs)
+        self.diffs.append(text)
+        self.add(f'<div class="diff" id="d{i}" data-title="{esc(title)}"><pre>{esc(text)}</pre></div>')
+
+
+def ul(items):
+    return "<ul>" + "".join(f"<li>{i}</li>" for i in items) + "</ul>" if items else ""
+
+
+def where(x):
+    f, l = x.get("fichier"), x.get("ligne")
+    return f' <code>{esc(f)}{":" + esc(l) if l else ""}</code>' if f else ""
+
+
+SIGN = {"ajoute": "+", "modifie": "~", "supprime": "−"}
+
+
+def render(carte, files):
+    p = Page()
+    r, st = carte.get("resume") or {}, carte.get("stats") or {}
+    hunks = carte.get("hunks") or []
+    feats = carte.get("fonctionnalites") or []
+    nav = [("resume", "Résumé")] + [(f"f-{f['id']}", f["nom"]) for f in feats]
+
+    p.add('<section id="resume"><h2>Résumé</h2>')
+    p.add(f'<p class="stats">{esc(carte.get("cible"))} · +{esc(st.get("ajouts"))} −{esc(st.get("suppressions"))} · '
+          f'{esc(st.get("fichiers"))} fichiers · <b>à vraiment relire : {esc(st.get("a_relire"))} lignes</b>'
+          f' (bruit : {esc(st.get("bruit"))})</p>')
+    p.add("<dl>" + "".join(f"<dt>{k}</dt><dd>{esc(r.get(v))}</dd>" for k, v in
+                           (("Besoin", "besoin"), ("Livré", "livre"), ("Pas fait", "pas_fait"), ("En plus", "hors_sujet"))
+                           if r.get(v)) + "</dl>")
+    eps = carte.get("endpoints") or []
+    if eps:
+        p.add("<h3>Endpoints</h3>" + ul([f'{SIGN.get(e.get("changement"), "")} <b>{esc(e.get("methode"))} '
+                                         f'{esc(e.get("chemin"))}</b> {esc(e.get("detail"))}{where(e)}' for e in eps]))
+    for key, title in (("base", "Base"), ("infra", "Infra")):
+        items = (carte.get("donnees") or {}).get(key) or []
+        if items:
+            p.add(f"<h3>{title}</h3>" + ul([f'{SIGN.get(d.get("changement"), "")} {esc(d.get("type"))} : '
+                                            f'{esc(d.get("detail"))}{where(d)}' for d in items]))
+    if feats:
+        p.add('<h3>Fonctionnalités touchées</h3><table><tr><th>Risque</th><th>Fonctionnalité</th><th>Lignes</th><th>Risques</th></tr>'
+              + "".join(f'<tr><td class="r-{esc(f.get("risque"))}">{esc(f.get("risque"))}</td>'
+                        f'<td><a href="#f-{esc(f["id"])}">{esc(f["nom"])}</a></td>'
+                        f'<td>+{esc(f.get("ajouts"))} −{esc(f.get("suppressions"))}</td>'
+                        f'<td>{esc("; ".join(x.get("risque", "") for x in f.get("risques") or []))}</td></tr>'
+                        for f in feats) + "</table>")
+    p.add("</section>")
+
+    for f in feats:
+        fo = f.get("fonctionnel") or {}
+        p.add(f'<section id="f-{esc(f["id"])}"><h2>{esc(f["nom"])} <span class="r-{esc(f.get("risque"))}">'
+              f'{esc(f.get("risque"))}</span></h2>')
+        p.add("<dl>" + "".join(f"<dt>{k}</dt><dd>{esc(v)}</dd>" for k, v in
+                               (("Avant", fo.get("avant")), ("Après", fo.get("apres")), ("Exemple", fo.get("exemple")),
+                                ("Technique", f.get("technique"))) if v) + "</dl>")
+        if f.get("contrats"):
+            p.add("<h3>Contrats</h3>" + ul([f'{esc(c.get("contrat"))} : {esc(c.get("changement"))}'
+                                            f'{"" if c.get("compatible") else " <b>(incompatible)</b>"}' for c in f["contrats"]]))
+        uc = f.get("usecase") or {}
+        if uc:
+            p.add(f'<h3>Use case</h3><p>{esc(uc.get("entree"))}</p>'
+                  + ul([f'<code>{esc(c.get("symbole"))}</code>{where(c)} — {esc(c.get("change"))}' for c in uc.get("chaine") or []]))
+        t = f.get("tests") or {}
+        if t:
+            p.add("<h3>Tests</h3>" + ul([f'{"🆕 " if x.get("nouveau") else ""}<code>{esc(x.get("test"))}</code>{where(x)} — '
+                                         f'{esc(x.get("verifie"))}' for x in t.get("couvrent") or []]
+                                        + [f'<b>non couvert</b> : {esc(x)}' for x in t.get("non_couvert") or []]))
+        for key, title in (("risques", "Risques"), ("a_lire", "À lire d'abord"), ("angles_morts", "Angles morts")):
+            vals = f.get(key) or []
+            if vals:
+                p.add(f"<h3>{title}</h3>" + ul([esc(v.get("risque") + f' ({v.get("niveau")})' if isinstance(v, dict) else v)
+                                                for v in vals]))
+        p.diff(select(files, [h for h in hunks if h.get("fonctionnalite") == f["id"] and h.get("nature") not in NOISE]),
+               f["nom"])
+        p.add("</section>")
+
+    refs = carte.get("refactorings") or []
+    if refs:
+        nav.append(("refactoring", "Refactoring"))
+        p.add('<section id="refactoring"><h2>Refactoring</h2>')
+        for rf in refs:
+            p.add(f'<h3>{esc(rf.get("quoi"))}</h3><dl><dt>Pourquoi</dt><dd>{esc(rf.get("pourquoi"))} '
+                  f'<i>({esc(rf.get("source"))})</i></dd><dt>Touche</dt><dd>{esc(", ".join(rf.get("touche") or []))}</dd>'
+                  f'<dt>Comportement préservé</dt><dd>{esc(rf.get("preserve") or "rien ne le montre")}</dd></dl>')
+            ids = set(rf.get("hunks") or [])
+            sub = Page()
+            sub.diff(select(files, [h for h in hunks if h.get("id") in ids]))
+            if sub.diffs:
+                p.add("<details><summary>Diff</summary>")
+                p.diff(sub.diffs[0], rf.get("quoi"))
+                p.add("</details>")
+        p.add("</section>")
+
+    sql = [h for h in hunks if h.get("couche") == "sql"]
+    if sql:
+        nav.append(("sql", "SQL"))
+        p.add('<section id="sql"><h2>SQL</h2>' + ul([f'<code>{esc(h["fichier"])}:{esc(h.get("debut"))}</code> — {esc(h.get("resume"))}'
+                                                    for h in sql]))
+        p.diff(select(files, sql), "SQL")
+        p.add("</section>")
+
+    hib = carte.get("hibernate") or []
+    if hib:
+        nav.append(("hibernate", "Hibernate"))
+        p.add('<section id="hibernate"><h2>Hibernate / infra</h2><table><tr><th>Entité</th><th>Champ</th><th>Avant</th><th>Après</th></tr>'
+              + "".join(f'<tr><td>{esc(e.get("entite"))}</td><td><code>{esc(c.get("champ"))}</code></td>'
+                        f'<td><code>{esc(c.get("avant"))}</code></td><td><code>{esc(c.get("apres"))}</code></td></tr>'
+                        for e in hib for c in e.get("changements") or []) + "</table></section>")
+
+    tk = carte.get("ticket") or []
+    if tk:
+        nav.append(("ticket", "Ticket"))
+        icon = {"fait": "✅", "partiel": "◐", "non_trouve": "❌"}
+        p.add('<section id="ticket"><h2>Ticket</h2>' + ul([f'{icon.get(c.get("statut"), "")} {esc(c.get("critere"))} '
+                                                          f'{" ".join(f"<code>{esc(o)}</code>" for o in c.get("ou") or [])}'
+                                                          for c in tk]) + "</section>")
+
+    noise = carte.get("bruit") or []
+    if noise:
+        nav.append(("bruit", "Bruit"))
+        p.add('<section id="bruit"><h2>Bruit</h2><details><summary>'
+              + esc(" · ".join(f'{b.get("nature")} : {b.get("detail")} ({b.get("lignes")} lignes)' for b in noise))
+              + "</summary>")
+        p.diff(select(files, [h for h in hunks if h.get("nature") in NOISE]), "Bruit")
+        p.add("</details></section>")
+    return p, nav
+
+
+CSS = """
+:root { --bg:#fff; --fg:#1f2328; --muted:#59636e; --line:#d1d9e0; --card:#f6f8fa;
+  --high:#cf222e; --mid:#9a6700; --low:#1a7f37; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0d1117; --fg:#e6edf3; --muted:#9198a1;
+  --line:#3d444d; --card:#151b23; --high:#ff7b72; --mid:#d29922; --low:#3fb950; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, sans-serif; }
+nav { position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line);
+  padding:8px 16px; display:flex; gap:14px; flex-wrap:wrap; z-index:2; }
+nav a { color:var(--fg); text-decoration:none; font-weight:500; }
+main { max-width:1200px; margin:0 auto; padding:16px; }
+section { border-bottom:1px solid var(--line); padding:8px 0 20px; }
+h1 { font-size:20px; margin:8px 0; } h2 { font-size:18px; } h3 { font-size:15px; margin:14px 0 4px; }
+dl { display:grid; grid-template-columns:max-content 1fr; gap:2px 12px; margin:6px 0; }
+dt { color:var(--muted); } dd { margin:0; }
+table { border-collapse:collapse; width:100%; } td, th { border:1px solid var(--line); padding:4px 8px; text-align:left; }
+code { font:13px ui-monospace, monospace; } .stats { color:var(--muted); }
+.r-haute { color:var(--high); font-weight:600; } .r-moyenne { color:var(--mid); font-weight:600; } .r-basse { color:var(--low); }
+.diff { margin:10px 0; overflow-x:auto; } .diff pre { background:var(--card); padding:8px; overflow-x:auto; }
+"""
+
+
+def main(argv):
+    if len(argv) != 4:
+        sys.exit(__doc__.strip())
+    with open(argv[1], encoding="utf-8") as f:
+        carte = json.load(f)
+    with open(argv[2], encoding="utf-8") as f:
+        files = parse_diff(f.read())
+    page, nav = render(carte, files)
+    data = json.dumps(page.diffs).replace("</", "<\\/")
+    doc = f"""<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carte {esc(carte.get("cible"))}</title>
+<link rel="stylesheet" href="{D2H}/css/diff2html.min.css">
+<style>{CSS}</style></head><body>
+<nav>{"".join(f'<a href="#{esc(a)}">{esc(t)}</a>' for a, t in nav)}</nav>
+<main><h1>Carte {esc(carte.get("cible"))}</h1>
+{"".join(page.parts)}
+</main>
+<script src="{D2H}/js/diff2html-ui-base.min.js"></script>
+<script>
+const diffs = {data};
+if (window.Diff2HtmlUI) diffs.forEach((d, i) => {{
+  const el = document.getElementById("d" + i);
+  new Diff2HtmlUI(el, d, {{ drawFileList: false, matching: "lines", outputFormat: "line-by-line",
+    colorScheme: "auto", fileContentToggle: false }}).draw();
+}});
+</script></body></html>
+"""
+    with open(argv[3], "w", encoding="utf-8") as f:
+        f.write(doc)
+    print(argv[3])
+
+
+if __name__ == "__main__":
+    main(sys.argv)

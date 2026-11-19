@@ -156,7 +156,7 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
                     review/ (agents reviewer, challenger et mapper, skills /review:diff, :pr, :decisions, :manual, :feedback, :pr-auto et :feedback-auto,
-                    bin/{review-post,review-watch}, timer systemd review-watch, profil Herdr UI)
+                    bin/{review-post,review-watch,review-map-html}, timer systemd review-watch, profil Herdr UI)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — lean — ou d'une base — vidal : harnais —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),

@@ -1466,8 +1466,8 @@ y compris par [`review-watch`](#review-watch-reviewpr-auto-reviewfeedback-auto),
 **Fichiers** : `plugins/review/` (`agents/{reviewer,challenger,mapper}.md`,
 `skills/{diff,pr,decisions,manual,feedback,pr-auto,feedback-auto}/SKILL.md`, `pr-expectations.md`, `validation.md` et
 `ticket.md` communs aux skills, `decisions.md` commun à `decisions`, `pr` et `diff`, `auto.md` commun à `pr-auto` et `feedback-auto`,
-`bin/{review-post,review-watch}`, `systemd/review-watch.{service,timer}`,
-`tests/{review-post,review-watch}.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
+`bin/{review-post,review-watch,review-map-html}`, `systemd/review-watch.{service,timer}`,
+`tests/{review-post,review-watch,review-map-html}.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
 hors du plugin, les liens `~/.local/bin/review-watch`,
 `~/.config/systemd/user/review-watch.{service,timer}` et
 `~/.config/claude-tools/watchers.d/review-watch` (déclaration auprès de
@@ -1487,7 +1487,8 @@ sans eux, la revue se fait sans le ticket. Outils IntelliJ utilisés par l'agent
 sinon recherche classique. Mode auto (`review-watch`) : systemd utilisateur ; herdr
 facultatif (sinon analyse en fond, reprise dans `gnome-terminal`) ; `python3-gi` avec
 `Notify 0.7` pour le clic des notifications (sinon `notify-send`, sans clic). Tests :
-`bash plugins/review/tests/review-post.test.sh` et `bash plugins/review/tests/review-watch.test.sh`
+`bash plugins/review/tests/review-post.test.sh`, `bash plugins/review/tests/review-watch.test.sh` et
+`bash plugins/review/tests/review-map-html.test.sh`
 (faux `gh`, `claude`, `herdr`, rien n'est publié ni lancé) ; pas de mod : `claude plugin test` ne s'applique pas.
 
 #### Installation hors de ce dépôt
@@ -1812,8 +1813,12 @@ qui a lieu d'être.
   *Hors refactoring* (seulement ce qui change le comportement, diff algorithmique),
   *SQL* (diff complet des migrations et requêtes, effet sur les données, réversibilité),
   *Hibernate / infra* (diff simplifié : par entité, champ, colonne, `nullable`, relation,
-  `fetch`, `cascade`… avant → après ; repositories ; config), *Ticket*, *Exporter la carte*
-  (Markdown dans le scratchpad, grosse PR).
+  `fetch`, `cascade`… avant → après ; repositories ; config), *Ticket*, *Exporter la carte
+  en HTML* (grosse PR : page locale ouverte par `xdg-open`, générée par
+  `bin/review-map-html <carte.json> <diff.patch> <sortie.html>` — résumé, fiche et diff de
+  chaque fonctionnalité rendus par diff2html chargé depuis cdn.jsdelivr.net, refactoring,
+  SQL, Hibernate, ticket, bruit replié ; rien n'est publié, les retours restent dans le
+  menu).
 - **Terminer** : en mode revue, mes remarques rédigées pour l'auteur, validées en liste,
   postées en une review `COMMENT` (`review-post`), puis le suivi manuel « terminé » ; si
   la revue de code est faite et que rien d'indispensable ni de recommandé ne reste, il

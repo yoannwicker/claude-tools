@@ -3,7 +3,7 @@ name: manual
 description: Relecture humaine guidée, dans une session séparée — d'une PR d'un collègue ou de son propre travail. L'agent mapper dresse la carte du diff ; la session affiche un résumé (endpoints, base et infra touchés, fonctionnalités par risque), puis le diff condensé pour une petite PR ou les axes d'analyse pour une grosse, et seulement ceux qui ont lieu d'être (fonctionnalité, use case et tests, refactoring, hors refactoring, SQL, Hibernate / infra, ticket) ; un menu prend mes retours à chaque étape. PR d'un collègue : mes remarques validées sont postées, avec un suivi séparé (<!-- review:suivi-manuel -->) qui bloque l'approbation de /review:pr tant qu'il est en cours. Mon travail : mes remarques deviennent des corrections ou une liste d'actions
 argument-hint: "[numéro | recherche] [--cancel]"
 disable-model-invocation: true
-allowed-tools: Bash(gpr list:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(difft:*), Bash(review-post:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, Skill
+allowed-tools: Bash(gpr list:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(difft:*), Bash(review-post:*), Bash(review-map-html:*), Bash(xdg-open:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, Skill
 ---
 
 Arguments : `$ARGUMENTS`
@@ -149,8 +149,15 @@ tel qu'il est dans le diff :
    diff brut d'un fichier à la demande.
 8. **Ticket** (s'il y a un ticket) — chaque critère : fait, partiel ou non trouvé, avec où
    dans le code ; ce que la PR fait en plus.
-9. **Exporter la carte** (grosse PR) — toute la carte en Markdown dans le scratchpad, pour
-   la parcourir à son rythme ; donner son chemin complet.
+9. **Exporter la carte en HTML** (grosse PR) — une page locale pour la parcourir à son
+   rythme à côté du terminal : écrire dans le scratchpad la carte (`carte.json`, avec le
+   bruit vérifié) et le diff (`diff.patch` : `gh pr diff <n>`, ou `git diff <merge-base>`
+   en mode auteur), puis `review-map-html carte.json diff.patch carte.html` (dans le `bin/`
+   du plugin) et `xdg-open carte.html`. Résumé, une section par fonctionnalité (fiche et
+   diff de ses seuls hunks, rendu par diff2html), refactoring, SQL, Hibernate, ticket,
+   bruit replié. Donner son chemin complet ; mes retours restent dans le menu (en citant la
+   fonctionnalité ou `fichier:ligne`). Rien n'est publié : la page ne charge que diff2html
+   depuis cdn.jsdelivr.net.
 
 ## 6. Mes remarques
 
@@ -197,5 +204,5 @@ rouge : **Ne pas approuver** en premier. Approuver : `review-post <n> <json vide
 - Mode revue : l'URL de la review, le nombre de commentaires inline et dans le corps, le
   lien du suivi manuel et ce qui reste, l'approbation s'il y en a eu une.
 - Mode auteur : les fichiers modifiés (rappeler de relire `git diff`), ou la liste gardée.
-- Le chemin de la carte exportée s'il y en a une. Worktree ouvert pour cette relecture
+- Le chemin de la carte HTML s'il y en a une. Worktree ouvert pour cette relecture
   (`agent/review-<n>-…`) : proposer le ménage comme l'étape 5 de `/review:pr`.
