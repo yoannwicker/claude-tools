@@ -12,9 +12,9 @@ But : relire la PR de quelqu'un d'autre et lui laisser les commentaires que j'ai
 Plusieurs PR liées (pile de PR, PR sur un même sujet, peut-être contradictoires) se
 relisent ensemble : chacune pour elle-même, plus la cohérence entre elles.
 
-**`--prepare`** (analyse en fond lancée par `review-watch`, `claude -p` : personne pour
-répondre) : aucune question (`AskUserQuestion`) ni rien de posté. Étape 1 sans proposer la
-pile (la citer en une ligne si elle existe), étape 2, l'alerte de relecture humaine
+**`--prepare`** (préparation lancée par `review-watch`, en fond avec `claude -p` ou
+dans herdr avec `launch --background` : personne pour répondre) : aucune question
+(`AskUserQuestion`) ni rien de posté. Étape 1 sans proposer la pile (la citer en une ligne si elle existe), étape 2, l'alerte de relecture humaine
 de l'étape 3 s'il y en a une (sans la question), puis le tableau de l'étape 3
 (commentaires tels qu'ils seront postés, points `🔎` listés sans les trancher), et si
 l'approbation serait proposée (étape 3, *Approbation*) ; finir par « Prêt pour la

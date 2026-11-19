@@ -15,10 +15,11 @@ le push forcé pendant la revue — c'est justement le moment de le faire. Ces s
 peuvent pas être lancés par l'outil Skill (`disable-model-invocation`) : lire leur
 `SKILL.md` et en suivre les étapes.
 
-**`--prepare`** (analyse en fond lancée par `tidy-watch` quand la PR a ses approbations,
-`claude -p` : personne pour répondre) : aucune question (`AskUserQuestion`), rien de
-réécrit, rebasé, poussé ni publié, aucun changement de branche ni worktree créé (la
-session est lancée là où la branche est extraite : sinon le dire et s'arrêter). Préparer :
+**`--prepare`** (préparation lancée par `tidy-watch` quand la PR a ses approbations, en
+fond avec `claude -p` ou dans herdr avec `launch --background` : personne pour répondre) :
+aucune question (`AskUserQuestion`), rien de réécrit, rebasé, poussé ni publié, aucun
+changement de branche ni worktree créé (la session est lancée là où la branche est
+extraite : sinon le dire et s'arrêter). Préparer :
 - étape 1 sans question ;
 - `commits`, étapes 1 à 3 : sans le `git rebase origin/<branche>` (dire seulement si la
   branche est en retard sur `origin`), et le plan avant/après sans la question

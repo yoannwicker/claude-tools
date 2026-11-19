@@ -430,9 +430,9 @@ class Tui(unittest.TestCase):
         tui.apply(m, "skip_closed", Ops)
         tui.apply(m, "unskip", Ops)
         self.assertEqual(calls, [("launch", 1, True), ("launch", 2, False), ("skip", 3, True)])
-        self.assertEqual(m.notes, {0: "en fond", 2: "écartée jusqu'à la fermeture"})  # 2 : échec, pas noté
+        self.assertEqual(m.notes, {0: "préparée", 2: "écartée jusqu'à la fermeture"})  # 2 : échec, pas noté
         self.assertEqual(m.msg, "pas écartée")
-        self.assertIn("· en fond", m.lines()[2][0][1])
+        self.assertIn("· préparée", m.lines()[2][0][1])
         tui.apply(m, "refresh", Ops)
         self.assertEqual((m.sel, m.notes, len(m.rows)), (0, {}, 1))
         self.assertFalse(tui.apply(m, "quit", Ops))

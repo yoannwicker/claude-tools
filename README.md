@@ -109,7 +109,7 @@ demander une déconnexion/reconnexion de session.
   seulement ce sur quoi j'ai à agir, dans les dépôts activés par `gh-watch set board`) —
   depuis quand, action proposée ; `--missed` : les actions que les watchers ont manquées,
   à lancer ou écarter (`gh-watch launch`, `gh-watch skip`) ; `gh-watch board -i` : la même
-  liste, interactive, pour lancer (en fond au choix) ou écarter ligne par ligne
+  liste, interactive, pour lancer (ou préparer sans question, dans herdr s'il tourne) ou écarter ligne par ligne
   (`/gh-watch:board -i` : dans un pane herdr, sinon par questions) (plugin `gh-watch`).
 - `/gh-watch:board-auto on` : une fois par jour, après le premier passage d'un watcher, les
   actions manquées remontent en une seule notification « N actions manquées », dont le clic

@@ -38,8 +38,8 @@ Mécanique commune avec review-watch : lib/watchlib.py du plugin gh-watch.
   tidy-watch poll [--dry-run]                un passage
   tidy-watch launch <owner/repo#n | n> [pr_approved] [--at <date>] [--background]
                                              (--at : date de l'événement, alors retenu
-                                             comme traité ; --background : analyse en fond
-                                             même si herdr tourne)
+                                             comme traité ; --background : préparer sans
+                                             question (--prepare), dans herdr s'il tourne, sinon en fond)
   tidy-watch skip <owner/repo#n | n> pr_approved --at <date>
                                              écarter cet événement (gh-watch skip)
   tidy-watch resume [<owner/repo#n>]         session préparée en fond

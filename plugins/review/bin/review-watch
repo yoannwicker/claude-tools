@@ -46,8 +46,8 @@ Mécanique commune (lancement, notifications, timer) : lib/watchlib.py du plugin
                                                [--background]
                                                (--at : date de l'événement, alors retenu
                                                comme traité ; gh-watch launch la donne ;
-                                               --background : analyse en fond même si
-                                               herdr tourne)
+                                               --background : préparer sans question (--prepare), dans herdr s'il
+                                               tourne, sinon en fond)
   review-watch skip <owner/repo#n | n> review_requested|feedback_received --at <date>
                                                écarter cet événement (gh-watch skip)
   review-watch resume [<owner/repo#n> [review_requested|feedback_received]]

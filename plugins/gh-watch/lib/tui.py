@@ -1,14 +1,15 @@
 """tui — liste interactive de `gh-watch board -i` (curses, plugin gh-watch).
 
 Une ligne par PR, regroupées par dépôt et par « qui doit agir », une ligne surlignée, et une
-touche par action : lancer l'action proposée (herdr s'il tourne, sinon en fond), la lancer
-en fond (analyse jusqu'à ce qu'il faille valider, puis notification), écarter, réintégrer,
+touche par action : lancer l'action proposée (herdr s'il tourne, sinon en fond), la
+préparer sans question jusqu'à la validation (dans herdr s'il tourne, sinon en fond puis
+notification), écarter, réintégrer,
 rafraîchir. La logique (Model, key_action, apply) est séparée du dessin (run) : elle se
 teste sans terminal.
 """
 import curses
 
-HELP = ("↑↓ z s : naviguer · Entrée : lancer · f : en fond · x : écarter · X : jusqu'à la "
+HELP = ("↑↓ z s : naviguer · Entrée : lancer · f : préparer · x : écarter · X : jusqu'à la "
         "fermeture · u : réintégrer · r : rafraîchir · q : quitter")
 BUCKET = {"me": "À toi", "others": "En attente des autres", "rest": "Le reste"}
 
@@ -87,7 +88,7 @@ def apply(model, action, ops):
     if action in ("launch", "background"):
         ok, model.msg = ops.launch(r, action == "background")
         if ok:
-            model.notes[model.sel] = "en fond" if action == "background" else "lancée"
+            model.notes[model.sel] = "préparée" if action == "background" else "lancée"
     elif action in ("skip", "skip_closed"):
         model.msg = ops.skip(r, action == "skip_closed")
         model.notes[model.sel] = "écartée" + (" jusqu'à la fermeture" if action == "skip_closed" else "")

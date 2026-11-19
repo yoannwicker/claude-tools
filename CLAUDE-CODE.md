@@ -861,9 +861,11 @@ Agir sur une ligne :
 - `gh-watch launch <owner/repo#n | n> [--background]` : lance la PR par le watcher qui
   gère son état (`<watcher> launch <repo#n> <événement> --at <date>` : herdr, sinon
   analyse en fond), et retient l'événement comme traité, comme `poll` ; un lancement à
-  la main est noté dans l'historique (`lancé`, « à la main »). `--background` : analyse
-  en fond même si herdr tourne (`claude -p /<skill> <n> --prepare`, jusqu'à ce qu'il
-  faille valider, puis notification dont le clic reprend la session). Une ligne dont
+  la main est noté dans l'historique (`lancé`, « à la main »). `--background` : préparer
+  sans question jusqu'à ce qu'il faille valider (`/<skill> <n> --prepare`) — dans herdr
+  s'il tourne (onglet sans focus, la session y reste ouverte : « Reprends à la
+  validation » pour continuer), sinon analyse en fond (`claude -p`) puis notification
+  dont le clic reprend la session. Une ligne dont
   aucun watcher ne gère l'état n'a rien à lancer : son action proposée (ex.
   `/git-tidy:pr-sync` pour une PR en retard) se lance à la main. `board --missed --launch
   [--background]` : toutes les manquées.
@@ -880,10 +882,11 @@ Agir sur une ligne :
 - `gh-watch board … -i` : **liste interactive** dans le terminal (curses, `lib/tui.py`),
   avec les mêmes filtres (dépôt, `--all`, `--full`, `--auto`, `--missed`, `--skipped`),
   regroupée par dépôt puis « À toi » / « En attente des autres » / « Le reste », une ligne
-  par PR. Touches : `↑`/`↓` ou `z`/`s` naviguer, `Entrée` lancer, `f` lancer en fond,
+  par PR. Touches : `↑`/`↓` ou `z`/`s` naviguer, `Entrée` lancer, `f` préparer (`--background` :
+  sans question jusqu'à la validation, dans herdr s'il tourne, sinon en fond),
   `x` écarter, `X` écarter jusqu'à la fermeture, `u` réintégrer, `r` rafraîchir (nouvel
   appel GitHub), `q`/`Échap` quitter. Le résultat s'affiche en bas et la ligne est
-  annotée (lancée, en fond, écartée). Refusé avec `--json`. Sans terminal (lancé par
+  annotée (lancée, préparée, écartée). Refusé avec `--json`. Sans terminal (lancé par
   une session Claude) : ouverte dans un pane herdr sous celui de la session
   (`HERDR_PANE_ID`), qui se ferme en quittant la liste ; sans herdr, refusé.
 - `/gh-watch:board … -i` : la liste interactive depuis Claude — dans un pane herdr sous
@@ -1089,7 +1092,8 @@ l'historique sort dans sa forme finale, sans `fixup!` restant.
 - Mêmes accords que les deux skills (plan, rebase, push, publication), plus la demande de
   relecture et le passage en validation ; finit par un résumé : commits réécrits, rebase,
   sauvegardes, push, relecteurs demandés, tickets passés, liens publiés, message Slack.
-- `--prepare` (analyse en fond lancée par `tidy-watch`, sans personne pour répondre) :
+- `--prepare` (préparation lancée par `tidy-watch` : analyse en fond, ou session herdr de
+  `launch --background`, sans personne pour répondre au départ) :
   aucune question ni écriture (ni réécriture, ni rebase, ni push, ni publication) ; plan de
   commits, retard sur la base, pile et conflits prévisibles, brouillons de PR et de ticket,
   relecteurs proposés ou tickets à passer en validation et message Slack, puis
@@ -1824,7 +1828,8 @@ auto : `review-watch add <repo> --on-review-requested notify`.
 
 **Lancement** (`review-watch launch <owner/repo#n | n> [review_requested|feedback_received] [--at <date>]
 [--background]`, appelé aussi par le mode auto, par le clic d'une notification et par
-[`gh-watch launch`](#gh-watch) ; `--background` : analyse en fond même si herdr tourne ;
+[`gh-watch launch`](#gh-watch) ; `--background` : préparer sans question (`--prepare`),
+dans herdr s'il tourne (la session y reste ouverte pour la validation), sinon en fond ;
 `--at` : date de l'événement, retenue comme traitée ; `review-watch skip … --at` écarte un
 événement). Clone du dépôt : `path` du dépôt (sans étoile : le clone), sinon celui déjà
 trouvé, sinon cherché dans le dossier du `path` en `dossier/*` de l'entrée la plus précise
@@ -1851,10 +1856,11 @@ dépôt garde son clone en mémoire.
   sinon) sur `claude --resume <uuid> "Reprends à la validation…"`. `review-watch resume`
   sans argument liste les sessions prêtes ; dans un terminal, il reprend sur place.
   Journal : `~/.local/state/claude-tools/review-watch/logs/`.
-- `--prepare` (argument de `/review:pr` et `/review:feedback`, pour cette analyse en fond) :
+- `--prepare` (argument de `/review:pr` et `/review:feedback`, pour cette analyse en fond,
+  ou dans herdr avec `launch --background`) :
   aucune question, rien de posté ni corrigé ; le tableau de validation est préparé et la
   session s'arrête sur « Prêt pour la validation ». À la reprise, elle continue à la
-  validation.
+  validation (dans herdr : « Reprends à la validation » dans le pane).
 - Une session herdr encore ouverte (Claude présent dans le pane) ou une analyse en cours
   pour la même PR n'est pas doublée. Une session herdr ouverte reçoit un message dans son
   pane (`herdr agent prompt` : « nouveaux retours sur la PR #n (HH:MM) », ou review

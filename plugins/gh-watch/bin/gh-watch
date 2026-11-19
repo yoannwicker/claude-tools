@@ -41,15 +41,17 @@ posé par le setup.sh de son plugin (./install.sh plugin <plugin>) : gh-watch le
                                            lance toutes les manquées (comme gh-watch launch)
   gh-watch board … --skipped               montre aussi les lignes écartées
   gh-watch board … -i                      liste interactive (mêmes filtres) : ↑↓ ou z/s,
-                                           Entrée lancer, f lancer en fond, x écarter, X
+                                           Entrée lancer, f préparer (--background), x écarter, X
                                            jusqu'à la fermeture, u réintégrer, r rafraîchir,
                                            q quitter ; sans terminal (session Claude) :
                                            ouverte dans un pane herdr sous la session
   gh-watch launch <owner/repo#n | n> [--background]
                                            lance l'action proposée par le watcher qui gère
                                            l'état (événement retenu comme traité) : herdr,
-                                           sinon (ou --background) analyse en fond jusqu'à ce
-                                           qu'il faille valider, puis notification
+                                           sinon analyse en fond jusqu'à ce qu'il faille
+                                           valider, puis notification ; --background :
+                                           préparer sans question jusqu'à la validation
+                                           (--prepare), dans herdr s'il tourne
   gh-watch skip <owner/repo#n | n> [--until-closed]
                                            écarte la ligne jusqu'au prochain événement (ou
                                            jusqu'à la fermeture de la PR) ; le watcher qui

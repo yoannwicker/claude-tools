@@ -596,8 +596,9 @@ def pid_alive(pid):
 
 def launch(cfg, state, repo, n, kind, at=None, background=False):
     """Lance la session de `kind` sur la PR (`at` : date de l'événement) : herdr s'il tourne,
-    sinon (ou avec background) analyse en fond (--prepare) reprise au clic de la
-    notification. Retourne une ligne de compte rendu."""
+    sinon analyse en fond (--prepare) reprise au clic de la notification. background :
+    préparer sans question (--prepare) — dans herdr s'il tourne (la session y reste ouverte
+    pour la validation), sinon en fond. Retourne une ligne de compte rendu."""
     key = key_of(repo, n, kind)
     prev = state["sessions"].get(key)
     if prev and herdr_alive(prev):
@@ -617,8 +618,8 @@ def launch(cfg, state, repo, n, kind, at=None, background=False):
                          "title,url,state,headRefName,headRefOid"]))
     if pr["state"] != "OPEN":
         return f"{key} : PR {pr['state'].lower()}"
-    prompt = f"/{S.skill[kind]} {n}"
-    if herdr_running() and not background:
+    prompt = f"/{S.skill[kind]} {n}" + (" --prepare" if background else "")
+    if herdr_running():
         if kind in S.detached:
             run(["git", "-C", clone, "fetch", "-q", "origin", f"pull/{n}/head"], check=False)
             branch, base = f"agent/review-{n}-{slug(pr['title'])}", pr["headRefOid"]
@@ -631,9 +632,12 @@ def launch(cfg, state, repo, n, kind, at=None, background=False):
         state["sessions"][key] = {"mode": "herdr", "workspace": ws, "pane": pane, "dir": path,
                                   "url": pr["url"], "title": pr["title"], "launched": iso(now()),
                                   "event_at": at}
-        notify(f"{S.label[kind].capitalize()} lancée : {repo}#{n}", f"{pr['title']}\nherdr : {S.tab[kind]} #{n}",
+        what = "préparée" if background else "lancée"
+        notify(f"{S.label[kind].capitalize()} {what} : {repo}#{n}",
+               f"{pr['title']}\nherdr : {S.tab[kind]} #{n}"
+               + ("\nsans question ; « Reprends à la validation » pour valider" if background else ""),
                ["herdr", "agent", "focus", pane])
-        return f"{key} : lancée dans herdr ({path})"
+        return f"{key} : {what} dans herdr ({path})" + (", sans question jusqu'à la validation" if background else "")
     # Sans herdr : analyse en fond, reprise au clic
     if kind in S.detached:
         path = clone  # la relecture lit le diff et le code à la tête de la PR, sans s'y placer

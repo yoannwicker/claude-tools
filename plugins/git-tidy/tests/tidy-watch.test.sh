@@ -150,13 +150,26 @@ check "skip sans --at → erreur" 2 "$("$bin" skip o/r#77 pr_approved >/dev/null
 check "launch --at : date retenue, historique « lancé » à la main" "2026-11-04T12:00:00Z lancé à la main" \
   "$(jq -r '"\(.pr_approved["o/r#78"]) \(.history[-1].action) \(.history[-1].detail | split(" :")[0])"' "$st")"
 
-# launch --background : analyse en fond même quand herdr tourne
-rm -f "$tmp/claude-calls" "$tmp/notifs"
-printf '#!/usr/bin/env bash\n[ "$1 $2" = "status server" ] && echo "status: running" && exit 0\nexit 1\n' > "$tmp/fakebin/herdr"
+# launch --background, herdr en marche : préparation (--prepare) dans un pane herdr, pas en fond
+rm -f "$tmp/claude-calls" "$tmp/notifs" "$tmp/herdr.log"
+cat > "$tmp/fakebin/herdr" <<'EOF'
+#!/usr/bin/env bash
+echo "herdr $*" >> "$FAKE/herdr.log"
+case "$1 $2" in
+  "status server") echo "status: running" ;;
+  "worktree list") echo '{"result": {"worktrees": []}}' ;;
+  "worktree open") echo '{"result": {"root_pane": {"workspace_id": "w7", "pane_id": "w7:p1"}}}' ;;
+  "pane run") ;;
+  *) exit 1 ;;
+esac
+EOF
 "$bin" launch o/r#79 pr_approved --background >/dev/null 2>&1
-for _ in $(seq 50); do grep -q ' 79 --prepare' "$tmp/claude-calls" 2>/dev/null && break; sleep 0.1; done
-check "launch --background avec herdr en marche → analyse en fond (--prepare)" "-p /git-tidy:ready 79 --prepare" \
-  "$(grep ' 79 --prepare' "$tmp/claude-calls" | cut -d' ' -f2-5)"
+check "launch --background avec herdr en marche → pane herdr avec --prepare" 1 \
+  "$(grep -c "^herdr pane run w7:p1 .*'/git-tidy:ready 79 --prepare'" "$tmp/herdr.log")"
+check "launch --background avec herdr en marche → pas d'analyse en fond" 0 \
+  "$(sleep 0.3; grep -c ' 79 --prepare' "$tmp/claude-calls" 2>/dev/null || true)"
+check "launch --background avec herdr : session herdr notée" "herdr w7:p1" \
+  "$(jq -r '.sessions["o/r#79:pr_approved"] | "\(.mode) \(.pane)"' "$XDG_STATE_HOME/claude-tools/tidy-watch/state.json")"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/fakebin/herdr"
 
 # Rattrapage quotidien (gh-watch set board_auto on) : à la fin du premier poll de la journée,

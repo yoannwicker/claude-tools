@@ -12,8 +12,9 @@ But : ne laisser aucun retour sans suite, en décidant vite de ce qui est simple
 prenant le temps sur ce qui le mérite. Complément du plugin `pr-comments` (panneau fil par
 fil) : ici chaque fil est analysé et une suite est proposée.
 
-**`--prepare`** (analyse en fond lancée par `review-watch`, `claude -p` : personne pour
-répondre) : aucune question (`AskUserQuestion`), aucune correction, aucun commit ni réponse.
+**`--prepare`** (préparation lancée par `review-watch`, en fond avec `claude -p` ou
+dans herdr avec `launch --background` : personne pour répondre) : aucune question
+(`AskUserQuestion`), aucune correction, aucun commit ni réponse.
 Étapes 1 à 3, puis le tableau de l'étape 4 (suite et réponse prévue de chaque fil, options et
 « à discuter » listés sans les trancher) ; finir par « Prêt pour la validation » et
 s'arrêter. À la reprise de la session (« Reprends à la validation »), reprendre à l'étape 4
