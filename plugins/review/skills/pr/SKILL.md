@@ -1,7 +1,7 @@
 ---
 name: pr
 description: Relire la PR d'un collègue — ou plusieurs PR liées ensemble (pile de PR, même sujet), avec la cohérence entre elles — avec l'agent reviewer — code ajouté seulement, points priorisés et validés — puis poster directement les commentaires gardés en une review GitHub par PR (COMMENT, ou approbation proposée quand plus rien d'indispensable ni de recommandé ne reste, hors messages de commit et de PR qui ne bloquent pas), tenir le commentaire de suivi des points (statut de chacun) à jour, et enfin supprimer les worktrees et branches créés pour la revue s'il y en a
-argument-hint: "<numéro… | recherche> [--refacto \"<piste>\"] [--prepare]"
+argument-hint: "<numéro… | recherche> [--refacto \"<piste>\"] [--decisions] [--prepare]"
 disable-model-invocation: true
 allowed-tools: Bash(gpr list:*), Bash(gpr view:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), Bash(herdr worktree list:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, ExitWorktree, Skill
 ---
@@ -94,6 +94,12 @@ validation »), reprendre à l'étape 3 avec ses questions, puis 4 et 5 normalem
 - Les normes : lire `${CLAUDE_SKILL_DIR}/../../pr-expectations.md` et rassembler les normes en
   vigueur et les niveaux d'exigence (*Rassembler les normes*, à la version de
   `baseRefName`), une fois pour le lot.
+- **Revue des décisions** (`${CLAUDE_SKILL_DIR}/../../decisions.md` : architecture,
+  fonctionnel, écart au ticket, contrat, non-décisions — un autre axe que la revue de
+  code), une fois pour le lot : `--decisions` → oui ; `--prepare` ou reprise sans
+  `--decisions` → non ; sinon demander (`AskUserQuestion`, header « Décisions ») :
+  **Code et décisions** / **Code seulement** — la première recommandée si un ticket a été
+  trouvé ou si le diff ajoute plus de 300 lignes, sinon la seconde.
 
 ## 2. La revue
 
@@ -108,6 +114,10 @@ autres encore ouverts (pour ne pas les redire non plus).
 Lot : un agent par PR (« PR #<n> du lot », plus le lot : numéro, titre, `headRefOid`,
 base et relation de chaque PR) et un agent pour **le croisement** (« croisement du lot »,
 le lot et les tickets de toutes), tous lancés ensemble dans un même message.
+
+Revue des décisions demandée : un agent `review:challenger` par PR (*L'agent* de
+`decisions.md`, choix déjà justifiés compris), dans le même message que les
+`review:reviewer`. Ses décisions se vérifient comme le dit `decisions.md`.
 
 Puis **vérifier chaque constat** (lire la ligne et son contexte à `headRefOid` de sa PR) :
 écarter les faux positifs, ceux qui ne portent pas sur une ligne du diff de leur PR (hors
@@ -148,6 +158,12 @@ c'est un remplacement exact des lignes commentées) ; préfixe selon le conseil 
 `[bloquant]` (indispensable), rien (recommandé), `[nit]` (optionnel), `[question]`
 (discutable ou très contestable gardé, ou point formulé en question).
 
+**Décisions** (revue des décisions demandée) : après la validation des points, la
+présentation de `decisions.md` en mode revue — conformes repliées, sujets un par un ;
+lot : PR par PR. Les commentaires gardés rejoignent la review de leur PR, et comptent pour
+l'approbation avec le conseil de leur poids. En `--prepare` (avec `--decisions`) : les
+sujets listés avec l'avis de l'agent, sans question.
+
 Lot : un seul tableau, avec une colonne `PR`, trié par PR (ordre de la pile) puis
 conseil ; les constats de croisement à la fin (`#83 ↔ #84`). Leur commentaire est posté
 sur la PR de leur ligne et cite l'autre côté (`#84`, `chemin:ligne`) ; le corps de la
@@ -172,7 +188,7 @@ préfixe, ou mon évaluation) → statut.
 
 **Approbation**, une fois la validation finie, PR par PR : proposée seulement si
 - aucun point gardé n'est `indispensable` ni `recommandé` (nouveau point, écart au
-  ticket), et aucun découpage n'est gardé ;
+  ticket, décision), et aucun découpage n'est gardé ;
 - reprise : aucun point de mon suivi ni de mes fils ne reste (ouvert ou en discussion)
   sur un point indispensable ou recommandé, après les statuts validés ;
 - aucun retour des autres encore ouvert n'est bloquant, indispensable ni recommandé ;
@@ -203,7 +219,7 @@ review par PR qui a des points gardés, une criticité à publier (ci-dessous, s
 ou dont l'approbation a été choisie (lot : de bas en haut de la pile) :
 
 - Écrire `review.json` dans le scratchpad : `{"body": "<synthèse : résumé, écarts au ticket
-  gardés sans ligne, écarts aux normes de commit et de PR gardés, découpage proposé s'il est gardé (partie par partie : commit, PR, tâche sur l'US ou US
+  gardés sans ligne, décisions gardées sans ligne, écarts aux normes de commit et de PR gardés, découpage proposé s'il est gardé (partie par partie : commit, PR, tâche sur l'US ou US
   séparée), remarques générales gardées ; lot : « Relue avec #84 (pile / même sujet) » et
   les points de croisement sans ligne>", "comments": [{"path", "line", "body"}…]}`
   (lot : `review-<n>.json`).

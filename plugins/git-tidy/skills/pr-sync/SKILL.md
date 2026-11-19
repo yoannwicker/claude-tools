@@ -25,7 +25,7 @@ accord explicite. Une commande git ou `gh` par appel Bash, sans `cd … &&` ni e
      (`AskUserQuestion`, header « PR »).
 - `gh pr view <n> --json number,url,title,body,state,isDraft,isCrossRepository,baseRefName,headRefName,commits,files,closingIssuesReferences`.
 - Pas de PR : le dire, proposer d'en créer une en brouillon
-  (`gh pr create --draft`, avec le titre et la description rédigés comme à l'étape 5) et
+  (`gh pr create --draft`, avec le titre et la description rédigés comme à l'étape 5, choix assumés compris : leur fichier est ensuite supprimé) et
   s'arrêter si l'utilisateur refuse.
 - PR fermée ou mergée : le dire ; on peut encore mettre à jour le ticket, pas la PR (passer
   l'étape 2).
@@ -164,10 +164,15 @@ Comparer le ticket et la PR :
   JIRA, ou `Closes #123` si la PR doit fermer l'issue) ;
 - ce qui change, regroupé par thème plutôt que commit par commit ;
 - ce qu'il faut regarder en relecture, les risques, la façon de tester ;
-- ce qui reste hors périmètre (critères non couverts).
+- ce qui reste hors périmètre (critères non couverts) ;
+- **choix assumés** : si le fichier des choix assumés de la branche existe
+  (`$(git rev-parse --git-common-dir)/review-choices/<branche, « / » remplacés par « - »>.md`,
+  écrit par `/review:decisions` du plugin `review` avant que la PR existe), ses points vont
+  dans une section `## Choix assumés`, fusionnés avec ceux qui y sont déjà (un même choix
+  n'est pas doublé), pour que les relecteurs ne refassent pas ces retours.
 
 Garder de la description actuelle ce qu'un humain y a mis et qui reste vrai (captures,
-cases cochées, contexte, mentions) ; ne réécrire que ce qui est faux ou manquant. Si elle
+cases cochées, contexte, mentions, section « Choix assumés ») ; ne réécrire que ce qui est faux ou manquant. Si elle
 est déjà juste, le dire et ne rien proposer.
 
 **Ticket** — selon l'écart trouvé à l'étape 4 :
@@ -188,7 +193,8 @@ Puis `AskUserQuestion` (header « Publier »), une option par combinaison utile 
 ## 6. Publier
 
 - PR : `gh pr edit <n> --title <titre> --body-file <fichier>` (description écrite dans le
-  scratchpad).
+  scratchpad). Fichier des choix assumés repris dans la description publiée : le
+  supprimer.
 - JIRA : `addCommentToJiraIssue` ou `editJiraIssue` (charger leur schéma via ToolSearch si
   besoin) ; description en Markdown.
 - Issue GitHub : `gh issue comment <n> --body-file <fichier>` ou

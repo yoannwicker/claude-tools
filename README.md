@@ -34,7 +34,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Plugin `herdr-session` (reprise des sessions par herdr) | `./install.sh plugin herdr-session` | herdr et son intégration Claude (`./setup/20-herdr.sh`) |
 | Plugin `build-brief` (consigne et garde-fou Gradle) | `./install.sh plugin build-brief` | `build-brief` dans le PATH (installé par `./setup/10-mise.sh`), `python3` |
 | Plugin `session-analysis` (analyse des sessions avec AgentsView, qu'il installe) | `./install.sh plugin session-analysis` | `python3`, `curl` |
-| Plugin `review` (agent reviewer, skills `/review:diff`, `/review:pr`, `/review:feedback` : relire son diff ou la PR d'un collègue, traiter les retours reçus ; `/review:pr-auto`, `/review:feedback-auto` : les lancer d'office depuis les notifications GitHub) | `./install.sh plugin review`, puis `review-watch enable` pour le mode auto | `git`, `python3` ; `gh` authentifié ; `git-nav` pour chercher une PR par mots-clés ; systemd utilisateur pour le mode auto |
+| Plugin `review` (agents reviewer et challenger, skills `/review:diff`, `/review:pr`, `/review:decisions`, `/review:feedback` : relire son diff ou la PR d'un collègue, remettre en question leurs décisions, traiter les retours reçus ; `/review:pr-auto`, `/review:feedback-auto` : les lancer d'office depuis les notifications GitHub) | `./install.sh plugin review`, puis `review-watch enable` pour le mode auto | `git`, `python3` ; `gh` authentifié ; `git-nav` pour chercher une PR par mots-clés ; systemd utilisateur pour le mode auto |
 
 Plusieurs plugins d'un coup : `./install.sh plugin <nom>…`, tous : `./install.sh plugin --all`
 (c'est ce que fait `./install.sh`). Relancer met à jour. `./install.sh plugin --remove <nom>…`
@@ -91,7 +91,9 @@ demander une déconnexion/reconnexion de session.
   défaut, dépôt par dépôt, via `tidy-watch`) (plugin `git-tidy`).
 - `/review:diff` : faire relire mon diff avant commit ou PR par l'agent `reviewer` (code
   ajouté seulement) ; `/review:pr <n…>` : relire la PR d'un collègue, ou plusieurs PR
-  liées (pile, même sujet) avec leur cohérence, et y poster les commentaires retenus ; `/review:feedback` : traiter les retours reçus sur ma PR
+  liées (pile, même sujet) avec leur cohérence, et y poster les commentaires retenus ;
+  `/review:decisions` (aussi proposée par les deux premiers) : remettre en question les
+  décisions (architecture, fonctionnel, ticket), avis point par point ; `/review:feedback` : traiter les retours reçus sur ma PR
   (solution, options ou à discuter pour chacun, puis fixups et réponses). Chaque point est
   priorisé et validé avant d'être envoyé ou traité (plugin `review`).
 - `/review:pr-auto` : lancer ces revues d'office à la demande de review ;
@@ -151,7 +153,7 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
-                    review/ (agent reviewer, skills /review:diff, :pr, :feedback, :pr-auto et :feedback-auto,
+                    review/ (agents reviewer et challenger, skills /review:diff, :pr, :decisions, :feedback, :pr-auto et :feedback-auto,
                     bin/{review-post,review-watch}, timer systemd review-watch, profil Herdr UI)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — lean — ou d'une base — vidal : harnais —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl

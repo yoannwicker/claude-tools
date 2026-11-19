@@ -80,7 +80,7 @@ Portées par le plugin [`notify`](#notify).
 
 ## Skills
 
-Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:auto-status`, `:board` et `:board-auto` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
+Les skills `/pr`, `/br`, `/worktree` (et `branch-cleanup`, lancé par Claude après un merge) sont dans le plugin [`git-nav`](#git-nav), `/git-tidy:commits`, `:pr-sync`, `:ready` et `:approved-auto` dans [`git-tidy`](#git-tidy), `/gh-watch:auto-status`, `:board` et `:board-auto` dans [`gh-watch`](#gh-watch), `/session-analysis:report` et `:session` dans [`session-analysis`](#session-analysis), `/review:diff`, `:pr`, `:decisions`, `:feedback`, `:pr-auto` et `:feedback-auto` dans [`review`](#review). Un skill
 qui n'a pas sa place dans un plugin va dans `home/.claude/skills/` (relié par
 `./install.sh link`).
 
@@ -1036,7 +1036,10 @@ n'y a rien d'autre ou plusieurs candidats (sans PR : propose d'en créer une en 
   PR : critères couverts ou non, ajouts, décisions qui s'en écartent.
 - **PR** : titre et description réécrits au format du dépôt (modèle de PR, consignes,
   dernières PR mergées) — pourquoi, lien vers le ticket, changements par thème, points de
-  relecture, hors périmètre — en gardant ce qu'un humain y a mis et qui reste vrai.
+  relecture, hors périmètre — en gardant ce qu'un humain y a mis et qui reste vrai. Les
+  choix assumés notés par [`/review:decisions`](#reviewdecisions) avant que la PR existe
+  (`$(git rev-parse --git-common-dir)/review-choices/<branche>.md`) y entrent dans une
+  section `## Choix assumés`, et le fichier est supprimé une fois publié.
 - **Ticket** : un commentaire par défaut (lien, ce qui est livré, ce qui ne l'est pas,
   écarts) ; une modification de sa description seulement si une décision de la PR l'a
   rendue fausse ; jamais de changement de statut, d'assigné ni de sprint sans demande.
@@ -1452,15 +1455,16 @@ conversation, rien n'est écrit.
 **Rôle** : revue de code par un agent dédié (contexte isolé, regard non ancré sur la
 session) — relire son propre diff (`/review:diff`), relire la PR d'un collègue, ou plusieurs
 PR liées ensemble (pile de PR, même sujet), et y poster les commentaires retenus
-(`/review:pr`), traiter les retours reçus sur sa PR
-(`/review:feedback`). Chaque point est priorisé avec un conseil et validé avant d'être
+(`/review:pr`), remettre en question les décisions d'une PR ou de son propre travail —
+architecture, fonctionnel, ticket — (`/review:decisions`, aussi proposée par les deux
+premiers), traiter les retours reçus sur sa PR (`/review:feedback`). Chaque point est priorisé avec un conseil et validé avant d'être
 envoyé ou traité. Les skills ne se lancent qu'à la demande (`disable-model-invocation`),
 y compris par [`review-watch`](#review-watch-reviewpr-auto-reviewfeedback-auto), qui les lance d'office à la demande de review
 (`/review:pr-auto`) ou au retour de revue reçu sur mes PR (`/review:feedback-auto`).
 
-**Fichiers** : `plugins/review/` (`agents/reviewer.md`,
-`skills/{diff,pr,feedback,pr-auto,feedback-auto}/SKILL.md`, `pr-expectations.md`, `validation.md` et
-`ticket.md` communs aux skills, `auto.md` commun à `pr-auto` et `feedback-auto`,
+**Fichiers** : `plugins/review/` (`agents/{reviewer,challenger}.md`,
+`skills/{diff,pr,decisions,feedback,pr-auto,feedback-auto}/SKILL.md`, `pr-expectations.md`, `validation.md` et
+`ticket.md` communs aux skills, `decisions.md` commun à `decisions`, `pr` et `diff`, `auto.md` commun à `pr-auto` et `feedback-auto`,
 `bin/{review-post,review-watch}`, `systemd/review-watch.{service,timer}`,
 `tests/{review-post,review-watch}.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
 hors du plugin, les liens `~/.local/bin/review-watch`,
@@ -1628,12 +1632,21 @@ un plan de commits à appliquer avec [`/git-tidy:commits`](#git-tidycommits), le
 des PR à créer, la partie à sortir pour une US séparée, et les brouillons de tâche ou
 d'US à reporter dans l'outil de tickets. Un écart au ticket non justifié est soit corrigé
 dans le code, soit justifié : le texte est rédigé, avec où le mettre (description de la
-PR, commentaire du ticket, message de commit), rien n'est posté.
+PR, commentaire du ticket, message de commit), rien n'est posté. `--decisions` (sinon une
+question au départ, *Code et décisions* recommandé s'il y a un ticket ou plus de 300
+lignes ajoutées) ajoute la [revue des décisions](#reviewdecisions) en mode auteur : agent
+`challenger` en parallèle, décisions présentées après la validation, corrections et
+choix assumés.
 
 #### `/review:pr`
 
-`/review:pr <numéro… | recherche> [--refacto "<piste>"]` : PR d'un collègue (recherche par
-`gpr list`), relue sans s'y placer. Chaque point est montré **tel qu'il sera posté**
+`/review:pr <numéro… | recherche> [--refacto "<piste>"] [--decisions]` : PR d'un collègue (recherche par
+`gpr list`), relue sans s'y placer. `--decisions` (sinon une question au départ, *Code et
+décisions* recommandé s'il y a un ticket ou plus de 300 lignes ajoutées ; pas en
+`--prepare` ni en reprise sans le flag) ajoute la [revue des décisions](#reviewdecisions) :
+agent `challenger` par PR en parallèle des `reviewer`, décisions présentées après la
+validation des points, commentaires gardés postés dans la même review et comptés pour
+l'approbation et le suivi. Chaque point est montré **tel qu'il sera posté**
 (langue de la PR, préfixe `[bloquant]`, `[nit]` ou `[question]` selon le conseil, bloc
 `suggestion` pour un remplacement exact). Un écart au ticket non justifié devient une
 demande de justification à l'auteur (sur sa ligne, sinon dans le corps de la review). Les
@@ -1719,6 +1732,35 @@ session s'il y tourne. Un worktree ouvert dans Herdr est retiré par `herdr work
 qui ferme son workspace mais garde la branche, supprimée juste après : si la session y
 tourne, les deux sont lancés détachés en dernier (échecs dans
 `~/.cache/claude-tools/review-cleanup.log`).
+
+#### `/review:decisions`
+
+`/review:decisions [numéro | recherche]` : revue des **décisions** d'un diff, pas de ses
+bugs — seule, ou proposée par `/review:pr` et `/review:diff` en même temps que leur revue
+(déroulé commun : `decisions.md`). L'agent `review:challenger` (lecture seule, mêmes
+outils que `reviewer`, `agents/challenger.md`) relève les décisions en cinq familles :
+architecture, fonctionnel, écart au ticket, contrat et données, non-décisions (choix
+implicites jamais tranchés). Pour chacune : le choix fait, ce que demande le ticket ou la
+norme, les alternatives, l'enjeu, et son verdict — **conforme** (une ligne, repliée) ou
+**sujet** (au plus 10). Le skill vérifie chaque sujet (doublon d'un constat de `reviewer`
+écarté) et demande mon avis **point par point** sur les sujets seulement (« Autre » pour
+en discuter : code, appelants, historique). Rien qui fasse sujet : une ligne.
+
+- **PR d'un collègue** (mode revue) : *D'accord avec le choix* (rien de posté), *À
+  challenger*, *Question à l'auteur*, *Hors périmètre* (brouillon de ticket de suite).
+  Les commentaires, préfixés par leur famille (`[architecture]`, `[fonctionnel]`,
+  `[ticket]`, `[contrat]`, `[implicite]`), sont postés en une review `COMMENT` (seul :
+  par `review-post`, sans jamais approuver ; depuis `/review:pr` : dans sa review) et
+  suivis dans le même [suivi](#pr-expectations) que les autres points.
+- **Mon propre travail** (ma PR, ou ma branche sans PR) : chaque point est traité sur
+  place — *À corriger* (dans le working tree, sans commit), *Choix assumé*
+  (justification), *Hors périmètre* (ticket de suite, justification qui y renvoie), *D'accord*.
+  Les justifications vont dans une section `## Choix assumés` de la description de ma
+  PR (`gh pr edit`, après accord), pour qu'aucun relecteur ne refasse le retour
+  (`reviewer` et `challenger` en tiennent compte) ; sans PR, dans
+  `$(git rev-parse --git-common-dir)/review-choices/<branche>.md`, que
+  [`/git-tidy:pr-sync`](#git-tidypr-sync) et `/git-tidy:ready` reprennent dans la
+  description à la création de la PR, puis suppriment.
 
 #### `/review:feedback`
 

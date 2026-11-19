@@ -1,4 +1,4 @@
-# PR expectations (commun à `/review:diff`, `/review:pr` et `/review:feedback`)
+# PR expectations (commun à `/review:diff`, `/review:pr`, `/review:decisions` et `/review:feedback`)
 
 Ce qu'on attend d'une PR, et donc du développement qu'elle porte. La revue vérifie ces
 attentes de façon pragmatique, au **niveau d'exigence** que le dépôt déclare pour chaque
@@ -149,6 +149,13 @@ maintenu à chacune des suivantes.
   reprendre avant merge si possible : … »), et le suivi les compte à part (« **Reste** : 1 recommandé (message, non bloquant) »).
 - **Relance côté auteur** (`/review:feedback`) : pas tant que tous les fils et points de
   suivi ne sont pas traités (corrigés ou répondus).
+
+## Choix assumés
+
+Dans mon propre travail, la revue des décisions (`decisions.md`) ajoute les choix gardés
+tels quels à une section `## Choix assumés` de la description de ma PR (ou les garde pour
+sa création). Un écart ou une décision qui y est justifié n'est plus un constat, ni pour
+`reviewer` ni pour `challenger`, sauf si la justification ne tient pas.
 
 ## Rassembler les normes (le skill, pas l'agent)
 

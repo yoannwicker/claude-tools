@@ -81,8 +81,9 @@ réécriture gardée en local (**Plus tard**) → rebase local seulement.
 
 Sans PR (création acceptée à l'étape 1) : ne pas redemander. Si la branche n'est pas
 poussée, proposer `git push -u origin <branche>` (refus → s'arrêter : `gh pr create` en a
-besoin). Puis rédiger titre et description comme le demande `pr-sync`, les montrer, créer
-la PR (`gh pr create --draft --base <base> --title <titre> --body-file <fichier>`) et
+besoin). Puis rédiger titre et description comme le demande `pr-sync` (choix assumés compris),
+les montrer, créer la PR (`gh pr create --draft --base <base> --title <titre> --body-file <fichier>`,
+puis supprimer le fichier des choix assumés s'il a été repris) et
 reprendre `pr-sync` sur cette PR à partir de son étape 2 (rebase).
 
 ## 4. Relecture

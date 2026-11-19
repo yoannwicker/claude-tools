@@ -1,9 +1,9 @@
 ---
 name: diff
 description: Relire son propre travail avant commit ou PR (commits de la branche depuis sa base + modifications non commitées) avec l'agent reviewer — code ajouté seulement, points priorisés et validés, puis corrections appliquées sans commit
-argument-hint: "[base] [--refacto \"<piste>\"]"
+argument-hint: "[base] [--refacto \"<piste>\"] [--decisions]"
 disable-model-invocation: true
-allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh repo view:*), Bash(gh issue view:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, Skill
+allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr edit:*), Bash(gh repo view:*), Bash(gh issue view:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, Skill
 ---
 
 Arguments : `$ARGUMENTS`
@@ -29,13 +29,19 @@ ajouté ou modifié.
 - Les normes : lire `${CLAUDE_SKILL_DIR}/../../pr-expectations.md` et rassembler les normes en
   vigueur et les niveaux d'exigence (*Rassembler les normes* ; base = la base retenue
   ci-dessus).
+- **Revue des décisions** (`${CLAUDE_SKILL_DIR}/../../decisions.md`, mode auteur :
+  architecture, fonctionnel, écart au ticket, contrat, non-décisions — un autre axe que la
+  revue de code) : `--decisions` → oui ; sinon demander (`AskUserQuestion`, header
+  « Décisions ») : **Code et décisions** / **Code seulement** — la première recommandée
+  si un ticket a été trouvé ou si le diff ajoute plus de 300 lignes, sinon la seconde.
 
 ## 2. La revue
 
 Lancer l'agent `review:reviewer` (outil Agent) avec : la plage, « working tree inclus »,
 les fichiers non suivis à lire en entier, la piste `--refacto` s'il y en a une, le
 ticket s'il y en a un, les blocs « Normes » et « Exigences », et la PR de la branche s'il y en a une (numéro,
-titre, brouillon ou non). Il rend du JSON.
+titre, brouillon ou non). Il rend du JSON. Revue des décisions demandée : l'agent
+`review:challenger` dans le même message (*L'agent* de `decisions.md`).
 
 Puis **vérifier chaque constat** contre le code (lire la ligne et son contexte) : écarter
 les faux positifs, ceux qui ne portent pas sur une ligne ajoutée ou modifiée (hors
@@ -58,7 +64,10 @@ non justifié est un point `🔎` : écart voulu → justification à écrire, s
 corriger (faire ce qui manque, retirer l'ajout, revenir à la demande). Chaque écart de
 `messages` est un point (`commit <sha>` ou `PR` à la place de `fichier:ligne`), avec le
 message ou le texte corrigé.
-Rien de retenu : le dire et s'arrêter.
+Rien de retenu : le dire et s'arrêter (sauf décisions à présenter).
+
+**Décisions** (revue des décisions demandée) : après la validation des points, la
+présentation de `decisions.md` en mode auteur — conformes repliées, sujets un par un.
 
 ## 4. L'exécution
 
@@ -81,6 +90,9 @@ Rien de retenu : le dire et s'arrêter.
 - Écart de `messages` : montrer le message corrigé et proposer `/git-tidy:commits` pour
   reformuler le commit ; pour la PR, le titre ou la description corrigés à reporter. Ne
   rien réécrire ni poster soi-même.
+- Décisions : *Mode auteur : corrections et choix assumés* de `decisions.md` (les
+  corrections avec les autres, sans commit ; les choix assumés dans la description de la
+  PR après accord, ou dans le fichier repris à sa création).
 - Niveaux d'exigence déduits : proposer le texte à ajouter à la section d'exigences du
   dépôt (ou de la créer), sans l'écrire sans accord.
 - Fin : liste des fichiers modifiés et des points écartés, puis rappeler de relire le
