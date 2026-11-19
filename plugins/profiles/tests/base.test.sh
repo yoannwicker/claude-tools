@@ -13,6 +13,7 @@ cp_=$tmp/tools/plugins/profiles/bin/claude-profile
 mkdir -p "$(dirname "$cp_")" "$tmp/tools/profiles" "$tmp/fake" "$HOME/.claude/projects" "$HOME/.claude/rules" "$HOME/.claude-profiles"
 cp "$src" "$cp_"
 echo '[]' > "$HOME/.claude-profiles/.mcp-servers.json"
+echo '{}' > "$HOME/.claude.json"
 
 ok() { printf 'ok    %s\n' "$1"; }
 ko() { printf 'FAIL  %s\n%s\n' "$1" "${2:-}"; fails=$((fails + 1)); }
@@ -60,6 +61,7 @@ jq -n --arg c "$c" --argjson on "$plugins" '{version: 2, plugins: ($on | map({(.
 echo '{}' > "$c/plugins/known_marketplaces.json"
 jq -n --argjson on "$plugins" '{enabledPlugins: ($on | map({(.): true}) | add), statusLine: {type: "command", command: "harnais"}}' > "$c/settings.json"
 echo harnais > "$c/CLAUDE.md"
+echo '{"mcpServers": {"sq": {"command": "sonar", "args": ["run", "mcp"]}}}' > "$HOME/.claude.json"
 EOF
 echo '["h@h", "b@h"]' > "$tmp/harnais/plugins"
 git -C "$tmp/harnais" add -A && git -C "$tmp/harnais" -c user.name=t -c user.email=t@t commit -qm init
@@ -86,6 +88,22 @@ check 'transcripts communs avec ~/.claude' test "$(readlink -f "$d/projects")" =
 check 'rules de ~/.claude non repris' test ! -e "$d/rules"
 expect 0 'plugins de la base :' show vidal
 expect 0 '+ d@h (dépendance)' show vidal
+# Serveurs MCP de la base (son ~/.claude.json) : repris dans le profil, chargés par switch.
+check 'MCP de la base repris' test "$(jq -c '.mcpServers | keys' "$d/base-mcp.json")" = '["sq"]'
+check '.claude.json du vrai HOME, pas celui de la base' test "$(readlink "$d/.claude.json")" = "$HOME/.claude.json"
+expect 0 '+ sq' show vidal
+echo '{"mcpServers": {"sq": {}, "x": {}}, "projects": {"/p": {"mcpServers": {"sq": {}}}}}' > "$HOME/.claude.json"
+expect 0 'serveur MCP sq aussi dans ~/.claude.json (utilisateur)' generate vidal
+expect 0 'serveur MCP sq aussi dans ~/.claude.json (projet /p)' generate vidal
+out=$(PATH=$tmp/fake:$PATH "$cp_" generate vidal 2>&1)
+check "pas d'avertissement pour un serveur seul dans ~/.claude.json" test -z "$(grep 'MCP x' <<< "$out")"
+echo '{}' > "$HOME/.claude.json"
+: > "$CALLS"
+expect 0 '' switch vidal 'un prompt'
+check 'switch charge les MCP de la base, sans avaler le prompt' grep -qxF -- "--mcp-config=$d/base-mcp.json un prompt" "$CALLS"
+: > "$CALLS"
+expect 0 '' switch lean
+check 'profil sans base : pas de --mcp-config' test "$(cat "$CALLS")" = ''
 
 expect 0 'b@h : désactivé dans vidal' plugin vidal b@h off
 check 'plugin de la base coupé : base.disabledPlugins' test "$(jq -c '.base.disabledPlugins' "$tmp/tools/profiles/vidal.json")" = '["b@h"]'

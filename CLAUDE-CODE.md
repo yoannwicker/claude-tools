@@ -362,6 +362,16 @@ Un profil peut partir de la config d'un autre dépôt, telle que son installeur 
   - **plugins du profil** : `enabledPlugins`, comme pour un autre profil, ajoutés à ceux de la
     base ; installés dans la base (`plugins/` à part) depuis la marketplace que `~/.claude`
     connaît pour eux, à l'activation ou au `update`.
+- **Serveurs MCP de la base** : ceux que l'installeur ajoute à son `~/.claude.json` (portée
+  utilisateur, ex. `sonar integrate` de harnais) sont repris dans `base-mcp.json` du dossier du
+  profil, que `switch`/`run` chargent (`claude --mcp-config=<fichier>`) : le `.claude.json` du profil est
+  celui du vrai HOME, commun à tous les profils, ils n'y sont donc pas. Une session lancée hors de
+  `claude-profile` (`CLAUDE_CONFIG_DIR` posé à la main) ne les a pas. Ils tournent avec le PATH de
+  la session, pas celui de l'installeur : une commande nue doit y désigner le bon programme.
+  `claude-profile show` les liste sous *MCP*, et `claude-profile mcp` les coupe comme les autres.
+  Même nom qu'un serveur de `~/.claude.json` (portée utilisateur, ou locale d'un projet) : celui
+  de la base l'emporte (Claude Code garde celui de `--mcp-config`, vérifié avec la 2.1.328, aussi
+  face à un `.mcp.json` de projet), et la génération le signale.
 - **Avertissements** à la génération : plugin du profil déjà actif dans la base (à retirer de
   `enabledPlugins`) ou pas installé, plugin de `base.disabledPlugins` que la base n'a plus,
   dépendance coupée d'un plugin actif (il ne se chargera pas).

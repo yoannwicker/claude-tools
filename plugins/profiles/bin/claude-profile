@@ -44,6 +44,10 @@ own_config="settings.json CLAUDE.md skills rules agents commands hooks plugins o
 # seule fois, dans le vrai HOME. Dossiers créés au besoin ; fichiers et réglages liés s'ils existent.
 shared_home_dirs=".local .cache .npm .plannotator .sonar"
 shared_home_links=".gitconfig .ssh .volta .config/gh"
+# Serveurs MCP que l'installeur de la base a ajoutés à son ~/.claude.json (portée utilisateur), repris
+# par le profil dans ce fichier de son dossier, chargé par switch/run (--mcp-config) : le .claude.json
+# du profil est celui du vrai HOME, commun à tous les profils.
+base_mcp=base-mcp.json
 # Serveurs MCP connus (nom, url), relevés par claude mcp list (mcp-scan).
 mcp_cache=$out_root/.mcp-servers.json
 # jq : motif serverUrl (jokers *) en expression régulière ; serveur s ({name, url}) coupé par la
@@ -246,6 +250,19 @@ base_warnings() {
   ' "$profiles_dir/$1.json" >&2
 }
 
+# Serveurs MCP de la base ($2) qui portent le nom d'un serveur de ~/.claude.json (portée utilisateur,
+# ou locale d'un projet) : celui de la base l'emporte (--mcp-config passe avant toute autre portée).
+base_mcp_warnings() {
+  [ -f "$HOME/.claude.json" ] || return 0
+  jq -r --slurpfile b "$2" --arg name "$1" --arg home "$HOME" '
+    ($b[0].mcpServers | keys) as $k
+    | ((.mcpServers // {}) | keys[] | select(IN($k[])) | [., "utilisateur"]),
+      ((.projects // {}) | to_entries[] | .key as $p | (.value.mcpServers // {}) | keys[] | select(IN($k[]))
+       | [., "projet \($p | sub("^\($home)"; "~"))"])
+    | "attention : serveur MCP \(.[0]) aussi dans ~/.claude.json (\(.[1])) : celui de la base de \($name) l'\''emporte"
+  ' "$HOME/.claude.json" >&2 2>/dev/null
+}
+
 # Identifiants : lien vers ceux de la base. Claude Code réécrit le fichier par renommage,
 # ce qui peut remplacer le lien par un fichier : s'il est plus récent que celui de la base
 # (jetons rafraîchis dans le profil), il le remplace, puis le lien est reposé.
@@ -301,6 +318,10 @@ generate() {
   fi
   rm -f "$dir/.claude.json"
   ln -s "$HOME/.claude.json" "$dir/.claude.json"
+  rm -f "$dir/$base_mcp"
+  [ -n "$withbase" ] && jq -e '(.mcpServers // {}) != {}' "$(base_dir "$name")/home/.claude.json" >/dev/null 2>&1 \
+    && (umask 077 && jq '{mcpServers: .mcpServers}' "$(base_dir "$name")/home/.claude.json" > "$dir/$base_mcp")
+  [ -f "$dir/$base_mcp" ] && base_mcp_warnings "$name" "$dir/$base_mcp"
   find "$dir" -maxdepth 1 -xtype l -delete
   tmp=$(mktemp "$dir/.settings.XXXXXX")
   merged "$name" > "$tmp" \
@@ -326,7 +347,11 @@ launch_loop() {
       # dépôt générerait sinon avec l'ancien code.
       *)       "$(readlink -f "${BASH_SOURCE[0]}")" generate "$name" >/dev/null || return 2
                dir=$(config_dir "$name")
-               if [ -z "$dir" ]; then env -u CLAUDE_CONFIG_DIR claude "$@"; else env CLAUDE_CONFIG_DIR="$dir" claude "$@"; fi ;;
+               if [ -z "$dir" ]; then env -u CLAUDE_CONFIG_DIR claude "$@"
+               # --mcp-config=… : séparé par une espace, l'option (à plusieurs valeurs) prendrait
+               # aussi l'argument suivant (prompt, chemin) pour un fichier de config MCP.
+               elif [ -f "$dir/$base_mcp" ]; then env CLAUDE_CONFIG_DIR="$dir" claude --mcp-config="$dir/$base_mcp" "$@"
+               else env CLAUDE_CONFIG_DIR="$dir" claude "$@"; fi ;;
     esac
     rc=$?
     [ -s "$req" ] || { rm -f "$req"; return "$rc"; }
@@ -502,7 +527,7 @@ cmd_show() {
   [ -f "$mcp_cache" ] || mcp_scan >/dev/null 2>&1
   jq -r --arg name "$name" --arg cur "$(current)" --arg state "$state" --arg file "${f/#$HOME/\~}" \
      --arg desc "$([ "$name" = reference ] || jq -r '.description // ""' "$f")" --argjson installed "$installed" \
-     --argjson servers "$(mcp_servers "$settings" "$pf")" --argjson based "$based" --argjson bp "$bp" \
+     --argjson servers "$(mcp_servers "$settings" "$pf" "$out_root/$name/$base_mcp")" --argjson based "$based" --argjson bp "$bp" \
      --argjson own "$own" --argjson snapon "$snapon" --arg baseline "$baseline" \
      --slurpfile ref "$main" "$jq_mcp"'
     (.enabledPlugins // {}) as $on
@@ -564,9 +589,10 @@ mcp_scan() {
 
 # Serveurs MCP connus pour un settings.json ($1) : le cache de mcp-scan, plus ceux des .mcp.json des
 # plugins qu'il active (plugin:<plugin>:<serveur>), installés selon $2 (installed_plugins.json, celui de
-# ~/.claude par défaut), en JSON [{name, url}].
+# ~/.claude par défaut), et ceux du fichier --mcp-config $3 s'il est donné, en JSON [{name, url}].
 mcp_servers() {
   local p dir extra='[]' pf=${2:-$base/plugins/installed_plugins.json}
+  [ -f "${3:-}" ] && extra=$(jq -c '.mcpServers // {} | to_entries | map({name: .key, url: (.value.url // null)})' "$3" 2>/dev/null || echo '[]')
   for p in $(jq -r '.enabledPlugins // {} | to_entries[] | select(.value) | .key' <<< "$1"); do
     dir=$(jq -r --arg p "$p" '.plugins[$p][0].installPath // empty' "$pf" 2>/dev/null)
     [ -f "$dir/.mcp.json" ] || continue
