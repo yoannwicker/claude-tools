@@ -1825,7 +1825,8 @@ qui a lieu d'être.
   *Hibernate / infra* (diff simplifié : par entité, champ, colonne, `nullable`, relation,
   `fetch`, `cascade`… avant → après ; repositories ; config), *Ticket*, *Exporter la carte
   en HTML* (grosse PR : page locale ouverte par `xdg-open`, générée par
-  `bin/review-map-html <carte.json> <diff.patch> <sortie.html>` — résumé, fiche et diff de
+  `bin/review-map-html <carte.json> <diff.patch> <sortie.html>` — page segmentée, une section
+  à la fois choisie dans un sommaire latéral ou avec ←/→ (j/k) : résumé, fiche et diff de
   chaque fonctionnalité rendus par diff2html chargé depuis cdn.jsdelivr.net, refactoring,
   SQL, Hibernate, ticket, bruit replié ; rien n'est publié, les retours restent dans le
   menu).

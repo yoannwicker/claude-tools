@@ -58,6 +58,12 @@ diffs=$(sed -n 's/^const diffs = \(.*\);$/\1/p' "$tmp/out.html")
 check "diff de la fonctionnalité : comportement et SQL, sans le renommage" "true true false" \
   "$(jq -r '.[0] | "\(contains("COMPORTEMENT")) \(contains("-- SQL")) \(contains("RENOMMAGE"))"' <<<"$diffs")"
 check "bruit replié dans sa section" true "$(jq -r '.[-1] | contains("RENOMMAGE")' <<<"$diffs")"
+# Segmentée : le sommaire liste chaque section, dans l'ordre, et le script n'en affiche qu'une
+check "sommaire = sections, dans l'ordre" \
+  "$(grep -o '<section id="[^"]*"' "$tmp/out.html" | sed 's/.*id="//; s/"$//' | paste -sd' ')" \
+  "$(grep -o '<a href="#[^"]*"><span>' "$tmp/out.html" | sed 's/.*#//; s/".*//' | paste -sd' ')"
+check "risque de la fonctionnalité dans le sommaire" oui "$(has '<span>Calcul des remises</span><span class="n r-moyenne">moyenne</span>')"
+check "une section à la fois" "oui oui" "$(has 's.hidden = j !== i') $(has 'hashchange')"
 check "usage sans arguments → erreur" 1 "$("$bin" >/dev/null 2>&1; echo $?)"
 
 [ "$fails" = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

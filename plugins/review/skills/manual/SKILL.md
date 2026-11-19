@@ -153,9 +153,10 @@ tel qu'il est dans le diff :
    rythme à côté du terminal : écrire dans le scratchpad la carte (`carte.json`, avec le
    bruit vérifié) et le diff (`diff.patch` : `gh pr diff <n>`, ou `git diff <merge-base>`
    en mode auteur), puis `review-map-html carte.json diff.patch carte.html` (dans le `bin/`
-   du plugin) et `xdg-open carte.html`. Résumé, une section par fonctionnalité (fiche et
-   diff de ses seuls hunks, rendu par diff2html), refactoring, SQL, Hibernate, ticket,
-   bruit replié. Donner son chemin complet ; mes retours restent dans le menu (en citant la
+   du plugin) et `xdg-open carte.html`. Page segmentée : une section à la fois, choisie
+   dans le sommaire latéral (risque de chaque fonctionnalité affiché) ou avec ←/→ (j/k) et
+   Précédente / Suivante. Sections : résumé, une par fonctionnalité (fiche et diff de ses
+   seuls hunks, rendu par diff2html), refactoring, SQL, Hibernate, ticket, bruit replié. Donner son chemin complet ; mes retours restent dans le menu (en citant la
    fonctionnalité ou `fichier:ligne`). Rien n'est publié : la page ne charge que diff2html
    depuis cdn.jsdelivr.net.
 
