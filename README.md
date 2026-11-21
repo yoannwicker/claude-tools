@@ -36,9 +36,9 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Plugin `session-analysis` (analyse des sessions avec AgentsView, qu'il installe) | `./install.sh plugin session-analysis` | `python3`, `curl` |
 | Plugin `review` (agents reviewer, challenger et mapper, skills `/review:diff`, `/review:pr`, `/review:decisions`, `/review:manual`, `/review:feedback` : relire son diff ou la PR d'un collègue, remettre en question leurs décisions, relire soi-même une PR guidé par sa carte, traiter les retours reçus ; `/review:pr-auto`, `/review:feedback-auto` : les lancer d'office depuis les notifications GitHub) | `./install.sh plugin review`, puis `review-watch enable` pour le mode auto | `git`, `python3` ; `gh` authentifié ; `git-nav` pour chercher une PR par mots-clés ; systemd utilisateur pour le mode auto |
 
-Pour Cursor : `./install.sh plugin --cursor <nom>…` (ou `--all`, `--remove`) convertit les
-plugins en plugins Cursor locaux (`~/.cursor/plugins/local/`), voir
-[CLAUDE-CODE.md](CLAUDE-CODE.md#version-cursor-des-plugins).
+Cursor reprend de lui-même les plugins installés pour Claude (skills, une partie des hooks) ;
+`./install.sh plugin --cursor <nom>…` y ajoute leur surcharge Cursor, pour ce qu'il ne reprend
+pas (consignes, MCP, notifications…), voir [CLAUDE-CODE.md](CLAUDE-CODE.md#avec-cursor).
 
 Plusieurs plugins d'un coup : `./install.sh plugin <nom>…`, tous : `./install.sh plugin --all`
 (c'est ce que fait `./install.sh`). Relancer met à jour. `./install.sh plugin --remove <nom>…`
@@ -146,7 +146,8 @@ home/               miroir de $HOME, un lien par fichier
   .config/          herdr/config.toml, mise/config.toml
   .local/           bin/{cl,dot}, share/gnome-shell/extensions/claude-notify@ywicker/
 .claude-plugin/     marketplace.json : ce dépôt comme marketplace locale « claude-tools »
-plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quelque chose hors de lui
+plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quelque chose hors de lui,
+                    et sa surcharge Cursor cursor/ s'il en a une (install.sh plugin --cursor)
                     (liens, contrôles ; lu par install.sh plugin) : pr-comments/ (repris
                     d'aguiddir/claude-config), intellij/, profiles/ (bin/claude-profile, shell/claude-profile.sh),
                     git-nav/ (skills /pr, /br, /worktree, branch-cleanup, hook merge-watch, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
@@ -156,13 +157,12 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     pour le rattrapage quotidien),
                     git-tidy/ (skills /git-tidy:commits, :pr-sync, :ready et :approved-auto,
                     bin/tidy-watch, timer systemd tidy-watch),
-                    notify/ (hooks et scripts des notifications desktop ; cursor/ : version Cursor sous herdr),
+                    notify/ (hooks et scripts des notifications desktop ; cursor/ : surcharge Cursor sous herdr),
                     herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
                     review/ (agents reviewer, challenger et mapper, skills /review:diff, :pr, :decisions, :manual, :feedback, :pr-auto et :feedback-auto,
                     bin/{review-post,review-watch,review-map-html}, timer systemd review-watch, profil Herdr UI)
-cursor/             convert.py et hook-adapter.py : version Cursor des plugins (install.sh plugin --cursor)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — lean — ou d'une base — vidal : harnais —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),

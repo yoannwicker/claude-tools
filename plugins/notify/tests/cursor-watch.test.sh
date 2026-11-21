@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests de la version Cursor de notify (cursor/scripts/cursor-watch.sh), avec un faux herdr et un
+# Tests de la surcharge Cursor de notify (cursor/scripts/cursor-watch.sh), avec un faux herdr et un
 # faux claude-notify.py : bash plugins/notify/tests/cursor-watch.test.sh
 set -u
 plugin=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -12,9 +12,11 @@ check() { # check <libellé> <commande…>
   if "$@" >/dev/null 2>&1; then printf 'ok    %s\n' "$label"; else printf 'FAIL  %s\n' "$label"; fails=$((fails + 1)); fi
 }
 
-# Scripts du plugin tels qu'installés pour Cursor : scripts/ et, par-dessus, cursor/scripts/.
-mkdir -p "$tmp/scripts" "$tmp/bin" "$tmp/state"
-cp "$plugin"/scripts/notify.sh "$plugin"/cursor/scripts/cursor-watch.sh "$tmp/scripts/"
+# Copie du plugin : scripts/ (notify.sh) et cursor/scripts/ (cursor-watch.sh).
+mkdir -p "$tmp/scripts" "$tmp/cursor/scripts" "$tmp/bin" "$tmp/state"
+cp "$plugin"/scripts/notify.sh "$tmp/scripts/"
+cp "$plugin"/cursor/scripts/cursor-watch.sh "$tmp/cursor/scripts/"
+watch=$tmp/cursor/scripts/cursor-watch.sh
 cat > "$tmp/scripts/claude-notify.py" <<EOF
 import json, sys
 open("$tmp/shown", "a").write(json.dumps(json.load(sys.stdin)) + "\n")
@@ -60,7 +62,8 @@ chmod +x "$tmp/bin/herdr" "$tmp/scripts/notify-click.sh"
 export HERDR_BIN_PATH=$tmp/bin/herdr HERDR_PANE_ID=w1:p1 HERDR_WORKSPACE_ID=w1
 export XDG_STATE_HOME=$tmp/state FAKE_HERDR_STATES=$tmp/states
 export CURSOR_WATCH_DETECT_TRIES=2 CURSOR_WATCH_SETTLE=0
-input='{"session_id":"s1","cwd":"/tmp","hook_event_name":"SessionStart"}'
+# Entrée de sessionStart dans Cursor.
+input='{"conversation_id":"s1","session_id":"s1","hook_event_name":"sessionStart","workspace_roots":["/tmp"]}'
 pidfile=$tmp/state/claude-notify/cursor-watch-w1_p1.pid
 
 # wait_lines <fichier> <n> : le fichier a n lignes (notify.sh affiche en arrière-plan), 5 s au plus
@@ -70,10 +73,10 @@ wait_lines() { for _ in $(seq 50); do [ "$(wc -l < "$1" 2>/dev/null)" = "$2" ] &
 echo "cursor idle" > "$tmp/states.cur"
 printf '%s\n' "cursor working" "cursor idle" "cursor working" "cursor idle!" "cursor blocked" \
   "cursor working" "cursor done" > "$tmp/states"
-echo "$input" | bash "$tmp/scripts/cursor-watch.sh" start
+echo "$input" | bash "$watch" start >/dev/null
 check "3 notifications : fin, permission, fin (rien pour l'idle bref)" wait_lines "$tmp/shown" 3
 check "l'observateur finit quand l'agent disparaît" \
-  bash -c 'sleep 0.5; [ ! -e "$1" ] && ! pgrep -f "$2 watch"' _ "$pidfile" "$tmp/scripts/cursor-watch.sh"
+  bash -c 'sleep 0.5; [ ! -e "$1" ] && ! pgrep -f "$2 watch"' _ "$pidfile" "$watch"
 check "fin de tour -> Stop" bash -c 'sed -n 1p "$1" | jq -e ".event == \"Stop\" and (.title | test(\"Travail terminé\"))"' _ "$tmp/shown"
 check "blocked -> permission, critique" \
   bash -c 'sed -n 2p "$1" | jq -e ".event == \"Notification\" and .urgency == \"critical\" and .session_id == \"s1\""' _ "$tmp/shown"
@@ -85,21 +88,21 @@ check "agent reparti -> notifications de la session effacées (3 fois)" \
 rm -f "$tmp/shown"
 echo "claude idle" > "$tmp/states.cur"
 printf '%s\n' "claude working" "claude idle" > "$tmp/states"
-echo "$input" | bash "$tmp/scripts/cursor-watch.sh" start
+echo "$input" | bash "$watch" start >/dev/null
 check "agent autre que Cursor : rien" bash -c 'sleep 3; [ ! -e "$1" ] && [ ! -e "$2" ]' _ "$tmp/shown" "$pidfile"
 
 # stop : l'observateur, bloqué dans herdr agent wait, est arrêté avec lui.
 echo "cursor idle" > "$tmp/states.cur"
-echo "$input" | FAKE_HERDR_HANG=1 bash "$tmp/scripts/cursor-watch.sh" start
+echo "$input" | FAKE_HERDR_HANG=1 bash "$watch" start >/dev/null
 sleep 0.5
 pid=$(cat "$pidfile" 2>/dev/null)
-echo '{}' | bash "$tmp/scripts/cursor-watch.sh" stop
+echo '{}' | bash "$watch" stop >/dev/null
 sleep 0.3
 check "stop arrête l'observateur et son herdr agent wait" \
   bash -c '[ -n "$1" ] && ! kill -0 "$1" 2>/dev/null && ! pgrep -g "$1"' _ "$pid"
 
 unset HERDR_PANE_ID
-echo "$input" | bash "$tmp/scripts/cursor-watch.sh" start
+echo "$input" | bash "$watch" start >/dev/null
 check "hors herdr : rien de lancé" test ! -e "$pidfile"
 
 [ $fails = 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

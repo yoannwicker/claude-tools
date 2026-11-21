@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Version Cursor du plugin notify (plugins/notify/cursor/, voir CLAUDE-CODE.md, notify) : le CLI
-# Cursor ne lance pas les hooks stop ni beforeSubmitPrompt, alors on suit l'agent par herdr.
-#   cursor-watch.sh start|stop   hooks sessionStart / sessionEnd (JSON au format Claude sur stdin)
+# Surcharge Cursor du plugin notify (plugins/notify/cursor/, voir CLAUDE-CODE.md, notify) : le
+# CLI Cursor ne lance pas les hooks stop ni beforeSubmitPrompt, alors on suit l'agent par herdr.
+#   cursor-watch.sh start|stop   hooks sessionStart / sessionEnd de Cursor (son JSON sur stdin)
 #   cursor-watch.sh watch <session> <cwd>   l'observateur, détaché par start
 # Hors herdr (pas de HERDR_PANE_ID : IDE, autre terminal), rien : pas de quoi suivre l'agent.
 # L'observateur suit les changements d'état de l'agent du pane (herdr agent wait) et passe à
@@ -9,11 +9,11 @@
 # si l'état tient), Notification permission_prompt quand il attend une validation (blocked),
 # UserPromptSubmit quand il repart (working), pour effacer ce qui reste en attente. Il s'arrête
 # quand le pane n'a plus d'agent Cursor, ou à sessionEnd.
-here=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+here=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../scripts   # notify.sh du plugin
 jq=$(command -v jq || echo ~/.local/bin/jq)
 herdr=${HERDR_BIN_PATH:-herdr}
 state=${XDG_STATE_HOME:-$HOME/.local/state}/claude-notify
-[ -n "$HERDR_PANE_ID" ] || { cat >/dev/null; exit 0; }
+[ -n "$HERDR_PANE_ID" ] || { cat >/dev/null; echo '{}'; exit 0; }
 STATES="idle working blocked done unknown"
 pidfile=$state/cursor-watch-${HERDR_PANE_ID//[^A-Za-z0-9]/_}.pid
 
@@ -53,12 +53,14 @@ case "${1:-}" in
     stop
     mkdir -p "$state"
     setsid -f bash "${BASH_SOURCE[0]}" watch \
-      "$($jq -r '.session_id // empty' <<<"$in")" "$($jq -r '.cwd // empty' <<<"$in")" \
-      </dev/null >/dev/null 2>&1
+      "$($jq -r '.session_id // .conversation_id // empty' <<<"$in")" \
+      "$($jq -r '.workspace_roots[0] // empty' <<<"$in")" </dev/null >/dev/null 2>&1
+    echo '{}'
     ;;
   stop)
     cat >/dev/null
     stop
+    echo '{}'
     ;;
   watch)
     session_id=$2 cwd=$3

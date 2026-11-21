@@ -1,23 +1,14 @@
 {
+  "version": 1,
   "hooks": {
-    "SessionStart": [
+    "sessionStart": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/cursor-watch.sh\" start"
-          }
-        ]
+        "command": "bash \"${CLAUDE_PLUGIN_ROOT}/cursor/scripts/cursor-watch.sh\" start"
       }
     ],
-    "SessionEnd": [
+    "sessionEnd": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/cursor-watch.sh\" stop"
-          }
-        ]
+        "command": "bash \"${CLAUDE_PLUGIN_ROOT}/cursor/scripts/cursor-watch.sh\" stop"
       }
     ]
   }

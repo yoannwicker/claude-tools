@@ -140,7 +140,8 @@ def main():
     try:
         data = json.load(sys.stdin)
         command = data["tool_input"]["command"]
-        cwd = data.get("cwd")
+        # Cursor (qui reprend ce hook) envoie un cwd vide : dossier du workspace.
+        cwd = data.get("cwd") or (data.get("workspace_roots") or [None])[0]
         found = [m for m in (merged(seg, cwd) for seg in segments(command)) if m]
     except (ValueError, KeyError, TypeError):
         return

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "jq -Rs '{additional_context: .}' \"${CLAUDE_PLUGIN_ROOT}/instructions.md\""
+      }
+    ]
+  }
+}

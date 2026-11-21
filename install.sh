@@ -5,7 +5,7 @@
 #   ./install.sh setup      exécute setup/*.sh dans l'ordre (idempotents)
 #   ./install.sh plugin <p>… installe ou met à jour ces plugins, avec ce qu'ils posent hors d'eux (setup.sh)
 #   ./install.sh plugin --all | --remove <p>… | --remove --all ; sans argument : état des plugins
-#   ./install.sh plugin --cursor <p>… | --all | --remove … : version Cursor des plugins (cursor/convert.py)
+#   ./install.sh plugin --cursor <p>… | --all : installe aussi la surcharge Cursor (--remove : la retire)
 #   ./install.sh status     état des liens et des plugins ; code retour 1 si quelque chose cloche
 #   ./install.sh adopt <f>… déplace un fichier de $HOME dans home/ et le remplace par un lien
 #   ./install.sh capture <f>… recopie un fichier de $HOME vers home/ (repli quand un lien n'est pas possible)
@@ -13,8 +13,9 @@
 # dépendances hors du plugin sont déclarées dans plugins/<p>/setup.sh, sourcé ici : links=( "<chemin
 # dans le plugin> <destination>" … ) et, facultatifs, on_install, on_remove, on_status. Les
 # plugins dont il dépend (`dependencies` de son plugin.json) sont installés avant lui. Avec
-# --cursor, le plugin est converti dans ~/.cursor/plugins/local/<p> ; cursor=off dans son
-# setup.sh l'exclut, un dossier cursor/ dans le plugin en donne la version Cursor de certains fichiers.
+# --cursor, s'y ajoute sa surcharge Cursor (plugins/<p>/cursor/ : plugin Cursor copié dans
+# ~/.cursor/plugins/local/<p>-cursor, et son setup.sh à lui), complément de ce que Cursor
+# reprend lui-même des plugins Claude activés.
 set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -126,9 +127,10 @@ with_deps() {
   printf '%s\n' "${out[@]}"
 }
 
-# Liens déclarés par plugins/<p>/setup.sh, « <source absolue>\t<destination absolue> » par ligne.
+# Liens déclarés par plugins/<p>/setup.sh (ou le setup.sh donné, celui de cursor/), « <source
+# absolue>\t<destination absolue> » par ligne ; les sources sont relatives au plugin.
 plugin_links() {
-  local p=$1 f=$plugins_root/$1/setup.sh
+  local p=$1 f=${2:-$plugins_root/$1/setup.sh}
   [ -f "$f" ] || return 0
   (
     links=()
@@ -141,10 +143,10 @@ plugin_links() {
   )
 }
 
-# plugin_hook <p> <on_install|on_remove|on_status> : lance le hook s'il est déclaré. Il voit
-# repo, plugin_dir, et note() pour un avertissement qui n'est pas une erreur.
+# plugin_hook <p> <on_install|on_remove|on_status> [<setup.sh>] : lance le hook s'il est déclaré.
+# Il voit repo, plugin_dir, et note() pour un avertissement qui n'est pas une erreur.
 plugin_hook() {
-  local p=$1 hook=$2 f=$plugins_root/$1/setup.sh
+  local p=$1 hook=$2 f=${3:-$plugins_root/$1/setup.sh}
   [ -f "$f" ] || return 0
   (
     plugin_dir=$plugins_root/$p
@@ -221,28 +223,26 @@ still_enabled() {
   done
 }
 
-# Liens et on_remove d'un plugin, au retrait de sa dernière version (Claude ou Cursor).
+# Liens et on_remove d'un plugin au retrait (ceux du setup.sh donné : celui de cursor/).
 unlink_plugin() {
-  local p=$1 src dst rc=0
-  plugin_hook "$p" on_remove || rc=1
+  local p=$1 f=${2:-} src dst rc=0
+  plugin_hook "$p" on_remove "$f" || rc=1
   while IFS=$'\t' read -r src dst; do
     if same_target "$dst" "$src"; then
       rm "$dst"; printf 'unlink  %s\n' "${dst/#$dst_root/\~}"
     elif [ -e "$dst" ] || [ -L "$dst" ]; then
       printf 'gardé   %s (ne pointe pas vers le plugin)\n' "${dst/#$dst_root/\~}"
     fi
-  done < <(plugin_links "$p")
+  done < <(plugin_links "$p" "$f")
   return $rc
 }
 
 remove_one() {
   local p=$1 id=$1@$marketplace rc=0
   printf '== plugin %s (retrait)\n' "$p"
-  if cursor_installed "$p"; then
-    printf 'gardé   liens et on_remove de %s (version Cursor installée)\n' "$p"
-  else
-    unlink_plugin "$p" || rc=1
-  fi
+  # Sans le plugin Claude, Cursor n'a plus rien à compléter.
+  ! cursor_installed "$p" || cursor_remove_one "$p" || rc=1
+  unlink_plugin "$p" || rc=1
   if [ -n "$(plugin_version "$p")" ]; then
     claude plugin uninstall "$id" || rc=1
   else
@@ -254,7 +254,7 @@ remove_one() {
 
 # État des liens déclarés par le setup.sh d'un plugin ; retour 1 si l'un cloche.
 links_status() {
-  local p=$1 src dst rc=0
+  local p=$1 f=${2:-} src dst rc=0
   while IFS=$'\t' read -r src dst; do
     if same_target "$dst" "$src"; then
       printf 'ok      plugin %s : %s\n' "$p" "${dst/#$dst_root/\~}"
@@ -265,7 +265,7 @@ links_status() {
     else
       printf 'MISSING plugin %s : %s\n' "$p" "${dst/#$dst_root/\~}"; rc=1
     fi
-  done < <(plugin_links "$p")
+  done < <(plugin_links "$p" "$f")
   return $rc
 }
 
@@ -302,106 +302,90 @@ plugins_status() {
   return $rc
 }
 
-## Plugins pour Cursor : conversion par cursor/convert.py dans ~/.cursor/plugins/local/<p>
+## Surcharge Cursor : plugins/<p>/cursor/
 
-cursor_installed() { [ -f "$cursor_root/$1/.claude-compat/source" ]; }
+# Cursor reprend de lui-même les plugins Claude activés dans ~/.claude/settings.json (skills,
+# hooks) ; la surcharge apporte le reste : un plugin Cursor (hooks au format Cursor, mcp.json…),
+# copié dans ~/.cursor/plugins/local/<p>-cursor (Cursor ne charge pas un plugin local qui est un
+# lien), ${CLAUDE_PLUGIN_ROOT} y devenant le dossier du plugin dans le dépôt, d'où servent ses
+# scripts ; et cursor/setup.sh, au format de setup.sh (liens relatifs au plugin).
 
-# Vrai si le plugin s'exclut de Cursor (cursor=off dans son setup.sh).
-cursor_off() {
-  local f=$plugins_root/$1/setup.sh
-  [ -f "$f" ] || return 1
-  # shellcheck source=/dev/null
-  ( cursor=on; . "$f"; [ "$cursor" = off ] )
+cursor_dir() { printf '%s/%s-cursor' "$cursor_root" "$1"; }
+cursor_setup() { printf '%s/%s/cursor/setup.sh' "$plugins_root" "$1"; }
+cursor_installed() { [ -f "$(cursor_dir "$1")/.claude-tools-overlay" ]; }
+
+# cursor_build <p> <dossier> : la surcharge telle qu'elle s'installe.
+cursor_build() {
+  local p=$1 out=$2 f
+  mkdir -p "$out"
+  # Les éléments d'un plugin Cursor ; le reste de cursor/ (scripts, textes) sert depuis le dépôt.
+  for f in .cursor-plugin hooks mcp.json rules skills agents commands; do
+    [ -e "$plugins_root/$p/cursor/$f" ] && cp -r "$plugins_root/$p/cursor/$f" "$out/"
+  done
+  find "$out" -type f -exec sed -i "s#\${CLAUDE_PLUGIN_ROOT}#$plugins_root/$p#g" {} +
+  f=$out/.cursor-plugin/plugin.json
+  [ -f "$f" ] || { mkdir -p "$(dirname "$f")"
+    jq -n --arg n "$p-cursor" --arg d "Surcharge Cursor du plugin $p de claude-tools" \
+      '{name: $n, description: $d}' > "$f"; }
+  printf '%s\n' "$plugins_root/$p" > "$out/.claude-tools-overlay"
 }
 
-# Scripts de bin/ qu'aucun lien de setup.sh ne met dans le PATH : Claude ajoute bin/ au PATH,
-# Cursor non.
-cursor_unlinked_bin() {
-  local p=$1 f linked
-  [ -d "$plugins_root/$p/bin" ] || return 0
-  linked=$(plugin_links "$p" | cut -f1)
-  for f in "$plugins_root/$p"/bin/*; do
-    grep -qxF -- "$f" <<< "$linked" || printf '%s ' "$(basename "$f")"
-  done
+# Vrai si Cursor reprend le plugin Claude : activé dans ~/.claude/settings.json (pas dans un
+# profil : Cursor ne lit que celui-là).
+cursor_imports() {
+  jq -e --arg id "$1@$marketplace" '.enabledPlugins[$id] == true' "$settings" >/dev/null 2>&1
 }
 
 cursor_install_one() {
-  local p=$1 src dst line rc=0 missing
-  printf '== plugin %s (Cursor)\n' "$p"
-  while IFS= read -r line; do
-    printf 'note    plugin %s : %s\n' "$p" "${line#note }"
-  done < <(python3 "$repo/cursor/convert.py" "$plugins_root/$p" "$cursor_root/$p") || return 1
-  printf 'cursor  %s\n' "${cursor_root/#$dst_root/\~}/$p"
-  missing=$(cursor_unlinked_bin "$p")
-  [ -z "$missing" ] || printf 'note    plugin %s : hors du PATH de Cursor : %s\n' "$p" "$missing"
+  local p=$1 dir src dst rc=0
+  if [ ! -d "$plugins_root/$p/cursor" ]; then
+    printf 'cursor  plugin %s : pas de surcharge, Cursor reprend le plugin Claude tel quel\n' "$p"
+    return 0
+  fi
+  dir=$(cursor_dir "$p")
+  if [ -e "$dir" ] && ! cursor_installed "$p"; then
+    printf '%s existe et ne vient pas de ce dépôt : surcharge non posée\n' "${dir/#$dst_root/\~}" >&2; return 1
+  fi
+  rm -rf "$dir"
+  cursor_build "$p" "$dir"
+  printf 'cursor  %s\n' "${dir/#$dst_root/\~}"
   while IFS=$'\t' read -r src dst; do
     link_one "$src" "$dst" "${dst/#$dst_root/\~}"
-  done < <(plugin_links "$p")
-  plugin_hook "$p" on_install || { echo "on_install de $p en échec"; rc=1; }
+  done < <(plugin_links "$p" "$(cursor_setup "$p")")
+  plugin_hook "$p" on_install "$(cursor_setup "$p")" || { echo "on_install Cursor de $p en échec"; rc=1; }
+  cursor_imports "$p" || printf 'note    plugin %s : éteint dans ~/.claude/settings.json, Cursor ne le reprend pas\n' "$p"
   return $rc
 }
 
 cursor_remove_one() {
-  local p=$1 rc=0
-  printf '== plugin %s (Cursor, retrait)\n' "$p"
+  local p=$1 dir
+  dir=$(cursor_dir "$p")
   if cursor_installed "$p"; then
-    rm -rf "${cursor_root:?}/$p"; printf 'retiré  %s\n' "${cursor_root/#$dst_root/\~}/$p"
-  else
-    printf 'absent  plugin %s (pas installé pour Cursor)\n' "$p"
+    rm -rf "$dir"; printf 'retiré  %s\n' "${dir/#$dst_root/\~}"
   fi
-  if [ -n "$(plugin_version "$p")" ]; then
-    printf 'gardé   liens et on_remove de %s (version Claude installée)\n' "$p"
-  else
-    unlink_plugin "$p" || rc=1
-  fi
-  return $rc
+  [ ! -d "$plugins_root/$p/cursor" ] || unlink_plugin "$p" "$(cursor_setup "$p")"
 }
 
-# État des versions Cursor installées : à jour si une conversion refaite maintenant donne le même
-# dossier. Liens et on_status vus ici quand la version Claude n'est pas installée.
+# État des surcharges installées : à jour si elle se reconstruit à l'identique ; liens de
+# cursor/setup.sh ; plugin Claude repris par Cursor.
 cursor_status() {
   local p tmp out rc=0
-  [ -d "$cursor_root" ] || return 0
   for p in $(plugin_names); do
     cursor_installed "$p" || continue
     tmp=$(mktemp -d)
-    python3 "$repo/cursor/convert.py" --as "$cursor_root/$p" "$plugins_root/$p" "$tmp/$p" >/dev/null
-    if diff -rq "$tmp/$p" "$cursor_root/$p" >/dev/null 2>&1; then
+    if [ -d "$plugins_root/$p/cursor" ] && cursor_build "$p" "$tmp/o" && diff -rq "$tmp/o" "$(cursor_dir "$p")" >/dev/null 2>&1; then
       printf 'ok      cursor %s\n' "$p"
     else
-      printf 'UPDATE  cursor %s (modifié depuis la conversion : ./install.sh plugin --cursor %s)\n' "$p" "$p"; rc=1
+      printf 'UPDATE  cursor %s (surcharge modifiée depuis : ./install.sh plugin --cursor %s)\n' "$p" "$p"; rc=1
     fi
     rm -rf "$tmp"
-    [ -z "$(plugin_version "$p")" ] || continue
-    links_status "$p" || rc=1
-    if ! out=$(plugin_hook "$p" on_status); then
-      printf 'ERREUR  plugin %s : %s\n' "$p" "$out"; rc=1
+    links_status "$p" "$(cursor_setup "$p")" || rc=1
+    if ! out=$(plugin_hook "$p" on_status "$(cursor_setup "$p")"); then
+      printf 'ERREUR  cursor %s : %s\n' "$p" "$out"; rc=1
     elif [ -n "$out" ]; then
       printf '%s\n' "$out"
     fi
-  done
-  return $rc
-}
-
-cmd_plugin_cursor() {
-  local remove=$1 p rc=0; shift
-  local -a names=("$@") kept=()
-  command -v python3 >/dev/null 2>&1 || { echo "python3 requis pour les plugins Cursor" >&2; return 1; }
-  command -v claude >/dev/null 2>&1 && refresh_installed
-  for p in "${names[@]}"; do
-    if [ $remove = 0 ] && cursor_off "$p"; then
-      printf 'ignoré  plugin %s (cursor=off dans son setup.sh)\n' "$p"
-    else
-      kept+=("$p")
-    fi
-  done
-  sweep_orphans
-  for p in "${kept[@]}"; do
-    if [ $remove = 1 ]; then
-      cursor_remove_one "$p" || rc=1
-    else
-      cursor_install_one "$p" || rc=1
-    fi
+    cursor_imports "$p" || { printf 'WARN    cursor %s : plugin Claude éteint dans ~/.claude/settings.json, Cursor ne le reprend pas\n' "$p"; rc=1; }
   done
   return $rc
 }
@@ -431,7 +415,11 @@ cmd_plugin() {
   for p in "${names[@]}"; do
     grep -qx -- "$p" < <(plugin_names) || { printf 'plugin inconnu : %s (plugins : %s)\n' "$p" "$(plugin_names | tr '\n' ' ')" >&2; return 2; }
   done
-  [ $cursor = 0 ] || { cmd_plugin_cursor $remove "${names[@]}"; return; }
+  # --cursor --remove : la surcharge seulement, le plugin Claude reste.
+  if [ $cursor = 1 ] && [ $remove = 1 ]; then
+    for p in "${names[@]}"; do printf '== plugin %s (surcharge Cursor, retrait)\n' "$p"; cursor_remove_one "$p" || rc=1; done
+    return $rc
+  fi
   command -v claude >/dev/null 2>&1 || { echo "claude absent : plugins ignorés"; return 0; }
 
   sweep_orphans
@@ -449,6 +437,10 @@ cmd_plugin() {
     fi
   done
   settings_restore; trap - EXIT
+
+  if [ $cursor = 1 ]; then
+    for p in "${names[@]}"; do cursor_install_one "$p" || rc=1; done
+  fi
 
   # Dépendances retirées avec rien : on les garde, en disant si plus rien n'en a besoin.
   if [ $remove = 1 ]; then

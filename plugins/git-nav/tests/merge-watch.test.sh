@@ -41,6 +41,15 @@ expect cleanup 'git push -u origin +refs/heads/feat/x:refs/heads/master' 'branch
 expect cleanup 'git push -o ci.skip origin feat/x:main' 'branche feat/x'
 expect cleanup "git -C $repo push origin HEAD:develop" 'branche feat/y poussée sur develop'
 
+# Entrée de Cursor (qui reprend le hook) : cwd vide, dossier du workspace dans workspace_roots.
+out=$(jq -n --arg r "$repo" '{tool_name: "Shell", cwd: "", workspace_roots: [$r], tool_input: {command: "git push origin HEAD:develop", cwd: ""}}' |
+  MERGE_WATCH_NO_PLAN=1 python3 "$hook" | jq -r '.hookSpecificOutput.additionalContext')
+if printf '%s' "$out" | grep -qF 'branche feat/y poussée sur develop'; then
+  echo "ok    cleanup (Cursor, cwd vide : workspace_roots)"
+else
+  echo "FAIL  cleanup (Cursor, cwd vide : workspace_roots) (obtenu : $out)"; fails=$((fails + 1))
+fi
+
 expect none 'gh pr merge --auto --squash 83'
 expect none 'git merge --abort'
 expect none 'git merge --continue'

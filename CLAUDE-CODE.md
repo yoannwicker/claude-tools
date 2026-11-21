@@ -9,9 +9,8 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 **Fichiers** : `home/.claude/settings.json` (le profil de référence), `profiles/*.json` (surcharges, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh` ;
 plugins : `.claude-plugin/marketplace.json`,
 `plugins/{pr-comments,intellij,profiles,git-nav,gh-watch,git-tidy,notify,herdr-session,build-brief,session-analysis,review}/` (avec
-leur `setup.sh`), `install.sh plugin` (voir [Installation des plugins](#installation-des-plugins)) ;
-version Cursor des plugins : `cursor/{convert.py,hook-adapter.py,tests/}` (voir
-[Version Cursor des plugins](#version-cursor-des-plugins)).
+leur `setup.sh`, et leur surcharge Cursor `cursor/` pour certains), `install.sh plugin` (voir
+[Installation des plugins](#installation-des-plugins) et [Avec Cursor](#avec-cursor)).
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line) ; `gh`
 authentifié (plugins [`git-nav`](#git-nav), [`git-tidy`](#git-tidy) et [`review`](#review), badge PR de la status line) ; Linux + GNOME pour
@@ -113,7 +112,7 @@ Un plugin à la fois, avec ce qu'il pose hors de lui :
 ./install.sh plugin --all            tous ceux de marketplace.json (ce que fait ./install.sh)
 ./install.sh plugin --remove <nom>…  désinstalle (--remove --all : tous)
 ./install.sh plugin                  état des plugins (aussi dans ./install.sh status)
-./install.sh plugin --cursor <nom>…  version Cursor (aussi --all, --remove) : voir plus bas
+./install.sh plugin --cursor <nom>…  et sa surcharge Cursor (--cursor --remove : la surcharge seule)
 ```
 
 `--all` et `./install.sh` ne font qu'appeler l'installation de chaque plugin l'une après
@@ -165,7 +164,6 @@ links=(                                  # <chemin dans le plugin>  <destination
 on_install() { …; }   # facultatifs et idempotents ; ils voient $repo, $plugin_dir
 on_remove()  { …; }   # et note "<message>" (avertissement affiché par status)
 on_status()  { …; }   # retour non nul = erreur
-cursor=off            # facultatif : pas de version Cursor (voir plus bas)
 ```
 
 Les liens suffisent au cas courant : pose, contrôle et retrait sont faits par
@@ -179,57 +177,49 @@ l'installe et l'active avec lui, et `./install.sh plugin` l'installe d'abord, li
 de ce `HOME` (`systemctl --user show -p FragmentPath`) : sur un HOME de test, le
 gestionnaire systemd reste celui de la session.
 
-#### Version Cursor des plugins
+#### Avec Cursor
 
-`./install.sh plugin --cursor <nom>…` (`--all`, `--remove` comme sans `--cursor`) installe un
-plugin dans Cursor : `cursor/convert.py` le convertit en plugin Cursor local,
-`~/.cursor/plugins/local/<nom>/`, régénéré en entier à chaque appel (une copie : Cursor ne
-charge pas un plugin local qui est un lien). Les dépendances passent d'abord, puis les liens
-et l'`on_install` du `setup.sh`, communs aux deux versions : au retrait de l'une, ils restent
-tant que l'autre est installée. Ni `claude`, ni marketplace, ni profils ; prérequis :
-`python3`, `jq`.
+Cursor (le CLI `cursor-agent` comme l'IDE, si son réglage *Include third-party Plugins, Skills,
+and other configs* est actif) reprend de lui-même les plugins Claude installés et activés dans
+`~/.claude/settings.json` (le profil de référence, pas les autres profils : Cursor ne lit que
+celui-là), sans réglage pour s'en passer dans le CLI. Constaté avec `cursor-agent` 2026.11.19 :
 
-Conversion :
+- repris : les skills (telles quelles), les hooks `PreToolUse`, `PostToolUse`, `SessionStart`,
+  `SessionEnd`, lancés avec `CLAUDE_PLUGIN_ROOT` mais avec le JSON de Cursor en entrée
+  (`hook_event_name: "sessionStart"`, `cwd` vide, `workspace_roots`), et `CURSOR_VERSION` dans
+  l'environnement ;
+- pas repris : la sortie texte de `SessionStart` (une consigne `cat`, ignorée ; seul le JSON
+  `hookSpecificOutput.additionalContext` passe), le MCP du plugin, `bin/` dans le PATH ; `Stop`,
+  `UserPromptSubmit` ne sont jamais lancés par le CLI ; les mods ne s'appliquent pas.
 
-- Copie du plugin, sans `.claude-plugin/`, `tests/`, `setup.sh`, `cursor/`, ni les mods
-  d'interface (`modules` de `hooks.json`, sans équivalent : signalés).
-- `.cursor-plugin/plugin.json` tiré de `.claude-plugin/plugin.json` (sans `dependencies`).
-- `${CLAUDE_PLUGIN_ROOT}` et `${CLAUDE_SKILL_DIR}` remplacés par le chemin installé dans
-  `skills/`, `agents/`, `commands/` et le MCP (`.mcp.json` devient `mcp.json`) ;
-  `${CLAUDE_SESSION_ID}` signalé.
-- `hooks/hooks.json` réécrit au format Cursor : `SessionStart`→`sessionStart`,
-  `PreToolUse`/`PostToolUse`→`preToolUse`/`postToolUse` (matcher `Bash`→`Shell`,
-  `Edit`/`Write`→`Write`, `mcp__<srv>__<outil>`→`MCP:<outil>`…),
-  `UserPromptSubmit`→`beforeSubmitPrompt`, `Stop` et `StopFailure`→`stop` (fin normale, ou
-  `status: error`), `SessionEnd`, `SubagentStop`, `PreCompact` ; `Notification` sans
-  équivalent (signalé). Chaque commande passe par `.claude-compat/hook-adapter.py`, qui
-  traduit l'entrée Cursor au format Claude, lance la commande d'origine
-  (`CLAUDE_PLUGIN_ROOT` = dossier installé), puis traduit sa réponse : `permissionDecision`
-  → `permission`, sortie de `SessionStart` (texte ou `additionalContext`) →
-  `additional_context`, `decision: block` → `continue: false` ou `followup_message`, code
-  retour 2 → refus avec le stderr. Les scripts du plugin restent ceux de Claude.
-- Scripts de `bin/` qu'aucun lien du `setup.sh` ne met dans le PATH : signalés (Claude ajoute
-  `bin/` au PATH, Cursor non).
+Un plugin installé pour Claude seulement est donc vu de Cursor : ses hooks restent corrects
+sous Cursor (`herdr-session` n'y fait rien, `merge-watch` de `git-nav` prend le dossier du
+workspace). Ce qui manque s'ajoute par une **surcharge Cursor**, `plugins/<nom>/cursor/`,
+installée seulement par `./install.sh plugin --cursor <nom>…`, qui installe d'abord le plugin
+pour Claude :
 
-Ce qui doit différer pour Cursor va dans `plugins/<nom>/cursor/`, posé par-dessus la copie, au
-même chemin ; seulement ce qui diffère. Son `hooks/hooks.json` remplace celui du plugin avant
-conversion : événements Claude (convertis comme ci-dessus) et événements Cursor (en
-camelCase, gardés tels quels) peuvent s'y mêler ; son `.cursor-plugin/plugin.json` complète le
-manifeste. Un plugin sans version Cursor possible le déclare par `cursor=off` dans son
-`setup.sh` (ignoré, avec un message, par `--cursor`).
+- les éléments d'un plugin Cursor de `cursor/` (`hooks/hooks.json` au format Cursor, `mcp.json`,
+  `rules/`, `skills/`, `agents/`, `commands/`, `.cursor-plugin/plugin.json`, sinon généré)
+  copiés dans `~/.cursor/plugins/local/<nom>-cursor/` (une copie : Cursor ne charge pas un
+  plugin local qui est un lien ; nom distinct de celui du plugin Claude repris), où
+  `${CLAUDE_PLUGIN_ROOT}` devient le dossier du plugin dans le dépôt : scripts et textes
+  servent de là ;
+- `cursor/setup.sh`, au format de `setup.sh` : liens (relatifs au plugin), `on_install`,
+  `on_remove`, `on_status`.
 
-`./install.sh status` donne `ok cursor <nom>`, ou `UPDATE` quand une conversion refaite
-maintenant diffère du dossier installé (plugin modifié depuis), plus les liens et
-`on_status` quand seule la version Cursor est installée. Un dossier de
-`~/.cursor/plugins/local/` qui n'a pas été généré ici (`.claude-compat/source`) n'est jamais
-remplacé ni retiré. Tests : `bash cursor/tests/convert.test.sh`.
+`--cursor --remove <nom>` retire la surcharge seule ; retirer le plugin Claude la retire aussi.
+`./install.sh status` donne pour chaque surcharge installée `ok cursor <nom>`, ou `UPDATE`
+quand elle ne se reconstruit plus à l'identique, l'état des liens de `cursor/setup.sh`, et
+`WARN` si le plugin est éteint dans `~/.claude/settings.json` (Cursor ne le reprend pas). Un
+dossier `<nom>-cursor` qui ne vient pas d'ici (`.claude-tools-overlay`) n'est jamais remplacé.
+Pour essayer une surcharge sans l'installer : `cursor-agent --plugin-dir <dossier>`.
 
-Constaté avec le CLI `cursor-agent` 2026.11.13 (l'IDE n'a pas été essayé) : les skills et les
-hooks `sessionStart`, `preToolUse`, `sessionEnd` d'un plugin local sont pris en compte ; les
-rules d'un plugin, et les hooks `stop`, `beforeSubmitPrompt`, `afterAgentResponse` (même dans
-`~/.cursor/hooks.json`), non. Une consigne passe donc par `SessionStart`, comme pour Claude ;
-les notifications de fin de tour, par herdr (voir [`notify`](#avec-cursor)).
-Pour essayer une version convertie sans l'installer : `cursor-agent --plugin-dir <dossier>`.
+| Plugin | Surcharge Cursor |
+|---|---|
+| [`build-brief`](#build-brief), [`intellij`](#intellij) | consigne passée par `sessionStart` (`additional_context`) ; `intellij` : MCP (`mcp.json`) |
+| [`notify`](#notify) | notifications sous herdr ([Avec Cursor](#notify-avec-cursor)) |
+| [`git-nav`](#git-nav), [`review`](#review) | `cursor/setup.sh` : `worktree-scan`, `review-post` liés dans `~/.local/bin` |
+| les autres | aucune : Cursor reprend le plugin Claude tel quel (skills ; mods de `pr-comments`, `profiles` sans effet) |
 
 ### `pr-comments`
 
@@ -279,6 +269,12 @@ d'une PR seulement quand elle a changé, après une écriture, ou toutes les dix
 
 **Prérequis** : IntelliJ ouvert avec le serveur MCP actif, sinon `claude mcp list` le montre
 déconnecté.
+
+**Cursor** : ni la consigne ni le MCP ne sont repris par Cursor ; la surcharge
+(`./install.sh plugin --cursor intellij`, voir [Avec Cursor](#avec-cursor)) passe la consigne
+par `sessionStart`, suivie de `cursor/instructions.md` (les outils y sont ceux du serveur
+`plugin-intellij-cursor-intellij`), et déclare le serveur dans son `mcp.json`. Consigne
+vérifiée avec `cursor-agent` ; le MCP, pas encore (IntelliJ fermé pendant l'essai).
 
 - `.mcp.json` : serveur `intellij`, transport SSE sur `http://127.0.0.1:64342/sse`
   (plugin MCP Server d'IntelliJ). Outils exposés sous `mcp__plugin_intellij_intellij__*`.
@@ -577,6 +573,12 @@ shell `gpr`/`gbr`, alias) posés par `./install.sh plugin git-nav`. **Activé da
 Tests : `bash plugins/git-nav/tests/merge-watch.test.sh` et
 `bash plugins/git-nav/tests/gbr-cleanup.test.sh` (hook commande et script, pas un mod :
 `claude plugin test` ne s'applique pas).
+
+**Cursor** : skills et hook `merge-watch` repris tels quels par Cursor (le hook prend le dossier
+du workspace, Cursor envoyant un `cwd` vide) ; la surcharge (`./install.sh plugin --cursor
+git-nav`, voir [Avec Cursor](#avec-cursor)) lie `worktree-scan`, appelé par `/worktree`, dans
+`~/.local/bin`. Pas d'`EnterWorktree` dans Cursor : `/pr` et `/br` y travaillent par le chemin
+du worktree.
 
 `bin/` du plugin est dans le PATH de l'outil Bash : les skills appellent `gpr`, `gbr`,
 `worktree-scan` par leur nom, et leurs `allowed-tools` (`Bash(gpr:*)`…) ne dépendent
@@ -1240,7 +1242,7 @@ permission, question) ; un clic ramène la session au premier plan (fenêtre Her
 gnome-terminal).
 
 **Fichiers** : `plugins/notify/` (`hooks/hooks.json`,
-`scripts/{notify.sh,notify-click.sh,claude-notify.py}`, `setup.sh`, version Cursor dans
+`scripts/{notify.sh,notify-click.sh,claude-notify.py}`, `setup.sh`, surcharge Cursor
 `cursor/` : `hooks/hooks.json`, `scripts/cursor-watch.sh` ; `tests/cursor-watch.test.sh`) ; hors du plugin, le lien
 `~/.local/bin/claude-notify-click` posé par `./install.sh plugin notify` pour l'extension GNOME
 `claude-notify@ywicker` ([TOOLS.md](TOOLS.md#extension-gnome-claude-notifyywicker)).
@@ -1248,10 +1250,10 @@ gnome-terminal).
 
 **Prérequis** : GNOME Shell + gnome-terminal (X11 : `xprop`), `python3-gi` avec
 `Notify 0.7`, `gdbus`, `jq` ; herdr et Herdr UI facultatifs (voir [Sans et avec herdr](#sans-et-avec-herdr)). `setup/30-gnome.sh` signale ce qui manque.
-Tests : `bash plugins/notify/tests/cursor-watch.test.sh` (version Cursor ; faux herdr).
+Tests : `bash plugins/notify/tests/cursor-watch.test.sh` (surcharge Cursor ; faux herdr).
 
-**Cursor** : version adaptée (`cursor/`), pour `cursor-agent` lancé dans herdr seulement (voir
-[Avec Cursor](#avec-cursor)).
+**Cursor** : surcharge (`./install.sh plugin --cursor notify`), pour `cursor-agent` lancé dans
+herdr seulement (voir [Avec Cursor](#notify-avec-cursor)).
 
 #### Installation hors de ce dépôt
 
@@ -1323,15 +1325,17 @@ Le titre d'onglet que cherche le clic sous herdr vient de `ui.window_title`, fix
 `"{hostname}: {workspace}"` dans `home/.config/herdr/config.toml` (voir
 [TOOLS.md](TOOLS.md#herdr)) : à garder tel quel, la recherche en dépend.
 
+<a id="notify-avec-cursor"></a>
 #### Avec Cursor
 
-`./install.sh plugin --cursor notify` (voir [Version Cursor des plugins](#version-cursor-des-plugins)).
+`./install.sh plugin --cursor notify` (voir [Avec Cursor](#avec-cursor)).
 Le CLI `cursor-agent` ne lance ni `stop` ni `beforeSubmitPrompt`, et ses notifications
 intégrées (réglage `notifications`) ne visent que certains terminaux (Ghostty, kitty, iTerm2,
-Warp, VS Code, Terminal macOS) : rien sous gnome-terminal ni herdr. La version Cursor suit donc
-l'agent par herdr, qui reconnaît `cursor-agent` en lisant son écran :
-`cursor/hooks/hooks.json` remplace les hooks du plugin par `SessionStart` et `SessionEnd`, qui
-démarrent et arrêtent `cursor/scripts/cursor-watch.sh`.
+Warp, VS Code, Terminal macOS) : rien sous gnome-terminal ni herdr. La surcharge suit donc
+l'agent par herdr, qui reconnaît `cursor-agent` en lisant son écran : ses hooks `sessionStart`
+et `sessionEnd` (`cursor/hooks/hooks.json`) démarrent et arrêtent
+`cursor/scripts/cursor-watch.sh`. Les hooks du plugin Claude repris par Cursor (`Stop`,
+`Notification`…) ne sont pas lancés par le CLI.
 
 - Démarrage (`sessionStart`) : sous herdr (`HERDR_PANE_ID` posé) seulement, un observateur
   détaché par pane (`~/.local/state/claude-notify/cursor-watch-<pane>.pid`, un nouveau remplace
@@ -1367,6 +1371,10 @@ ménage de `setup/20-herdr.sh`. **Activé dans** : tous les profils.
 version ≥ 6 pour la reprise ; `herdr integration status` → `claude: current`). Sans le
 script, ou hors d'un pane herdr, le hook ne fait rien. Pas de tests.
 
+**Cursor** : repris par Cursor, le hook n'y fait rien (`CURSOR_VERSION` posé) : il signalerait
+la session Cursor comme une session Claude. Pour Cursor, l'intégration de herdr :
+`herdr integration install cursor`.
+
 #### Installation hors de ce dépôt
 
 Le plugin ne dépend pas du reste de la config :
@@ -1385,7 +1393,7 @@ fois (à refaire après chaque réinstallation de l'intégration, ce que fait ic
 #### Fonctionnement
 
 Un hook `SessionStart` (démarrage, reprise, `/clear`, compaction, fork ; `timeout` 10 s)
-lance `[ -f "$HOME/.claude/hooks/herdr-agent-state.sh" ] && bash … session || true`. Le
+lance `[ -z "${CURSOR_VERSION:-}" ] && [ -f "$HOME/.claude/hooks/herdr-agent-state.sh" ] && bash … session || true`. Le
 script de herdr ne fait rien hors d'un pane herdr (`HERDR_ENV`, `HERDR_PANE_ID`,
 `HERDR_SOCKET_PATH`) ni pour un sous-agent ; sinon il envoie au socket herdr
 `pane.report_agent_session` : agent `claude`, identifiant de session, chemin du transcript.
@@ -1417,9 +1425,9 @@ réduite) — consigne d'usage et garde-fou qui refuse un Gradle brut.
 `hooks/gradle-guard.py`, `tests/gradle-guard.test.sh`, `setup.sh` : `status` note
 `build-brief` absent du PATH). **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
 
-**Cursor** : converti sans adaptation (`./install.sh plugin --cursor build-brief`, voir
-[Version Cursor des plugins](#version-cursor-des-plugins)) : consigne au démarrage de la
-session, garde-fou sur l'outil `Shell` ; vérifié avec `cursor-agent`.
+**Cursor** : le garde-fou marche tel quel (hook repris par Cursor, sur l'outil `Shell`) ; la
+consigne demande la surcharge (`./install.sh plugin --cursor build-brief`, voir
+[Avec Cursor](#avec-cursor)), qui la passe par `sessionStart` ; vérifié avec `cursor-agent`.
 
 **Prérequis** : `build-brief` dans le PATH, installé par mise (`./setup/10-mise.sh`, voir
 [TOOLS.md](TOOLS.md#mise)) ; sans lui, le garde-fou laisse tout passer ;
@@ -1589,6 +1597,11 @@ facultatif (sinon analyse en fond, reprise dans `gnome-terminal`) ; `python3-gi`
 `bash plugins/review/tests/review-post.test.sh`, `bash plugins/review/tests/review-watch.test.sh` et
 `bash plugins/review/tests/review-map-html.test.sh`
 (faux `gh`, `claude`, `herdr`, rien n'est publié ni lancé) ; pas de mod : `claude plugin test` ne s'applique pas.
+
+**Cursor** : skills et agent `reviewer` repris tels quels par Cursor (`/review:pr` y est la
+skill `pr`, l'agent un sous-agent) ; la surcharge (`./install.sh plugin --cursor review`, voir
+[Avec Cursor](#avec-cursor)) lie `review-post`, appelé par `/review:pr`, dans `~/.local/bin`. Le
+mode auto reste à Claude (`review-watch` lance `claude`).
 
 #### Installation hors de ce dépôt
 

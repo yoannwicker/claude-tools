@@ -67,11 +67,13 @@ Un plugin peut être installé seul, sans le reste de la config : sa sous-sectio
 - Vérifier sur un HOME de test (`HOME=$(mktemp -d)`, depuis une copie du dépôt pour ne pas
   toucher au `settings.json` versionné) : `./install.sh plugin <plugin>`, `status`,
   `plugin --remove <plugin>`, `status`.
-- Version Cursor (`./install.sh plugin --cursor`, détail : CLAUDE-CODE.md, *Version Cursor des
-  plugins*) : convertie d'office depuis le plugin Claude. Ce qui doit différer pour Cursor va
-  dans `plugins/<plugin>/cursor/`, et seulement ce qui diffère (jamais une copie du plugin) ;
-  un plugin sans équivalent possible le déclare par `cursor=off` dans son `setup.sh`. Le dire
-  dans la ligne **Cursor** de sa sous-section.
+- Cursor (détail : CLAUDE-CODE.md, *Avec Cursor*) reprend de lui-même le plugin installé pour
+  Claude : ses hooks doivent rester corrects sous Cursor (JSON de Cursor en entrée,
+  `CURSOR_VERSION` posé), ne rien y faire s'ils n'y ont pas de sens. Ce que Cursor ne reprend
+  pas va dans la surcharge `plugins/<plugin>/cursor/` (plugin Cursor : `hooks/hooks.json` au
+  format Cursor, `mcp.json`… ; `cursor/setup.sh` pour les liens), installée seulement par
+  `./install.sh plugin --cursor` : jamais une copie du plugin, ses scripts servent depuis le
+  dépôt (`${CLAUDE_PLUGIN_ROOT}`). Le dire dans la ligne **Cursor** de sa sous-section.
 
 ## Analyses de sessions et pistes d'amélioration
 
@@ -84,6 +86,6 @@ emplacement du rapport, comparaison avec le précédent).
 Ne jamais versionner (ni `./install.sh adopt`) : `~/.claude/.credentials.json`, `~/.claude.json` (tokens OAuth, état, serveurs MCP
 utilisateur), `~/.claude-profiles/` (dossiers de profils générés),
 `~/.claude/projects/` (transcripts, mémoire), `~/.claude/plugins/`,
-`~/.claude/skills/synced/`, `history.jsonl`, `~/.cursor/` (plugins générés, état et
+`~/.claude/skills/synced/`, `history.jsonl`, `~/.cursor/` (surcharges installées, état et
 authentification de Cursor), et dans `~/.config/herdr/` les `*.log`,
 `*.sock`, `session.json`, `config-gpui.lock`. Toujours `adopt` fichier par fichier, jamais un dossier.
