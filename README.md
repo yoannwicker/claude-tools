@@ -36,6 +36,10 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Plugin `session-analysis` (analyse des sessions avec AgentsView, qu'il installe) | `./install.sh plugin session-analysis` | `python3`, `curl` |
 | Plugin `review` (agents reviewer, challenger et mapper, skills `/review:diff`, `/review:pr`, `/review:decisions`, `/review:manual`, `/review:feedback` : relire son diff ou la PR d'un collègue, remettre en question leurs décisions, relire soi-même une PR guidé par sa carte, traiter les retours reçus ; `/review:pr-auto`, `/review:feedback-auto` : les lancer d'office depuis les notifications GitHub) | `./install.sh plugin review`, puis `review-watch enable` pour le mode auto | `git`, `python3` ; `gh` authentifié ; `git-nav` pour chercher une PR par mots-clés ; systemd utilisateur pour le mode auto |
 
+Pour Cursor : `./install.sh plugin --cursor <nom>…` (ou `--all`, `--remove`) convertit les
+plugins en plugins Cursor locaux (`~/.cursor/plugins/local/`), voir
+[CLAUDE-CODE.md](CLAUDE-CODE.md#version-cursor-des-plugins).
+
 Plusieurs plugins d'un coup : `./install.sh plugin <nom>…`, tous : `./install.sh plugin --all`
 (c'est ce que fait `./install.sh`). Relancer met à jour. `./install.sh plugin --remove <nom>…`
 désinstalle, liens compris. Activer un plugin installé dans un profil reste à `/profile show`.
@@ -135,7 +139,7 @@ demander une déconnexion/reconnexion de session.
 ## Structure
 
 ```
-install.sh          link | plugin | setup | status | adopt | capture (défaut : link + plugin --all + setup)
+install.sh          link | plugin [--cursor] | setup | status | adopt | capture (défaut : link + plugin --all + setup)
 home/               miroir de $HOME, un lien par fichier
   .bash_aliases     charge .config/shell/*.sh (posés par les plugins profiles et git-nav, voir TOOLS.md)
   .claude/          settings.json (le profil de référence, voir CLAUDE-CODE.md), statusline-*.sh
@@ -157,6 +161,7 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
                     review/ (agents reviewer, challenger et mapper, skills /review:diff, :pr, :decisions, :manual, :feedback, :pr-auto et :feedback-auto,
                     bin/{review-post,review-watch,review-map-html}, timer systemd review-watch, profil Herdr UI)
+cursor/             convert.py et hook-adapter.py : version Cursor des plugins (install.sh plugin --cursor)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — lean — ou d'une base — vidal : harnais —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),

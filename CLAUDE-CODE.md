@@ -9,7 +9,9 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 **Fichiers** : `home/.claude/settings.json` (le profil de référence), `profiles/*.json` (surcharges, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh` ;
 plugins : `.claude-plugin/marketplace.json`,
 `plugins/{pr-comments,intellij,profiles,git-nav,gh-watch,git-tidy,notify,herdr-session,build-brief,session-analysis,review}/` (avec
-leur `setup.sh`), `install.sh plugin` (voir [Installation des plugins](#installation-des-plugins)).
+leur `setup.sh`), `install.sh plugin` (voir [Installation des plugins](#installation-des-plugins)) ;
+version Cursor des plugins : `cursor/{convert.py,hook-adapter.py,tests/}` (voir
+[Version Cursor des plugins](#version-cursor-des-plugins)).
 
 **Prérequis** : `claude` installé et connecté ; `jq` et `python3` (status line) ; `gh`
 authentifié (plugins [`git-nav`](#git-nav), [`git-tidy`](#git-tidy) et [`review`](#review), badge PR de la status line) ; Linux + GNOME pour
@@ -111,6 +113,7 @@ Un plugin à la fois, avec ce qu'il pose hors de lui :
 ./install.sh plugin --all            tous ceux de marketplace.json (ce que fait ./install.sh)
 ./install.sh plugin --remove <nom>…  désinstalle (--remove --all : tous)
 ./install.sh plugin                  état des plugins (aussi dans ./install.sh status)
+./install.sh plugin --cursor <nom>…  version Cursor (aussi --all, --remove) : voir plus bas
 ```
 
 `--all` et `./install.sh` ne font qu'appeler l'installation de chaque plugin l'une après
@@ -162,6 +165,7 @@ links=(                                  # <chemin dans le plugin>  <destination
 on_install() { …; }   # facultatifs et idempotents ; ils voient $repo, $plugin_dir
 on_remove()  { …; }   # et note "<message>" (avertissement affiché par status)
 on_status()  { …; }   # retour non nul = erreur
+cursor=off            # facultatif : pas de version Cursor (voir plus bas)
 ```
 
 Les liens suffisent au cas courant : pose, contrôle et retrait sont faits par
@@ -174,6 +178,57 @@ l'installe et l'active avec lui, et `./install.sh plugin` l'installe d'abord, li
 `setup.sh` compris. Un hook qui touche à systemd utilisateur vérifie que l'unité est celle
 de ce `HOME` (`systemctl --user show -p FragmentPath`) : sur un HOME de test, le
 gestionnaire systemd reste celui de la session.
+
+#### Version Cursor des plugins
+
+`./install.sh plugin --cursor <nom>…` (`--all`, `--remove` comme sans `--cursor`) installe un
+plugin dans Cursor : `cursor/convert.py` le convertit en plugin Cursor local,
+`~/.cursor/plugins/local/<nom>/`, régénéré en entier à chaque appel (une copie : Cursor ne
+charge pas un plugin local qui est un lien). Les dépendances passent d'abord, puis les liens
+et l'`on_install` du `setup.sh`, communs aux deux versions : au retrait de l'une, ils restent
+tant que l'autre est installée. Ni `claude`, ni marketplace, ni profils ; prérequis :
+`python3`, `jq`.
+
+Conversion :
+
+- Copie du plugin, sans `.claude-plugin/`, `tests/`, `setup.sh`, `cursor/`, ni les mods
+  d'interface (`modules` de `hooks.json`, sans équivalent : signalés).
+- `.cursor-plugin/plugin.json` tiré de `.claude-plugin/plugin.json` (sans `dependencies`).
+- `${CLAUDE_PLUGIN_ROOT}` et `${CLAUDE_SKILL_DIR}` remplacés par le chemin installé dans
+  `skills/`, `agents/`, `commands/` et le MCP (`.mcp.json` devient `mcp.json`) ;
+  `${CLAUDE_SESSION_ID}` signalé.
+- `hooks/hooks.json` réécrit au format Cursor : `SessionStart`→`sessionStart`,
+  `PreToolUse`/`PostToolUse`→`preToolUse`/`postToolUse` (matcher `Bash`→`Shell`,
+  `Edit`/`Write`→`Write`, `mcp__<srv>__<outil>`→`MCP:<outil>`…),
+  `UserPromptSubmit`→`beforeSubmitPrompt`, `Stop` et `StopFailure`→`stop` (fin normale, ou
+  `status: error`), `SessionEnd`, `SubagentStop`, `PreCompact` ; `Notification` sans
+  équivalent (signalé). Chaque commande passe par `.claude-compat/hook-adapter.py`, qui
+  traduit l'entrée Cursor au format Claude, lance la commande d'origine
+  (`CLAUDE_PLUGIN_ROOT` = dossier installé), puis traduit sa réponse : `permissionDecision`
+  → `permission`, sortie de `SessionStart` (texte ou `additionalContext`) →
+  `additional_context`, `decision: block` → `continue: false` ou `followup_message`, code
+  retour 2 → refus avec le stderr. Les scripts du plugin restent ceux de Claude.
+- Scripts de `bin/` qu'aucun lien du `setup.sh` ne met dans le PATH : signalés (Claude ajoute
+  `bin/` au PATH, Cursor non).
+
+Ce qui doit différer pour Cursor va dans `plugins/<nom>/cursor/`, posé par-dessus la copie, au
+même chemin ; seulement ce qui diffère. Son `hooks/hooks.json` remplace celui du plugin avant
+conversion : événements Claude (convertis comme ci-dessus) et événements Cursor (en
+camelCase, gardés tels quels) peuvent s'y mêler ; son `.cursor-plugin/plugin.json` complète le
+manifeste. Un plugin sans version Cursor possible le déclare par `cursor=off` dans son
+`setup.sh` (ignoré, avec un message, par `--cursor`).
+
+`./install.sh status` donne `ok cursor <nom>`, ou `UPDATE` quand une conversion refaite
+maintenant diffère du dossier installé (plugin modifié depuis), plus les liens et
+`on_status` quand seule la version Cursor est installée. Un dossier de
+`~/.cursor/plugins/local/` qui n'a pas été généré ici (`.claude-compat/source`) n'est jamais
+remplacé ni retiré. Tests : `bash cursor/tests/convert.test.sh`.
+
+Constaté avec le CLI `cursor-agent` 2026.11.13 (l'IDE n'a pas été essayé) : les skills et les
+hooks `sessionStart`, `preToolUse`, `sessionEnd` d'un plugin local sont pris en compte ; les
+rules d'un plugin, et les hooks `stop`, `beforeSubmitPrompt`, `afterAgentResponse` (même dans
+`~/.cursor/hooks.json`), non. Une consigne passe donc par `SessionStart`, comme pour Claude.
+Pour essayer une version convertie sans l'installer : `cursor-agent --plugin-dir <dossier>`.
 
 ### `pr-comments`
 
@@ -1331,6 +1386,10 @@ réduite) — consigne d'usage et garde-fou qui refuse un Gradle brut.
 **Fichiers** : `plugins/build-brief/` (`instructions.md`, `hooks/hooks.json`,
 `hooks/gradle-guard.py`, `tests/gradle-guard.test.sh`, `setup.sh` : `status` note
 `build-brief` absent du PATH). **Activé dans** : le profil de référence et `lean` (pas `vidal`, profil harnais).
+
+**Cursor** : converti sans adaptation (`./install.sh plugin --cursor build-brief`, voir
+[Version Cursor des plugins](#version-cursor-des-plugins)) : consigne au démarrage de la
+session, garde-fou sur l'outil `Shell` ; vérifié avec `cursor-agent`.
 
 **Prérequis** : `build-brief` dans le PATH, installé par mise (`./setup/10-mise.sh`, voir
 [TOOLS.md](TOOLS.md#mise)) ; sans lui, le garde-fou laisse tout passer ;
