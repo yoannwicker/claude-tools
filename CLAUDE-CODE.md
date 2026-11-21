@@ -218,7 +218,7 @@ Pour essayer une surcharge sans l'installer : `cursor-agent --plugin-dir <dossie
 |---|---|
 | [`build-brief`](#build-brief), [`intellij`](#intellij) | consigne passée par `sessionStart` (`additional_context`) ; `intellij` : MCP (`mcp.json`) |
 | [`notify`](#notify) | notifications sous herdr ([Avec Cursor](#notify-avec-cursor)) |
-| [`git-nav`](#git-nav), [`review`](#review) | `cursor/setup.sh` : `worktree-scan`, `review-post` liés dans `~/.local/bin` |
+| [`git-nav`](#git-nav), [`review`](#review) | `cursor/setup.sh` : `worktree-scan`, `review-post`, `review-map-html` liés dans `~/.local/bin` |
 | les autres | aucune : Cursor reprend le plugin Claude tel quel (skills ; mods de `pr-comments`, `profiles` sans effet) |
 
 ### `pr-comments`
@@ -1598,9 +1598,10 @@ facultatif (sinon analyse en fond, reprise dans `gnome-terminal`) ; `python3-gi`
 `bash plugins/review/tests/review-map-html.test.sh`
 (faux `gh`, `claude`, `herdr`, rien n'est publié ni lancé) ; pas de mod : `claude plugin test` ne s'applique pas.
 
-**Cursor** : skills et agent `reviewer` repris tels quels par Cursor (`/review:pr` y est la
-skill `pr`, l'agent un sous-agent) ; la surcharge (`./install.sh plugin --cursor review`, voir
-[Avec Cursor](#avec-cursor)) lie `review-post`, appelé par `/review:pr`, dans `~/.local/bin`. Le
+**Cursor** : skills et agents (`reviewer`, `challenger`, `mapper`) repris tels quels par Cursor
+(`/review:pr` y est la skill `pr`, les agents des sous-agents) ; la surcharge
+(`./install.sh plugin --cursor review`, voir [Avec Cursor](#avec-cursor)) lie `review-post`
+(`/review:pr`) et `review-map-html` (`/review:manual`) dans `~/.local/bin`. Le
 mode auto reste à Claude (`review-watch` lance `claude`).
 
 #### Installation hors de ce dépôt
