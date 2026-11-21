@@ -156,7 +156,8 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     pour le rattrapage quotidien),
                     git-tidy/ (skills /git-tidy:commits, :pr-sync, :ready et :approved-auto,
                     bin/tidy-watch, timer systemd tidy-watch),
-                    notify/ (hooks et scripts des notifications desktop), herdr-session/ (hook herdr),
+                    notify/ (hooks et scripts des notifications desktop ; cursor/ : version Cursor sous herdr),
+                    herdr-session/ (hook herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
                     review/ (agents reviewer, challenger et mapper, skills /review:diff, :pr, :decisions, :manual, :feedback, :pr-auto et :feedback-auto,

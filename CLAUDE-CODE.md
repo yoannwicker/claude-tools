@@ -227,7 +227,8 @@ remplacé ni retiré. Tests : `bash cursor/tests/convert.test.sh`.
 Constaté avec le CLI `cursor-agent` 2026.11.13 (l'IDE n'a pas été essayé) : les skills et les
 hooks `sessionStart`, `preToolUse`, `sessionEnd` d'un plugin local sont pris en compte ; les
 rules d'un plugin, et les hooks `stop`, `beforeSubmitPrompt`, `afterAgentResponse` (même dans
-`~/.cursor/hooks.json`), non. Une consigne passe donc par `SessionStart`, comme pour Claude.
+`~/.cursor/hooks.json`), non. Une consigne passe donc par `SessionStart`, comme pour Claude ;
+les notifications de fin de tour, par herdr (voir [`notify`](#avec-cursor)).
 Pour essayer une version convertie sans l'installer : `cursor-agent --plugin-dir <dossier>`.
 
 ### `pr-comments`
@@ -1239,14 +1240,18 @@ permission, question) ; un clic ramène la session au premier plan (fenêtre Her
 gnome-terminal).
 
 **Fichiers** : `plugins/notify/` (`hooks/hooks.json`,
-`scripts/{notify.sh,notify-click.sh,claude-notify.py}`, `setup.sh`) ; hors du plugin, le lien
+`scripts/{notify.sh,notify-click.sh,claude-notify.py}`, `setup.sh`, version Cursor dans
+`cursor/` : `hooks/hooks.json`, `scripts/cursor-watch.sh` ; `tests/cursor-watch.test.sh`) ; hors du plugin, le lien
 `~/.local/bin/claude-notify-click` posé par `./install.sh plugin notify` pour l'extension GNOME
 `claude-notify@ywicker` ([TOOLS.md](TOOLS.md#extension-gnome-claude-notifyywicker)).
 **Activé dans** : tous les profils.
 
 **Prérequis** : GNOME Shell + gnome-terminal (X11 : `xprop`), `python3-gi` avec
 `Notify 0.7`, `gdbus`, `jq` ; herdr et Herdr UI facultatifs (voir [Sans et avec herdr](#sans-et-avec-herdr)). `setup/30-gnome.sh` signale ce qui manque.
-Pas de tests.
+Tests : `bash plugins/notify/tests/cursor-watch.test.sh` (version Cursor ; faux herdr).
+
+**Cursor** : version adaptée (`cursor/`), pour `cursor-agent` lancé dans herdr seulement (voir
+[Avec Cursor](#avec-cursor)).
 
 #### Installation hors de ce dépôt
 
@@ -1317,6 +1322,31 @@ coupées, pour la même raison que les toasts de herdr.
 Le titre d'onglet que cherche le clic sous herdr vient de `ui.window_title`, fixé à
 `"{hostname}: {workspace}"` dans `home/.config/herdr/config.toml` (voir
 [TOOLS.md](TOOLS.md#herdr)) : à garder tel quel, la recherche en dépend.
+
+#### Avec Cursor
+
+`./install.sh plugin --cursor notify` (voir [Version Cursor des plugins](#version-cursor-des-plugins)).
+Le CLI `cursor-agent` ne lance ni `stop` ni `beforeSubmitPrompt`, et ses notifications
+intégrées (réglage `notifications`) ne visent que certains terminaux (Ghostty, kitty, iTerm2,
+Warp, VS Code, Terminal macOS) : rien sous gnome-terminal ni herdr. La version Cursor suit donc
+l'agent par herdr, qui reconnaît `cursor-agent` en lisant son écran :
+`cursor/hooks/hooks.json` remplace les hooks du plugin par `SessionStart` et `SessionEnd`, qui
+démarrent et arrêtent `cursor/scripts/cursor-watch.sh`.
+
+- Démarrage (`sessionStart`) : sous herdr (`HERDR_PANE_ID` posé) seulement, un observateur
+  détaché par pane (`~/.local/state/claude-notify/cursor-watch-<pane>.pid`, un nouveau remplace
+  l'ancien) ; hors herdr (IDE, autre terminal), rien.
+- Il attend que herdr reconnaisse l'agent `cursor` du pane (30 s au plus), puis suit ses
+  changements d'état (`herdr agent wait`) et passe à `notify.sh` l'événement Claude qui
+  correspond : passage à `working` → `UserPromptSubmit` (efface ce qui est en attente pour la
+  session) ; `blocked` → `Notification` `permission_prompt` (« 🔐 Permission demandée »,
+  critique) ; `working` → `idle` ou `done` → `Stop` (« ✅ Travail terminé »), seulement si
+  l'état tient encore 2 s (herdr voit parfois un `idle` bref pendant le travail).
+- Titre, corps, silence quand le pane est regardé, clic : ceux de `notify.sh` sous herdr
+  (tableau ci-dessus), avec la session Cursor (`conversation_id`).
+- Arrêt : `sessionEnd` (fin de `cursor-agent`), ou quand le pane n'a plus d'agent `cursor`.
+- Pas d'équivalent à `StopFailure`, ni aux questions (`elicitation_dialog`) : herdr ne
+  distingue pas une question d'une validation, les deux donnent `blocked`.
 
 Le plugin [`herdr-session`](#herdr-session) ne change rien à ce tableau : herdr reconnaît
 Claude et son état en lisant l'écran du pane, l'intégration ne lui transmet que
