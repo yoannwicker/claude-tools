@@ -248,6 +248,17 @@ lean, `agent …` sur le profil du projet ou par défaut. Les commandes de gesti
 `--help`, `--version`) vont droit au vrai `cursor-agent`, dans le vrai HOME ; `command
 cursor-agent` contourne la fonction.
 
+**Bascule** : comme `claude-profile run`, `claude-profile cursor` lance `cursor-agent` en
+boucle, avec `CURSOR_PROFILE_SWITCH_FILE` dans l'environnement. La skill `/profile <nom>` (surcharge
+Cursor de `profiles` : `./install.sh plugin --cursor profiles`) appelle `claude-profile
+cursor-switch <nom>`, qui y dépose `<nom> <conversation>` (`CURSOR_CONVERSATION_ID`, posé
+par Cursor dans le shell de l'agent) puis quitte `cursor-agent` (SIGTERM, une seconde plus
+tard) ; la boucle relance `cursor-agent --resume <conversation>` sur `<nom>`. La conversation
+est gardée : Cursor l'enregistre au fil de l'eau (vérifié avec `cursor-agent` 2026.11.22).
+`/profile` seul liste les profils et celui de la session (`claude-profile cursor-current`).
+Session lancée hors de la boucle (`command cursor-agent`, IDE) : `cursor-switch` donne la
+relance manuelle (`agent <nom> --resume <conversation>`).
+
 Mise à jour d'un plugin : rien à refaire. Les plugins Claude (`plugins/` commun aux profils,
 sauf profil avec base) et les scripts des surcharges (servis depuis le dépôt) valent dès la
 session suivante ; une surcharge mise à jour (`./install.sh plugin --cursor <nom>`) est
@@ -258,7 +269,8 @@ recopiée au lancement suivant de chaque profil.
 | [`build-brief`](#build-brief), [`intellij`](#intellij) | consigne passée par `sessionStart` (`additional_context`) ; `intellij` : MCP (`mcp.json`) |
 | [`notify`](#notify) | notifications sous herdr ([Avec Cursor](#notify-avec-cursor)) |
 | [`git-nav`](#git-nav), [`review`](#review) | `cursor/setup.sh` : `worktree-scan`, `review-post`, `review-map-html` liés dans `~/.local/bin` |
-| les autres | aucune : Cursor reprend le plugin Claude tel quel (skills ; mods de `profiles` sans effet) |
+| [`profiles`](#profiles) | skill `/profile` : bascule de la session Cursor ([Sur un profil](#cursor-sur-un-profil)) ; le mod `/profile` de Claude est sans effet dans Cursor |
+| les autres | aucune : Cursor reprend le plugin Claude tel quel (skills) |
 
 **Hors des plugins**, ce qui diffère sous Cursor, et ce qui a été décidé :
 
@@ -311,7 +323,7 @@ ignorerait celui du plugin — et `on_status` le signale en erreur s'il est enco
 `claude-profile` et commande `/profile`.
 
 **Fichiers** : `plugins/profiles/` (`bin/claude-profile`, mod `/profile` dans `hooks/`,
-`shell/claude-profile.sh`, `tests/`, `setup.sh`) ; hors du plugin, les liens
+`shell/claude-profile.sh`, `tests/`, `setup.sh`, surcharge Cursor `cursor/skills/profile/SKILL.md`) ; hors du plugin, les liens
 `~/.local/bin/claude-profile` et `~/.config/shell/claude-profile.sh` posés par
 `./install.sh plugin profiles`. **Activé dans** : tous les profils
 (`profiles@claude-tools` doit y rester activé, sinon pas de `/profile` ; `generate` prévient).
@@ -319,6 +331,10 @@ ignorerait celui du plugin — et `on_status` le signale en erreur s'il est enco
 **Prérequis** : `jq` ; pour un profil avec base, `git` et ce que demande son installeur.
 Tests : `claude plugin test plugins/profiles` (mod) et `bash plugins/profiles/tests/base.test.sh`
 (profils avec base, hors ligne : faux dépôt de base, faux `claude`).
+
+**Cursor** : `claude-profile cursor` (fonctions `agent`, `cursor-agent`) lance `cursor-agent`
+sur un profil, et la surcharge (`./install.sh plugin --cursor profiles`) y ajoute la skill
+`/profile <nom>` pour basculer la session (voir [Sur un profil](#cursor-sur-un-profil)).
 
 #### Installation hors de ce dépôt
 
@@ -462,6 +478,9 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
 - `claude-profile cursor [<nom>] [arguments cursor-agent…]` : lance `cursor-agent` sur le
   profil `<nom>`, sinon celui du projet, sinon le profil par défaut, sinon le profil de
   référence (voir [Sur un profil](#cursor-sur-un-profil)) ;
+- `claude-profile cursor-switch <nom>` : depuis une session lancée par `claude-profile cursor`
+  (skill `/profile` de Cursor), la relance sur `<nom>` en reprenant la conversation ;
+  `claude-profile cursor-current` : profil de cette session ;
 - `claude-profile show [<nom>]` : ce qui est actif sur un profil (celui de la session par
   défaut) — plugins activés (`+`) ou non (`-`, ou `?` pour un plugin installé que le profil
   ne mentionne pas), avec `(référence : activé|désactivé)` quand la référence diffère ; pour un

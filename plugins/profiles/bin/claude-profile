@@ -6,6 +6,7 @@
 #   claude-profile default [<nom>|--unset] : profil par défaut (celui des nouvelles sessions de run), affiché ou changé
 #   claude-profile project [<nom>|--unset] : profil du projet courant (.claude/profile.local), prioritaire sur le défaut
 #   claude-profile cursor [<nom>] [arguments cursor-agent…] : cursor-agent sur un profil (HOME à part, voir cursor_home)
+#   claude-profile cursor-switch <nom> | cursor-current : depuis une session Cursor (skill /profile), la relancer sur <nom>, son profil
 #   claude-profile switch <nom> [arguments claude…] | run [arguments claude…] | request <nom> <session>
 #   claude-profile base <nom> [update] : base d'un profil (dépôt et son installeur), affichée ou mise à jour
 #   Profil de référence (reference) : ~/.claude/settings.json, ~/.claude sans profil.
@@ -23,7 +24,7 @@
 set -u
 # Lancé depuis une session claude-profile cursor : HOME y est le HOME de liens du profil ; on
 # repart du vrai.
-case "$HOME" in */.claude-profiles/.cursor-homes/*) HOME=$(dirname "$(readlink -f "$HOME/.claude-profiles")") ;; esac
+case "$HOME" in */.claude-profiles/.cursor-homes/*) CURSOR_PROFILE_HOME=$HOME; HOME=$(dirname "$(readlink -f "$HOME/.claude-profiles")") ;; esac
 repo=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../.." && pwd)
 profiles_dir=$repo/profiles
 base=$HOME/.claude
@@ -64,7 +65,7 @@ jq_mcp='
   def denied($s; $d): any($d[]; .serverName == $s.name or urlmatch(.serverUrl; $s.url));
 '
 
-usage() { sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "$*" >&2; exit 2; }
 
 names() { local f; for f in "$profiles_dir"/*.json; do [ -e "$f" ] && basename "$f" .json; done; }
@@ -810,9 +811,12 @@ cursor_home() {
 
 # cursor-agent sur un profil : le profil nommé, sinon celui du projet, sinon le profil par défaut,
 # sinon le profil de référence. Un profil par session : plusieurs cursor-agent peuvent tourner
-# chacun sur le sien. Au retour, ce que la session a écrit est rapatrié (cursor_home).
+# chacun sur le sien. Au retour, ce que la session a écrit est rapatrié (cursor_home). Lancé en
+# boucle, comme claude par launch_loop : cursor-switch (skill /profile de la surcharge Cursor) dépose
+# « <profil> <conversation> » dans CURSOR_PROFILE_SWITCH_FILE puis quitte cursor-agent, et la boucle
+# relance la conversation (--resume) sur ce profil.
 cmd_cursor() {
-  local name="" h rc
+  local name="" h rc req id self
   if [ $# -gt 0 ] && { [ "$1" = reference ] || [ -f "$profiles_dir/$1.json" ]; }; then name=$1; shift; fi
   if [ -z "$name" ]; then
     name=$(project_profile)
@@ -820,13 +824,52 @@ cmd_cursor() {
   fi
   name=${name:-reference}
   command -v cursor-agent >/dev/null 2>&1 || die "cursor-agent introuvable"
-  generate "$name" >/dev/null || exit 2
-  h=$(cursor_home "$name") || exit 2
-  echo "→ cursor-agent sur le profil $name" >&2
-  HOME=$h cursor-agent "$@"
-  rc=$?
-  cursor_home "$name" >/dev/null
-  return $rc
+  self=$(readlink -f "${BASH_SOURCE[0]}")
+  req=${XDG_RUNTIME_DIR:-/tmp}/claude-profile-cursor-switch.$$
+  export CURSOR_PROFILE_SWITCH_FILE=$req
+  rm -f "$req"
+  while :; do
+    # Le script relu (generate), pas la fonction en mémoire : voir launch_loop.
+    "$self" generate "$name" >/dev/null || return 2
+    h=$(cursor_home "$name") || return 2
+    echo "→ cursor-agent sur le profil $name" >&2
+    HOME=$h cursor-agent "$@"
+    rc=$?
+    cursor_home "$name" >/dev/null
+    [ -s "$req" ] || { rm -f "$req"; return "$rc"; }
+    read -r name id < "$req"; rm -f "$req"
+    echo "→ profil $name" >&2
+    if [ -n "$id" ]; then set -- --resume "$id"; else set --; fi
+  done
+}
+
+# Profil de la session Cursor courante, d'après son HOME (rien hors de claude-profile cursor). HOME
+# est déjà le vrai ici : celui de la session est dans CURSOR_PROFILE_HOME.
+cursor_current() {
+  case "${CURSOR_PROFILE_HOME:-}" in
+    */.cursor-homes/*) echo "${CURSOR_PROFILE_HOME##*/}" ;;
+    *) echo "session Cursor lancée hors de claude-profile cursor : profil de référence" ;;
+  esac
+}
+
+# Bascule de la session Cursor courante (skill /profile) : demande déposée pour la boucle de
+# claude-profile cursor, puis cursor-agent (l'ancêtre de ce shell) quitté par SIGTERM, une
+# seconde plus tard pour laisser l'outil rendre sa sortie.
+cmd_cursor_switch() {
+  [ $# -eq 1 ] || die "usage : claude-profile cursor-switch <nom>"
+  check "$1"
+  local pid=$$ args
+  [ -n "${CURSOR_PROFILE_SWITCH_FILE:-}" ] \
+    || { echo "session Cursor lancée hors de claude-profile cursor (fonction agent, cursor-agent) : quitter puis agent $1 --resume ${CURSOR_CONVERSATION_ID:-<conversation>}" >&2; exit 3; }
+  while [ "$pid" -gt 1 ]; do
+    args=$(ps -o args= -p "$pid" 2>/dev/null) || break
+    case "$args" in */cursor-agent\ *|*/cursor-agent|cursor-agent\ *|cursor-agent) break ;; esac
+    pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
+  done
+  [ "${pid:-1}" -gt 1 ] || die "processus cursor-agent introuvable : quitter puis agent $1 --resume ${CURSOR_CONVERSATION_ID:-<conversation>}"
+  printf '%s %s\n' "$1" "${CURSOR_CONVERSATION_ID:-}" > "$CURSOR_PROFILE_SWITCH_FILE"
+  echo "bascule vers $1 : cursor-agent se ferme et la boucle relance cette conversation sur $1"
+  setsid bash -c "sleep 1; kill -TERM $pid" >/dev/null 2>&1 < /dev/null &
 }
 
 command -v jq >/dev/null 2>&1 || die "jq requis"
@@ -837,6 +880,8 @@ case "${1:-}" in
   default)  shift; cmd_default "$@" ;;
   project)  shift; cmd_project "$@" ;;
   cursor)   shift; cmd_cursor "$@" ;;
+  cursor-switch) shift; cmd_cursor_switch "$@" ;;
+  cursor-current) cursor_current ;;
   show)     shift; cmd_show "$@" ;;
   new)      shift; cmd_new "$@" ;;
   plugin)   shift; cmd_plugin "$@" ;;
