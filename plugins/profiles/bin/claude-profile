@@ -5,6 +5,7 @@
 #   claude-profile mcp <nom> <serveur|url|claude.ai> on|off | mcp-scan : MCP coupés (deniedMcpServers), serveurs connus
 #   claude-profile default [<nom>|--unset] : profil par défaut (celui des nouvelles sessions de run), affiché ou changé
 #   claude-profile project [<nom>|--unset] : profil du projet courant (.claude/profile.local), prioritaire sur le défaut
+#   claude-profile cursor [<nom>] [arguments cursor-agent…] : cursor-agent sur un profil (HOME à part, voir cursor_home)
 #   claude-profile switch <nom> [arguments claude…] | run [arguments claude…] | request <nom> <session>
 #   claude-profile base <nom> [update] : base d'un profil (dépôt et son installeur), affichée ou mise à jour
 #   Profil de référence (reference) : ~/.claude/settings.json, ~/.claude sans profil.
@@ -20,6 +21,9 @@
 #   profil part sur le profil du projet, sinon le profil par défaut, sinon le profil de référence ; une reprise
 #   (--continue, --resume <id>) part sur le dernier profil de la conversation (remember <session>).
 set -u
+# Lancé depuis une session claude-profile cursor : HOME y est le HOME de liens du profil ; on
+# repart du vrai.
+case "$HOME" in */.claude-profiles/.cursor-homes/*) HOME=$(dirname "$(readlink -f "$HOME/.claude-profiles")") ;; esac
 repo=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../.." && pwd)
 profiles_dir=$repo/profiles
 base=$HOME/.claude
@@ -48,6 +52,8 @@ shared_home_links=".gitconfig .ssh .volta .config/gh"
 # par le profil dans ce fichier de son dossier, chargé par switch/run (--mcp-config) : le .claude.json
 # du profil est celui du vrai HOME, commun à tous les profils.
 base_mcp=base-mcp.json
+# HOME de Cursor par profil (claude-profile cursor) : <profil>/ dans ce dossier.
+cursor_homes=$out_root/.cursor-homes
 # Serveurs MCP connus (nom, url), relevés par claude mcp list (mcp-scan).
 mcp_cache=$out_root/.mcp-servers.json
 # jq : motif serverUrl (jokers *) en expression régulière ; serveur s ({name, url}) coupé par la
@@ -58,7 +64,7 @@ jq_mcp='
   def denied($s; $d): any($d[]; .serverName == $s.name or urlmatch(.serverUrl; $s.url));
 '
 
-usage() { sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 die() { echo "$*" >&2; exit 2; }
 
 names() { local f; for f in "$profiles_dir"/*.json; do [ -e "$f" ] && basename "$f" .json; done; }
@@ -729,6 +735,100 @@ cmd_project() {
   echo "profil du projet : $1 (${f/#$HOME/\~} ; nouvelles sessions lancées ici par claude-profile run : fonction shell claude, cl)"
 }
 
+## Cursor sur un profil
+
+# home_sync <dossier de liens> <dossier réel> [nom exclu…] : le dossier de liens refait sur le
+# dossier réel, une entrée par lien. Ce qu'une session y a écrit à la place d'un lien (fichier
+# réécrit par renommage, comme cli-config.json de Cursor ou .gitconfig par git) ou créé est
+# d'abord rapatrié dans le dossier réel s'il y est plus récent ou absent (à travers un lien du
+# dossier réel : sa cible est réécrite, pas le lien) ; un dossier n'est rapatrié que s'il n'y est pas.
+home_sync() {
+  local fake=$1 real=$2 e n t
+  shift 2
+  mkdir -p "$fake"
+  for e in "$fake"/* "$fake"/.[!.]* "$fake"/..?*; do
+    [ -e "$e" ] || [ -L "$e" ] || continue
+    n=${e##*/}
+    [[ " $* " == *" $n "* ]] && continue
+    if [ -L "$e" ]; then [ -e "$e" ] || rm -f "$e"; continue; fi
+    if [ -d "$e" ]; then
+      if [ -e "$real/$n" ] || [ -L "$real/$n" ]; then echo "conservé (dossier écrit par une session, $real/$n existe) : $e" >&2; continue; fi
+      mv "$e" "$real/$n" && echo "rapatrié : $real/$n" >&2
+    else
+      if [ ! -e "$real/$n" ] || [ "$e" -nt "$real/$n" ]; then
+        t=$(readlink -f "$real/$n")
+        cp -p "$e" "$t.cursor-sync.$$" && mv -f "$t.cursor-sync.$$" "$t" || { rm -f "$t.cursor-sync.$$"; echo "rapatriement impossible : $e" >&2; continue; }
+      fi
+      rm -f "$e"
+    fi
+  done
+  for e in "$real"/* "$real"/.[!.]* "$real"/..?*; do
+    [ -e "$e" ] || [ -L "$e" ] || continue
+    n=${e##*/}
+    [[ " $* " == *" $n "* ]] && continue
+    [ -e "$fake/$n" ] || [ -L "$fake/$n" ] || ln -s "$e" "$fake/$n"
+  done
+}
+
+# cursor_home <profil> : prépare et affiche le HOME de Cursor pour ce profil. Cursor lit les
+# plugins Claude dans $HOME/.claude/settings.json (chemin écrit en dur) et ses plugins locaux
+# dans $HOME/.cursor/plugins/local ; ce HOME est le vrai, en liens, sauf :
+# - .claude : le dossier du profil (~/.claude pour reference) ;
+# - .cursor : le vrai en liens, sauf plugins/local, où sont copiées les surcharges posées dans
+#   ~/.cursor/plugins/local (./install.sh plugin --cursor) des seuls plugins actifs du profil,
+#   et tels quels les plugins locaux qui ne viennent pas de ce dépôt (copie : Cursor ne charge
+#   pas un plugin local qui est un lien).
+cursor_home() {
+  local name=$1 h conf real=$HOME/.cursor/plugins/local d n p
+  h=$cursor_homes/$name
+  if [ "$name" = reference ]; then conf=$base; else conf=$out_root/$name; fi
+  mkdir -p "$h" "$HOME/.cursor/plugins/local"
+  home_sync "$h" "$HOME" .claude .cursor
+  ln -sfn "$conf" "$h/.claude"
+  home_sync "$h/.cursor" "$HOME/.cursor" plugins
+  home_sync "$h/.cursor/plugins" "$HOME/.cursor/plugins" local
+  mkdir -p "$h/.cursor/plugins/local"
+  for d in "$h/.cursor/plugins/local"/*; do
+    [ -e "$d" ] || continue
+    [ -d "$real/${d##*/}" ] || rm -rf "$d"
+  done
+  for d in "$real"/*; do
+    [ -d "$d" ] || continue
+    n=${d##*/}
+    if [ -f "$d/.claude-tools-overlay" ]; then
+      p=${n%-cursor}
+      if ! jq -e --arg p "$p@claude-tools" '.enabledPlugins[$p] == true' "$conf/settings.json" >/dev/null 2>&1; then
+        rm -rf "${h:?}/.cursor/plugins/local/$n"; continue
+      fi
+    fi
+    diff -rq "$d" "$h/.cursor/plugins/local/$n" >/dev/null 2>&1 && continue
+    rm -rf "${h:?}/.cursor/plugins/local/$n.tmp" && cp -r "$d" "$h/.cursor/plugins/local/$n.tmp" \
+      && rm -rf "${h:?}/.cursor/plugins/local/$n" && mv "$h/.cursor/plugins/local/$n.tmp" "$h/.cursor/plugins/local/$n"
+  done
+  echo "$h"
+}
+
+# cursor-agent sur un profil : le profil nommé, sinon celui du projet, sinon le profil par défaut,
+# sinon le profil de référence. Un profil par session : plusieurs cursor-agent peuvent tourner
+# chacun sur le sien. Au retour, ce que la session a écrit est rapatrié (cursor_home).
+cmd_cursor() {
+  local name="" h rc
+  if [ $# -gt 0 ] && { [ "$1" = reference ] || [ -f "$profiles_dir/$1.json" ]; }; then name=$1; shift; fi
+  if [ -z "$name" ]; then
+    name=$(project_profile)
+    if [ -n "$name" ]; then echo "→ profil $name (projet)" >&2; else name=$(default_profile); fi
+  fi
+  name=${name:-reference}
+  command -v cursor-agent >/dev/null 2>&1 || die "cursor-agent introuvable"
+  generate "$name" >/dev/null || exit 2
+  h=$(cursor_home "$name") || exit 2
+  echo "→ cursor-agent sur le profil $name" >&2
+  HOME=$h cursor-agent "$@"
+  rc=$?
+  cursor_home "$name" >/dev/null
+  return $rc
+}
+
 command -v jq >/dev/null 2>&1 || die "jq requis"
 
 case "${1:-}" in
@@ -736,6 +836,7 @@ case "${1:-}" in
   current)  current ;;
   default)  shift; cmd_default "$@" ;;
   project)  shift; cmd_project "$@" ;;
+  cursor)   shift; cmd_cursor "$@" ;;
   show)     shift; cmd_show "$@" ;;
   new)      shift; cmd_new "$@" ;;
   plugin)   shift; cmd_plugin "$@" ;;

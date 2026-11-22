@@ -189,7 +189,8 @@ gestionnaire systemd reste celui de la session.
 Cursor (le CLI `cursor-agent` comme l'IDE, si son réglage *Include third-party Plugins, Skills,
 and other configs* est actif) reprend de lui-même les plugins Claude installés et activés dans
 `~/.claude/settings.json` (le profil de référence, pas les autres profils : Cursor ne lit que
-celui-là), sans réglage pour s'en passer dans le CLI. Constaté avec `cursor-agent` 2026.11.19 :
+celui-là, sauf lancé par [`claude-profile cursor`](#cursor-sur-un-profil)), sans réglage pour s'en
+passer dans le CLI. Constaté avec `cursor-agent` 2026.11.19 :
 
 - repris : les skills (telles quelles), les hooks `PreToolUse`, `PostToolUse`, `SessionStart`,
   `SessionEnd`, lancés avec `CLAUDE_PLUGIN_ROOT` mais avec le JSON de Cursor en entrée
@@ -220,6 +221,37 @@ quand elle ne se reconstruit plus à l'identique, l'état des liens de `cursor/s
 `WARN` si le plugin est éteint dans `~/.claude/settings.json` (Cursor ne le reprend pas). Un
 dossier `<nom>-cursor` qui ne vient pas d'ici (`.claude-tools-overlay`) n'est jamais remplacé.
 Pour essayer une surcharge sans l'installer : `cursor-agent --plugin-dir <dossier>`.
+
+<a id="cursor-sur-un-profil"></a>
+**Sur un profil** : `claude-profile cursor [<profil>] [arguments cursor-agent…]` (plugin
+[`profiles`](#claude-profile)) lance `cursor-agent` avec pour `HOME`
+`~/.claude-profiles/.cursor-homes/<profil>/`, puisque Cursor ne lit que `$HOME/.claude/settings.json` :
+un profil par session, CLI seulement. Ce HOME est le vrai, en liens, sauf :
+
+- `.claude`, lien vers le dossier du profil (`~/.claude` pour `reference`) : Cursor reprend
+  les plugins Claude du profil (vérifié avec `cursor-agent` 2026.11.19) ;
+- `.cursor`, le vrai en liens, sauf `plugins/local` : y sont copiées les surcharges posées
+  dans `~/.cursor/plugins/local` (`./install.sh plugin --cursor`) des seuls plugins actifs du
+  profil, et telles quelles les autres plugins locaux. Une surcharge doit donc être installée
+  pour qu'un profil l'ait.
+
+Cursor réécrit certains fichiers par renommage (`~/.cursor/cli-config.json`), git aussi
+(`~/.gitconfig`) : ce qui remplace un lien, ou est créé dans ce HOME ou dans son `.cursor`, est
+rapatrié dans le vrai (s'il y est plus récent ou absent ; à travers un lien, sa cible est
+réécrite) puis le lien est remis, à la sortie et au lancement suivant. Lancé depuis une telle
+session, `claude-profile` repart du vrai HOME.
+
+Dans le terminal, `shell/claude-profile.sh` (voir [Bascule depuis une session](#bascule-depuis-une-session))
+fait passer `cursor-agent` et `agent` par `claude-profile cursor` : `agent lean …` part sur
+lean, `agent …` sur le profil du projet ou par défaut. Les commandes de gestion (`login`,
+`logout`, `update`, `plugin`, `mcp`, `status`, `models`, `about`, `persist`, `worker`…,
+`--help`, `--version`) vont droit au vrai `cursor-agent`, dans le vrai HOME ; `command
+cursor-agent` contourne la fonction.
+
+Mise à jour d'un plugin : rien à refaire. Les plugins Claude (`plugins/` commun aux profils,
+sauf profil avec base) et les scripts des surcharges (servis depuis le dépôt) valent dès la
+session suivante ; une surcharge mise à jour (`./install.sh plugin --cursor <nom>`) est
+recopiée au lancement suivant de chaque profil.
 
 | Plugin | Surcharge Cursor |
 |---|---|
@@ -427,6 +459,9 @@ Dans Claude, le `bin/` du plugin est dans le PATH de l'outil Bash ; pour le term
   fichier), ou en fait `<nom>` (il est généré ; `.claude/profile.local` et son
   `.gitignore` écrits à la racine du projet) ; `--unset` retire le fichier (et le
   `.gitignore` s'il est resté tel que généré) ; refusé dans `$HOME` ;
+- `claude-profile cursor [<nom>] [arguments cursor-agent…]` : lance `cursor-agent` sur le
+  profil `<nom>`, sinon celui du projet, sinon le profil par défaut, sinon le profil de
+  référence (voir [Sur un profil](#cursor-sur-un-profil)) ;
 - `claude-profile show [<nom>]` : ce qui est actif sur un profil (celui de la session par
   défaut) — plugins activés (`+`) ou non (`-`, ou `?` pour un plugin installé que le profil
   ne mentionne pas), avec `(référence : activé|désactivé)` quand la référence diffère ; pour un
@@ -489,7 +524,8 @@ Le dossier de config est fixé au lancement, il faut donc un nouveau processus. 
 neuve si la session quittée était encore vide), soit la même conversation dans le nouveau
 profil. Pour que `claude` tapé à la main passe par la boucle,
 `shell/claude-profile.sh` du plugin (lié dans `~/.config/shell/`, chargé par `~/.bash_aliases`) le définit comme
-fonction appelant `claude-profile run` ; `cl` y passe aussi. Lancé autrement (IDE, lanceur
+fonction appelant `claude-profile run` ; `cl` y passe aussi. Il fait de même pour
+`cursor-agent` et `agent` avec `claude-profile cursor` (voir [Sur un profil](#cursor-sur-un-profil)). Lancé autrement (IDE, lanceur
 graphique, `command claude`), `/profile` donne la relance manuelle : `/exit` puis
 `claude-profile switch <nom> --continue`. Une session passée en arrière-plan (sous
 `claude daemon`, reconnue à `CLAUDE_JOB_DIR`, variable non documentée) ne se quitte pas par

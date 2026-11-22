@@ -37,7 +37,8 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 
 Cursor reprend de lui-même les plugins installés pour Claude (skills, une partie des hooks) ;
 `./install.sh plugin --cursor <nom>…` y ajoute leur surcharge Cursor, pour ce qu'il ne reprend
-pas (consignes, MCP, notifications…), voir [CLAUDE-CODE.md](CLAUDE-CODE.md#avec-cursor).
+pas (consignes, MCP, notifications…), et `claude-profile cursor <profil>` lance `cursor-agent` sur
+un profil, voir [CLAUDE-CODE.md](CLAUDE-CODE.md#avec-cursor).
 
 Plusieurs plugins d'un coup : `./install.sh plugin <nom>…`, tous : `./install.sh plugin --all`
 (c'est ce que fait `./install.sh`). Relancer met à jour. `./install.sh plugin --remove <nom>…`

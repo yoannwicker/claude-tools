@@ -14,7 +14,8 @@ source `~/.bash_aliases` (sinon y ajouter `. ~/.bash_aliases`). Fonctions et ali
 sont chargés que dans un shell interactif : ils n'existent pas dans les commandes `!` ni
 dans le shell de Claude, qui n'utilisent que les scripts de `~/.local/bin`.
 Seule exception côté Claude : `claude-profile.sh`, qui fait passer `claude` par
-`claude-profile run` (voir [CLAUDE-CODE.md](CLAUDE-CODE.md#bascule-depuis-une-session)).
+`claude-profile run` (voir [CLAUDE-CODE.md](CLAUDE-CODE.md#bascule-depuis-une-session)), et
+`cursor-agent`/`agent` par `claude-profile cursor` (voir [CLAUDE-CODE.md](CLAUDE-CODE.md#cursor-sur-un-profil)).
 
 ## Lanceur `cl`
 
