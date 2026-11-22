@@ -52,7 +52,7 @@ désinstalle, liens compris. Activer un plugin installé dans un profil reste à
 | herdr (+ intégrations Claude, Copilot, Cursor ; au choix, client graphique Herdr UI) | `./setup/20-herdr.sh [--ui]` | `curl` ; Linux ou macOS. Herdr UI : glibc ≥ 2.39 et `sudo` (APT, DNF ou pacman), ou Homebrew |
 | Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
 | Status line dans Cursor | `./install.sh link && ./setup/40-cursor.sh` | `cursor-agent`, `jq` |
-| Extension GNOME `claude-notify` (pastille des notifications du plugin `notify`) | `./install.sh link && ./install.sh plugin notify && ./setup/30-gnome.sh` | GNOME Shell 46 |
+| Extension GNOME `claude-notify` (pastille des notifications du plugin `notify`) | `./install.sh link && ./install.sh plugin notify && ./setup/30-gnome.sh` | GNOME Shell ≥ 45 |
 
 Sans GNOME : désactiver le plugin `notify` dans chaque profil (`"notify@claude-tools": false`
 dans `enabledPlugins` de `profiles/*.json`, ou `/profile show`). Le premier `enable` d'une extension GNOME fraîchement liée peut

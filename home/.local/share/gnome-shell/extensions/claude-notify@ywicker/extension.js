@@ -90,7 +90,12 @@ class ClaudeNotifyButton extends PanelMenu.Button {
         }
         for (const n of pending) {
             const item = new PopupMenu.PopupBaseMenuItem();
-            const column = new St.BoxLayout({vertical: true, x_expand: true});
+            const column = new St.BoxLayout({x_expand: true});
+            // GNOME 48+: orientation (vertical deprecated); before: vertical only
+            if ('orientation' in column)
+                column.orientation = Clutter.Orientation.VERTICAL;
+            else
+                column.vertical = true;
             column.add_child(new St.Label({text: n.title ?? 'Claude Code', style_class: 'claude-notify-title'}));
             if (n.body)
                 column.add_child(new St.Label({text: n.body, style_class: 'claude-notify-body'}));

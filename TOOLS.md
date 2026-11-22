@@ -61,7 +61,12 @@ attente ; menu pour revenir sur une session ou tout effacer.
 **Fichiers** : `home/.local/share/gnome-shell/extensions/claude-notify@ywicker/`
 (`extension.js`, `metadata.json`, `stylesheet.css`).
 
-**Prérequis** : GNOME Shell 46 (`shell-version` dans `metadata.json`), les scripts de
+**Prérequis** : GNOME Shell 45 ou plus (API des extensions en modules ES). `shell-version`
+dans `metadata.json` déclare 45 à 60 : GNOME n'accepte pas de joker et refuse de charger
+(état `OUT OF DATE`) une extension dont la version n'y figure pas, même activée — à
+prolonger au-delà de 60. Le code gère les deux API de `St.BoxLayout` (`vertical` avant 48,
+`orientation` après) ; une incompatibilité réelle d'une version future se voit en état
+`ERROR`. `setup/30-gnome.sh` et `./install.sh status` signalent ces deux états. Les scripts de
 notification de Claude, plugin [`notify`](CLAUDE-CODE.md#notify) (l'extension appelle
 `~/.local/bin/claude-notify-click`, lien vers son `notify-click.sh` posé par
 `./install.sh plugin notify`).

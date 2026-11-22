@@ -2,6 +2,23 @@
   "uuid": "claude-notify@ywicker",
   "name": "Claude Notify",
   "description": "Pastille des notifications Claude Code en attente ; un clic ramène sur la session.",
-  "shell-version": ["46"],
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50",
+    "51",
+    "52",
+    "53",
+    "54",
+    "55",
+    "56",
+    "57",
+    "58",
+    "59",
+    "60"
+  ],
   "version": 1
 }
