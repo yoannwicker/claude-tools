@@ -234,8 +234,13 @@ if model:
     line1.append(seg)
 
 config_dir = os.environ.get("CLAUDE_CONFIG_DIR", "")
-# Cursor only reads ~/.claude/settings.json: a profile inherited from the shell does not apply.
-if os.environ.get("STATUSLINE_AGENT") != "cursor" and config_dir.startswith(os.path.expanduser("~/.claude-profiles/")):
+if os.environ.get("STATUSLINE_AGENT") == "cursor":
+    # Cursor only reads $HOME/.claude/settings.json: a profile inherited from the shell does not
+    # apply; claude-profile cursor runs it with HOME=~/.claude-profiles/.cursor-homes/<profile>.
+    m = re.search(r"/\.claude-profiles/\.cursor-homes/([^/]+)/?$", os.environ.get("HOME", ""))
+    if m and m.group(1) != "reference":
+        line1.append(f"🧩 {MAGENTA}{m.group(1)}{RST}")
+elif config_dir.startswith(os.path.expanduser("~/.claude-profiles/")):
     line1.append(f"🧩 {MAGENTA}{os.path.basename(config_dir.rstrip('/'))}{RST}")
 
 cwd = get(data, "workspace", "current_dir") or data.get("cwd")

@@ -77,8 +77,9 @@ nom du worktree, durée de session, et `🧩 <profil>` pour une session lancée 
 
 **Cursor** : `setup/40-cursor.sh` branche le même script dans `~/.cursor/cli-config.json`
 (clé `statusLine`, rafraîchie toutes les 10 s ; le reste du fichier, état de Cursor, n'est pas
-touché), avec `STATUSLINE_AGENT=cursor` : pas de `🧩 <profil>` (Cursor ne suit pas les
-profils). Cursor envoie les mêmes champs que Claude sauf coût, durée, lignes modifiées et
+touché), avec `STATUSLINE_AGENT=cursor` : `🧩 <profil>` seulement pour une session lancée par
+[`claude-profile cursor`](#cursor-sur-un-profil) (fonction `agent`), lu dans son `HOME`
+(`~/.claude-profiles/.cursor-homes/<profil>`), pas dans `CLAUDE_CONFIG_DIR` que Cursor ignore. Cursor envoie les mêmes champs que Claude sauf coût, durée, lignes modifiées et
 limites d'usage, qui ne s'affichent donc pas. Il lance la commande sans shell : `env` pour la
 variable et chemin absolu (pas de `~`). Vérifié avec `cursor-agent` 2026.11.19.
 
