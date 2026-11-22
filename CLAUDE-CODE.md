@@ -255,9 +255,12 @@ cursor-switch <nom>`, qui y dépose `<nom> <conversation>` (`CURSOR_CONVERSATION
 par Cursor dans le shell de l'agent) puis quitte `cursor-agent` (SIGTERM, une seconde plus
 tard) ; la boucle relance `cursor-agent --resume <conversation>` sur `<nom>`. La conversation
 est gardée : Cursor l'enregistre au fil de l'eau (vérifié avec `cursor-agent` 2026.11.22).
-`/profile` seul liste les profils et celui de la session (`claude-profile cursor-current`).
-Session lancée hors de la boucle (`command cursor-agent`, IDE) : `cursor-switch` donne la
-relance manuelle (`agent <nom> --resume <conversation>`).
+`/profile` seul liste les profils et celui de la session (`claude-profile cursor-current`) ;
+`/profile show [<nom>]`, `/profile default [<nom>|--unset]` et `/profile project
+[<nom>|--unset]` passent à `claude-profile show`, `default`, `project` (pour les sessions
+suivantes). Session lancée hors de la boucle (`command cursor-agent`, IDE, `agent` d'un shell
+ouvert avant l'installation de la fonction) : `cursor-switch` donne la relance manuelle
+(`agent <nom> --resume <conversation>`). Vérifié en interactif avec `cursor-agent` 2026.11.22.
 
 Mise à jour d'un plugin : rien à refaire. Les plugins Claude (`plugins/` commun aux profils,
 sauf profil avec base) et les scripts des surcharges (servis depuis le dépôt) valent dès la
@@ -334,7 +337,7 @@ Tests : `claude plugin test plugins/profiles` (mod) et `bash plugins/profiles/te
 
 **Cursor** : `claude-profile cursor` (fonctions `agent`, `cursor-agent`) lance `cursor-agent`
 sur un profil, et la surcharge (`./install.sh plugin --cursor profiles`) y ajoute la skill
-`/profile <nom>` pour basculer la session (voir [Sur un profil](#cursor-sur-un-profil)).
+`/profile` (bascule de la session, `show`, `default`, `project`) (voir [Sur un profil](#cursor-sur-un-profil)).
 
 #### Installation hors de ce dépôt
 

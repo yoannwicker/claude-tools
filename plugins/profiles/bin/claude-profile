@@ -860,7 +860,7 @@ cmd_cursor_switch() {
   check "$1"
   local pid=$$ args
   [ -n "${CURSOR_PROFILE_SWITCH_FILE:-}" ] \
-    || { echo "session Cursor lancée hors de claude-profile cursor (fonction agent, cursor-agent) : quitter puis agent $1 --resume ${CURSOR_CONVERSATION_ID:-<conversation>}" >&2; exit 3; }
+    || { echo "session Cursor lancée hors de claude-profile cursor : rien pour la relancer. Quitter puis agent $1 --resume ${CURSOR_CONVERSATION_ID:-<conversation>} (si agent n'est pas la fonction de claude-profile.sh, shell ouvert avant son installation : . ~/.bash_aliases d'abord)" >&2; exit 3; }
   while [ "$pid" -gt 1 ]; do
     args=$(ps -o args= -p "$pid" 2>/dev/null) || break
     case "$args" in */cursor-agent\ *|*/cursor-agent|cursor-agent\ *|cursor-agent) break ;; esac
