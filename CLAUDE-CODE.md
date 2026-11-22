@@ -8,7 +8,7 @@ Configuration utilisateur de Claude Code et ses plugins. Les outils hors Claude 
 
 **Fichiers** : `home/.claude/settings.json` (le profil de référence), `profiles/*.json` (surcharges, voir [Profils](#profils)), `home/.claude/statusline-command.sh`, `statusline-ps1.sh` ;
 plugins : `.claude-plugin/marketplace.json`,
-`plugins/{pr-comments,intellij,profiles,git-nav,gh-watch,git-tidy,notify,herdr-session,build-brief,session-analysis,review}/` (avec
+`plugins/{intellij,profiles,git-nav,gh-watch,git-tidy,notify,herdr-session,build-brief,session-analysis,review}/` (avec
 leur `setup.sh`, et leur surcharge Cursor `cursor/` pour certains), `install.sh plugin` (voir
 [Installation des plugins](#installation-des-plugins) et [Avec Cursor](#avec-cursor)).
 
@@ -58,10 +58,10 @@ produit l'installeur d'un autre dépôt (section `base`, voir
 Profils versionnés : `vidal` (base [harnais](https://github.com/softwarevidal/harnais), la
 config Claude Code de l'équipe VIDAL, telle quelle : ses plugins, hooks, `CLAUDE.md`, skills
 et statusline, plus les plugins de ce dépôt [`profiles`](#profiles), [`git-nav`](#git-nav), [`git-tidy`](#git-tidy), [`gh-watch`](#gh-watch), [`review`](#review), [`notify`](#notify) et [`herdr-session`](#herdr-session) ; pas `build-brief`, que harnais fournit déjà) et `lean` (tous les plugins du dépôt sauf
-`pr-comments`, [`review`](#review) et `superpowers`, mais seuls les MCP `claude.ai Atlassian MCP` et
+[`review`](#review) et `superpowers`, mais seuls les MCP `claude.ai Atlassian MCP` et
 `plugin:intellij:intellij` restent allumés, les autres connecteurs claude.ai étant coupés par
 url dans `deniedMcpServers`). Aucun profil par défaut à l'installation : `claude` part sur le
-profil de référence (tous les plugins du dépôt sauf `pr-comments`).
+profil de référence (tous les plugins du dépôt).
 
 Passer d'un profil à l'autre demande le plugin [`profiles`](#profiles) (`/profile`,
 `claude-profile`).
@@ -168,7 +168,7 @@ on_status()  { …; }   # retour non nul = erreur
 
 Les liens suffisent au cas courant : pose, contrôle et retrait sont faits par
 `install.sh`. Les hooks ne servent qu'à ce qui ne se ramène pas à un lien (MCP à retirer,
-outil à vérifier). Pas de `setup.sh` : le plugin n'a rien hors de lui (`pr-comments`).
+outil à vérifier). Pas de `setup.sh` : le plugin n'a rien hors de lui.
 
 Un plugin qui a besoin d'un autre plugin du dépôt le déclare dans son
 `.claude-plugin/plugin.json` (`"dependencies": ["gh-watch"]`) : `claude plugin install`
@@ -219,47 +219,7 @@ Pour essayer une surcharge sans l'installer : `cursor-agent --plugin-dir <dossie
 | [`build-brief`](#build-brief), [`intellij`](#intellij) | consigne passée par `sessionStart` (`additional_context`) ; `intellij` : MCP (`mcp.json`) |
 | [`notify`](#notify) | notifications sous herdr ([Avec Cursor](#notify-avec-cursor)) |
 | [`git-nav`](#git-nav), [`review`](#review) | `cursor/setup.sh` : `worktree-scan`, `review-post`, `review-map-html` liés dans `~/.local/bin` |
-| les autres | aucune : Cursor reprend le plugin Claude tel quel (skills ; mods de `pr-comments`, `profiles` sans effet) |
-
-### `pr-comments`
-
-**Rôle** : fils de review non résolus des PR du dépôt, au-dessus du prompt et dans un panneau.
-
-**Fichiers** : `plugins/pr-comments/`. **Activé dans** : aucun profil versionné (à allumer par `/profile show` ou `claude-profile plugin`).
-
-**Prérequis** : `gh` authentifié, Claude Code ≥ 2.1.287. Tests : `claude plugin test plugins/pr-comments`.
-
-Mod repris de [aguiddir/claude-config](https://github.com/aguiddir/claude-config)
-(`plugins/pr-comments`, commit `bac6e75`, licence MIT déclarée dans son `plugin.json`),
-copié tel quel dans `plugins/pr-comments/`. Une ligne au-dessus du prompt liste les PR
-ouvertes du dépôt qui ont des fils de review non résolus, en groupes : à traiter
-(les tiennes et celle de la branche courante), en relecture (relecture demandée ou déjà
-faite) et à relire (relecture demandée, encore aucun fil, sans compteur) —
-`💬 à traiter #89 (9) · en relecture #73 (10) · à relire #108`. Une PR à relire passe en
-dernier ; son panneau donne le lien GitHub (`o`) et rappelle `/pr <n>` pour s'y placer. `c` dans un prompt vide (tant que
-de nouveaux fils sont arrivés depuis le dernier prompt envoyé), sinon `/pr-review [n]`,
-ouvre un panneau qui montre un fil à la fois : le diff concerné et toute la conversation,
-avec les badges `↩ répondu` (l'auteur de la PR a le dernier mot) et `obsolète`.
-
-Touches du panneau (adaptées à l'AZERTY, main gauche) : `z`/`s` fil précédent/suivant,
-`q`/`d` PR précédente/suivante, `x` marquer, `a` tout (dé)marquer (**a**ll), `f` mettre
-les fils marqués (ou celui affiché) dans le prompt pour Claude (**f**ix ; sur ta PR : un
-commit `--fixup` par commit corrigé puis push ; sur celle d'un autre : correction locale
-sans commit ni push ; si la PR n'est pas sur la branche courante, Claude est prié de s'y
-placer d'abord), `r` répondre (**r**etour, publié sur GitHub à Entrée), `v` résoudre le
-fil sur GitHub (**v**alider), `o` ouvrir dans le navigateur, `e`/Esc fermer (**e**xit).
-La barre d'aide groupe la navigation (`z: ↑ s: ↓ fil · q: ← d: → PR`) au-dessus des
-actions. Pas de flèches : un bouton de mod n'accepte qu'une lettre ou un chiffre, et dans
-un panneau les flèches font défiler.
-
-Écarts avec l'original : ces raccourcis (l'original : `n`/`p`, `t`, `q` sur QWERTY), la
-PR précédente (`q`) et le groupe « à relire », absents de l'original (qui n'affiche que
-les PR ayant des fils non résolus).
-Réponses et résolutions passent par `gh` sans autre confirmation que la touche.
-Pour faire analyser tous les fils d'une de tes PR et proposer une suite à chacun :
-`/review:feedback` (plugin [`review`](#review)).
-GitHub est interrogé chaque minute pour la liste (1 point GraphQL sur 5000/h), les fils
-d'une PR seulement quand elle a changé, après une écriture, ou toutes les dix minutes.
+| les autres | aucune : Cursor reprend le plugin Claude tel quel (skills ; mods de `profiles` sans effet) |
 
 ### `intellij`
 
@@ -1952,7 +1912,7 @@ relecture lit le diff et l'API) ; `--worktree` en crée un, détaché sur la tê
 #### `/review:feedback`
 
 `/review:feedback [numéro]` : une de mes PR, par défaut celle de la branche courante. Fils de
-review non résolus (GraphQL `reviewThreads`, même requête que `pr-comments`), chacun
+review non résolus (GraphQL `reviewThreads`), chacun
 analysé avec son code (fils obsolètes revérifiés) et classé par conseil selon
 [les PR expectations](#pr-expectations) et les normes rassemblées, avec une suite :
 **solution** (correctif précis), **options** (2-3, compromis, recommandation), **à

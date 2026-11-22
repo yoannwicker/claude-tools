@@ -32,7 +32,7 @@ automatique.
 | `git-tidy` (`tidy-watch`) | déclare `approved` → événement `approved` (`/git-tidy:ready`) ; le seuil `approvals` par dépôt (déjà exposé par `status --json`) ; l'action suggérée `/git-tidy:pr-sync` pour `behind` (sans événement) ; plus tard, les statuts JIRA reconnus |
 
 Plugin absent : l'état s'affiche quand même, sans action ni suivi (seuil d'approbations : 2).
-Pas de `/review:status`. `pr-comments` (mod tiers, dépôt courant) reste tel quel.
+Pas de `/review:status`.
 
 ### États
 

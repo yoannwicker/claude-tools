@@ -9,8 +9,7 @@ allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr edit:*), Bash(gh repo
 Argument : `$ARGUMENTS`
 
 But : ne laisser aucun retour sans suite, en décidant vite de ce qui est simple et en
-prenant le temps sur ce qui le mérite. Complément du plugin `pr-comments` (panneau fil par
-fil) : ici chaque fil est analysé et une suite est proposée.
+prenant le temps sur ce qui le mérite : chaque fil est analysé et une suite est proposée.
 
 **`--prepare`** (préparation lancée par `review-watch`, en fond avec `claude -p` ou
 dans herdr avec `launch --background` : personne pour répondre) : aucune question

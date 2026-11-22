@@ -28,7 +28,6 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Plugin `git-nav` (skills `/pr`, `/br`, `/worktree`, ménage après un merge ; `gpr`, `gbr` pour le terminal) | `./install.sh plugin git-nav` | `git` ; `gh` authentifié |
 | Plugin `gh-watch` (base des watchers GitHub `review-watch` et `tidy-watch`, supervision : `/gh-watch:auto-status`, `gh-watch status` ; point sur les PR : `/gh-watch:board`, `gh-watch board` ; rattrapage quotidien des actions manquées : `/gh-watch:board-auto`) | installé avec `review` ou `git-tidy` (ou `./install.sh plugin gh-watch`) | `python3` ; systemd utilisateur |
 | Plugin `git-tidy` (skills `/git-tidy:commits`, `/git-tidy:pr-sync`, `/git-tidy:ready` : commits remis au propre, rebase sur la base, PR et ticket JIRA en phase ; `/git-tidy:approved-auto` : lancer `ready` d'office quand la PR a ses approbations) | `./install.sh plugin git-tidy`, puis `tidy-watch enable` pour le mode auto | `git` ; `gh` authentifié ; MCP Atlassian pour JIRA ; `python3` et systemd utilisateur pour le mode auto |
-| Plugin `pr-comments` (fils de review non résolus) | `./install.sh plugin pr-comments` | `claude` ≥ 2.1.287, `gh` authentifié |
 | Plugin `intellij` (MCP IntelliJ + consigne) | `./install.sh plugin intellij` | IntelliJ avec le serveur MCP sur le port 64342 |
 | Plugin `notify` (notifications desktop) | `./install.sh plugin notify` | `python3-gi`, `gdbus`, `xprop`, `jq`, gnome-terminal |
 | Plugin `herdr-session` (reprise des sessions par herdr) | `./install.sh plugin herdr-session` | herdr et son intégration Claude (`./setup/20-herdr.sh`) |
@@ -76,9 +75,6 @@ demander une déconnexion/reconnexion de session.
   session, `/profile` propose la liste des profils et `/profile <profil>` relance la
   conversation dans ce profil ; `/profile show [<profil>]` montre ce qui y est actif et
   (dés)active ses plugins et MCP, `/profile create <nom>` crée un profil.
-- Fils de review non résolus de mes PR (et de celles que je relis) : ligne `💬` au-dessus
-  du prompt, `c` ou `/pr-review` pour les parcourir, les envoyer à Claude, répondre,
-  résoudre (plugin `pr-comments`).
 - `/pr [numéro | mots-clés]`, `/br [nom | mots-clés]` : trouver une PR ou une branche,
   la charger en contexte et se placer dessus (branche courante ou worktree) ;
   `/worktree clear` supprime les worktrees qu'aucune session n'utilise ;
@@ -148,8 +144,7 @@ home/               miroir de $HOME, un lien par fichier
 .claude-plugin/     marketplace.json : ce dépôt comme marketplace locale « claude-tools »
 plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quelque chose hors de lui,
                     et sa surcharge Cursor cursor/ s'il en a une (install.sh plugin --cursor)
-                    (liens, contrôles ; lu par install.sh plugin) : pr-comments/ (repris
-                    d'aguiddir/claude-config), intellij/, profiles/ (bin/claude-profile, shell/claude-profile.sh),
+                    (liens, contrôles ; lu par install.sh plugin) : intellij/, profiles/ (bin/claude-profile, shell/claude-profile.sh),
                     git-nav/ (skills /pr, /br, /worktree, branch-cleanup, hook merge-watch, bin/{gpr,gbr}, lib/ et shell/git-tools.sh),
                     gh-watch/ (lib/watchlib.py commun aux watchers, bin/gh-watch et skill
                     /gh-watch:auto-status pour les superviser, lib/board.py, lib/tui.py et skill

@@ -24,19 +24,19 @@ test('an error: no exit, its message', () => {
 })
 
 test('claude-profile list parsed: name, description, current', () => {
-  const out = '  basic            Sans pr-comments [généré]\n* vidal            Config complète [généré, par défaut]\n  vide              [non généré]\n'
+  const out = '  basic            Sans superpowers [généré]\n* vidal            Config complète [généré, par défaut]\n  vide              [non généré]\n'
   expect(parseList(out)).toEqual([
-    { name: 'basic', description: 'Sans pr-comments', isCurrent: false, isDefault: false, isProject: false },
+    { name: 'basic', description: 'Sans superpowers', isCurrent: false, isDefault: false, isProject: false },
     { name: 'vidal', description: 'Config complète', isCurrent: true, isDefault: true, isProject: false },
     { name: 'vide', description: '', isCurrent: false, isDefault: false, isProject: false },
   ])
 })
 
 test('claude-profile list parsed: the project profile', () => {
-  const out = '* reference        Profil de référence (~/.claude/settings.json) [référence, par défaut]\n  basic            Sans pr-comments [généré, projet]\n'
+  const out = '* reference        Profil de référence (~/.claude/settings.json) [référence, par défaut]\n  basic            Sans superpowers [généré, projet]\n'
   expect(parseList(out)).toEqual([
     { name: 'reference', description: 'Profil de référence (~/.claude/settings.json)', isCurrent: true, isDefault: true, isProject: false },
-    { name: 'basic', description: 'Sans pr-comments', isCurrent: false, isDefault: false, isProject: true },
+    { name: 'basic', description: 'Sans superpowers', isCurrent: false, isDefault: false, isProject: true },
   ])
 })
 
@@ -53,10 +53,10 @@ test('claude-profile show parsed: plugins on, off, unlisted; other lines as text
 })
 
 test('claude-profile list with the reference: default when none is set', () => {
-  const out = '* reference        Profil de référence (~/.claude/settings.json) [référence, par défaut]\n  basic            Sans pr-comments [généré]\n'
+  const out = '* reference        Profil de référence (~/.claude/settings.json) [référence, par défaut]\n  basic            Sans superpowers [généré]\n'
   expect(parseList(out)).toEqual([
     { name: 'reference', description: 'Profil de référence (~/.claude/settings.json)', isCurrent: true, isDefault: true, isProject: false },
-    { name: 'basic', description: 'Sans pr-comments', isCurrent: false, isDefault: false, isProject: false },
+    { name: 'basic', description: 'Sans superpowers', isCurrent: false, isDefault: false, isProject: false },
   ])
 })
 
