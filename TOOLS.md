@@ -82,7 +82,7 @@ locaux dans `~/.config/herdr/` : `*.log`, `*.sock`, `session.json`, `release-not
 
 **Installation** : `./setup/20-herdr.sh`, soit
 `curl -fsSL https://herdr.dev/install.sh | sh`, puis `herdr integration install claude`
-(et `copilot` si la CLI Copilot est présente). Le script propose aussi l'interface : terminal
+(et `copilot` si la CLI Copilot est présente, `cursor` si Cursor l'est). Le script propose aussi l'interface : terminal
 seul, ou terminal + [Herdr UI](#herdr-ui). Mise à jour : `herdr update` (fait par `dot`).
 
 **Configuration spécifique** :
@@ -101,7 +101,10 @@ seul, ou terminal + [Herdr UI](#herdr-ui). Mise à jour : `herdr update` (fait p
   [`herdr-session`](CLAUDE-CODE.md#herdr-session) : `setup/20-herdr.sh` retire de
   `settings.json` tout hook herdr (en écrivant à travers le lien), et `dot` rejoue ce script
   après `herdr update`.
-- Vérifier : `herdr integration status` → `claude: current`.
+- Intégration Cursor : hook `sessionStart` dans `~/.cursor/hooks.json` vers
+  `~/.cursor/herdr-agent-state.sh` (générés par herdr, non versionnés) ; herdr reprend la
+  session Cursor après un redémarrage, comme celle de Claude.
+- Vérifier : `herdr integration status` → `claude: current` (et `cursor: current`).
 
 ## Herdr UI
 

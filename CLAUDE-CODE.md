@@ -75,6 +75,13 @@ nom du worktree, durée de session, et `🧩 <profil>` pour une session lancée 
 (dossier de `CLAUDE_CONFIG_DIR` sous `~/.claude-profiles/`). `statusline-ps1.sh` est la variante minimale
 `user@host:~/chemin` (ancien PS1), à brancher dans `statusLine.command` si besoin.
 
+**Cursor** : `setup/40-cursor.sh` branche le même script dans `~/.cursor/cli-config.json`
+(clé `statusLine`, rafraîchie toutes les 10 s ; le reste du fichier, état de Cursor, n'est pas
+touché), avec `STATUSLINE_AGENT=cursor` : pas de `🧩 <profil>` (Cursor ne suit pas les
+profils). Cursor envoie les mêmes champs que Claude sauf coût, durée, lignes modifiées et
+limites d'usage, qui ne s'affichent donc pas. Il lance la commande sans shell : `env` pour la
+variable et chemin absolu (pas de `~`). Vérifié avec `cursor-agent` 2026.11.19.
+
 ## Notifications desktop
 
 Portées par le plugin [`notify`](#notify).
@@ -220,6 +227,19 @@ Pour essayer une surcharge sans l'installer : `cursor-agent --plugin-dir <dossie
 | [`notify`](#notify) | notifications sous herdr ([Avec Cursor](#notify-avec-cursor)) |
 | [`git-nav`](#git-nav), [`review`](#review) | `cursor/setup.sh` : `worktree-scan`, `review-post`, `review-map-html` liés dans `~/.local/bin` |
 | les autres | aucune : Cursor reprend le plugin Claude tel quel (skills ; mods de `profiles` sans effet) |
+
+**Hors des plugins**, ce qui diffère sous Cursor, et ce qui a été décidé :
+
+| Élément | Sous Cursor |
+|---|---|
+| Reprise des sessions par herdr | intégration de herdr pour Cursor (`herdr integration install cursor`, posée par `setup/20-herdr.sh` si Cursor est là), à la place de [`herdr-session`](#herdr-session) |
+| [Status line](#status-line) | le même `statusline-command.sh`, branché par `setup/40-cursor.sh` dans `~/.cursor/cli-config.json` |
+| JIRA dans `git-tidy` et `review` | pas de connecteur claude.ai dans Cursor : sans MCP Atlassian configuré dans Cursor, les skills le disent et continuent sans le ticket JIRA (issues GitHub inchangées) |
+| Profils | Cursor ne lit que le profil de référence (`~/.claude/settings.json`), jamais `CLAUDE_CONFIG_DIR` |
+| Réglages (`settings.json` : modèle, permissions…) | `~/.cursor/cli-config.json`, état de Cursor non versionné (seule sa clé `statusLine` est posée par `setup/40-cursor.sh`) |
+| Lanceur `cl` | `claude` seulement, pas d'équivalent voulu |
+| [`session-analysis`](#session-analysis) | sessions Claude seulement, laissé de côté |
+| Modes auto (`review-watch`, `tidy-watch`, `/gh-watch:board-auto`) | restent sur Claude, par choix |
 
 ### `intellij`
 
@@ -1333,7 +1353,9 @@ script, ou hors d'un pane herdr, le hook ne fait rien. Pas de tests.
 
 **Cursor** : repris par Cursor, le hook n'y fait rien (`CURSOR_VERSION` posé) : il signalerait
 la session Cursor comme une session Claude. Pour Cursor, l'intégration de herdr :
-`herdr integration install cursor`.
+`herdr integration install cursor` (posée par `setup/20-herdr.sh` quand `cursor-agent` ou
+`cursor` est là : hook `sessionStart` dans `~/.cursor/hooks.json`, script
+`~/.cursor/herdr-agent-state.sh`).
 
 #### Installation hors de ce dépôt
 

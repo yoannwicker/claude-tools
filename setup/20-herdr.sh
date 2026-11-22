@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # herdr : installe le binaire si absent, propose l'interface (terminal seul, ou avec Herdr UI),
-# pose les intégrations agents, retire le hook Claude de settings.json (il vient du plugin
-# herdr-session, quand celui-ci est installé).
+# pose les intégrations agents (claude, et copilot, cursor s'ils sont là), retire le hook Claude
+# de settings.json (il vient du plugin herdr-session, quand celui-ci est installé).
 #   --ui  installe Herdr UI sans demander (et oublie un refus)
 # Le choix est demandé dans un terminal tant que Herdr UI n'est ni installé ni refusé ; un refus est
 # retenu (~/.config/claude-tools/herdr-ui-declined). Sans terminal, il est seulement signalé.
@@ -62,6 +62,9 @@ fi
 
 integrations="claude"
 command -v copilot >/dev/null 2>&1 && integrations="$integrations copilot"
+# Cursor : son intégration (hook sessionStart dans ~/.cursor/hooks.json) signale la session à herdr, qui
+# la reprend après un redémarrage ; herdr-session ne fait rien sous Cursor.
+{ command -v cursor-agent || command -v cursor; } >/dev/null 2>&1 && integrations="$integrations cursor"
 for agent in $integrations; do
   if "$herdr" integration status 2>/dev/null | grep -q "^$agent: current"; then
     echo "intégration herdr $agent : à jour"

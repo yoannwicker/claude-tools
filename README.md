@@ -48,8 +48,9 @@ désinstalle, liens compris. Activer un plugin installé dans un profil reste à
 | Outil | Commande | Prérequis |
 |---|---|---|
 | mise (outils globaux) | `./setup/10-mise.sh` | `curl` |
-| herdr (+ intégrations Claude/Copilot ; au choix, client graphique Herdr UI) | `./setup/20-herdr.sh [--ui]` | `curl` ; Linux ou macOS. Herdr UI : glibc ≥ 2.39 et `sudo` (APT, DNF ou pacman), ou Homebrew |
+| herdr (+ intégrations Claude, Copilot, Cursor ; au choix, client graphique Herdr UI) | `./setup/20-herdr.sh [--ui]` | `curl` ; Linux ou macOS. Herdr UI : glibc ≥ 2.39 et `sudo` (APT, DNF ou pacman), ou Homebrew |
 | Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
+| Status line dans Cursor | `./install.sh link && ./setup/40-cursor.sh` | `cursor-agent`, `jq` |
 | Extension GNOME `claude-notify` (pastille des notifications du plugin `notify`) | `./install.sh link && ./install.sh plugin notify && ./setup/30-gnome.sh` | GNOME Shell 46 |
 
 Sans GNOME : désactiver le plugin `notify` dans chaque profil (`"notify@claude-tools": false`
@@ -159,7 +160,7 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     review/ (agents reviewer, challenger et mapper, skills /review:diff, :pr, :decisions, :manual, :feedback, :pr-auto et :feedback-auto,
                     bin/{review-post,review-watch,review-map-html}, timer systemd review-watch, profil Herdr UI)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — lean — ou d'une base — vidal : harnais —, voir `claude-profile`)
-setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 50-cl
+setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 40-cursor, 50-cl
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),
                     pistes-amelioration/ (pistes préfixées par leur priorité 1, 2, 3)
 CLAUDE-CODE.md      Claude Code : settings, profils, plugins

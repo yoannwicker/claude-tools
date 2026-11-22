@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Claude Code status line — https://code.claude.com/docs/en/statusline
 # Reads the session JSON on stdin; a single python3 call parses and renders it.
+# Also used by cursor-agent (same JSON fields, minus cost and rate limits), launched with
+# STATUSLINE_AGENT=cursor by setup/40-cursor.sh.
 
 read -r -d '' PY <<'PY'
 import hashlib, json, os, subprocess, sys, time, unicodedata, re
@@ -232,7 +234,8 @@ if model:
     line1.append(seg)
 
 config_dir = os.environ.get("CLAUDE_CONFIG_DIR", "")
-if config_dir.startswith(os.path.expanduser("~/.claude-profiles/")):
+# Cursor only reads ~/.claude/settings.json: a profile inherited from the shell does not apply.
+if os.environ.get("STATUSLINE_AGENT") != "cursor" and config_dir.startswith(os.path.expanduser("~/.claude-profiles/")):
     line1.append(f"🧩 {MAGENTA}{os.path.basename(config_dir.rstrip('/'))}{RST}")
 
 cwd = get(data, "workspace", "current_dir") or data.get("cwd")
@@ -283,6 +286,8 @@ if pr_number is not None:
     line1.append(seg)
 
 worktree = get(data, "workspace", "git_worktree") or get(data, "worktree", "name")
+if not worktree and isinstance(data.get("worktree"), str):
+    worktree = os.path.basename(data["worktree"].rstrip("/"))
 if worktree:
     line1.append(f"🌳 {GREEN}{worktree}{RST}")
 
