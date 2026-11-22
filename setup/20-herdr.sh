@@ -53,6 +53,13 @@ herdr_ui() {
 }
 herdr_ui "$@"
 
+# Copie à la souris dans un pane shell : herdr passe par wl-copy sous Wayland, sinon par OSC 52,
+# que gnome-terminal ignore. Sans wl-clipboard, la copie se perd sans erreur.
+if [ "${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+  command -v wl-copy >/dev/null 2>&1 \
+    || echo "wl-copy absent : la copie depuis herdr ne marchera pas (sudo apt install wl-clipboard)"
+fi
+
 # Profil Herdr UI du plugin review (/review:pr depuis la boîte de revue) : proposé ici aussi, car
 # ./install.sh installe les plugins avant setup/, donc souvent avant Herdr UI.
 if command -v herdr-gpui >/dev/null 2>&1 \

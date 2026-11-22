@@ -84,7 +84,10 @@ agents, worktrees).
 locaux dans `~/.config/herdr/` : `*.log`, `*.sock`, `session.json`, `release-notes.json`,
 `.plugins.lock`. Le binaire (`~/.local/bin/herdr`) n'est pas versionné.
 
-**Prérequis** : Linux ou macOS, `curl`.
+**Prérequis** : Linux ou macOS, `curl`. Sous Wayland, `wl-clipboard` (`sudo apt install
+wl-clipboard`) : herdr copie la sélection souris d'un pane shell avec `wl-copy`, sinon en
+OSC 52, que gnome-terminal ignore — sans lui, la copie se perd sans erreur (dans un agent,
+c'est l'agent qui copie). `20-herdr.sh` signale son absence.
 
 **Installation** : `./setup/20-herdr.sh`, soit
 `curl -fsSL https://herdr.dev/install.sh | sh`, puis `herdr integration install claude`
