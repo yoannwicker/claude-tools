@@ -132,4 +132,16 @@ expect 0 'version :' base vidal
 jq '.enabledPlugins["h@h"] = true' "$tmp/tools/profiles/vidal.json" > "$tmp/v" && mv "$tmp/v" "$tmp/tools/profiles/vidal.json"
 expect 0 'déjà actif dans la base' generate vidal
 
+# plugins/ du profil devenu un vrai dossier : le plus récent des deux devient celui de la base.
+bp=$HOME/.claude-profiles/.bases/vidal/home/.claude/plugins
+rm "$d/plugins" && cp -r "$bp" "$d/plugins" && echo profil > "$d/plugins/marque"
+touch -d '+1 min' "$d/plugins/installed_plugins.json"
+expect 0 'repris dans la base' generate vidal
+check 'plugins du profil plus récents : dans la base, lien reposé' test -L "$d/plugins" -a "$(cat "$bp/marque")" = profil
+check 'plugins de la base gardés' test -f "$HOME/.claude-profiles/.bases/vidal/plugins.old/installed_plugins.json" -a ! -e "$HOME/.claude-profiles/.bases/vidal/plugins.old/marque"
+rm "$d/plugins" && mkdir "$d/plugins" && echo '{}' > "$d/plugins/installed_plugins.json" && touch -d '-1 min' "$d/plugins/installed_plugins.json"
+expect 0 'plus anciens que ceux de la base' base vidal update
+check 'plugins du profil plus anciens : écartés, lien reposé' test "$(readlink -f "$d/plugins")" = "$bp" -a "$(cat "$bp/marque")" = profil
+check 'plugins du profil écartés gardés' test "$(cat "$HOME/.claude-profiles/.bases/vidal/plugins.old/installed_plugins.json")" = '{}'
+
 [ "$fails" -eq 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

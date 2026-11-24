@@ -437,6 +437,13 @@ Un profil peut partir de la config d'un autre dépôt, telle que son installeur 
   `dev-mods/` de la base s'ils y sont, jamais ceux de `~/.claude`, plus ce que la base est seule
   à avoir (ex. `RTK.md`, `harnais/`). Le reste de `~/.claude` reste commun : identifiants,
   `.claude.json`, transcripts (`projects/`), historique, état.
+- **`plugins/` réparé** : c'est un lien vers celui de la base, où les sessions du profil
+  écrivent (mises à jour des plugins). S'il est devenu un vrai dossier, base et profil
+  divergent, et l'installeur de la base lit une version figée (ex. un fichier du plugin
+  harnais introuvable). À chaque génération et avant l'installeur de `base <nom> update`, le
+  plus récent des deux (date de `installed_plugins.json`) devient le `plugins/` de la base,
+  l'autre est gardé dans `~/.claude-profiles/.bases/<nom>/plugins.old` (remplacé à la
+  réparation suivante), puis le lien est reposé.
 - **`settings.json`** : celui de la base, plus les marketplaces ajoutées depuis pour les
   plugins du profil, les sections du profil (`deniedMcpServers`, `disableClaudeAiConnectors`)
   et les plugins :

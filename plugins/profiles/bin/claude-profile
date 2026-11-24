@@ -283,6 +283,27 @@ repair_credentials() {
   fi
 }
 
+# plugins/ d'un profil avec base : lien vers celui de la base, où les sessions écrivent. S'il est
+# devenu un vrai dossier (lien remplacé pendant une session), base et profil divergent et
+# l'installeur de la base lit une version figée : le plus récent des deux (installed_plugins.json)
+# devient celui de la base, l'autre est gardé dans .bases/<nom>/plugins.old, puis le lien est reposé.
+repair_base_plugins() {
+  local p=$out_root/$1/plugins c old
+  c=$(base_conf "$1")/plugins
+  old=$(base_dir "$1")/plugins.old
+  [ -d "$p" ] && [ ! -L "$p" ] || return 0
+  rm -rf "$old"
+  if [ "$p/installed_plugins.json" -nt "$c/installed_plugins.json" ]; then
+    [ -e "$c" ] && mv "$c" "$old"
+    mkdir -p "${c%/*}" && mv "$p" "$c"
+    echo "plugins du profil $1 (dossier au lieu du lien) repris dans la base, ceux de la base gardés : ${old/#$HOME/\~}" >&2
+  else
+    mv "$p" "$old"
+    echo "plugins du profil $1 (dossier au lieu du lien) plus anciens que ceux de la base, gardés : ${old/#$HOME/\~}" >&2
+  fi
+  ln -s "$c" "$p"
+}
+
 # Lien $2 -> $1 (cible résolue), sauf sur un vrai dossier, gardé.
 link_entry() {
   if [ -d "$2" ] && [ ! -L "$2" ]; then
@@ -306,6 +327,7 @@ generate() {
   fi
   mkdir -p "$dir"
   repair_credentials "$dir"
+  [ -n "$withbase" ] && repair_base_plugins "$name"
   for e in "$base"/* "$base"/.[!.]*; do
     [ -e "$e" ] || [ -L "$e" ] || continue
     n=${e##*/}
@@ -465,6 +487,7 @@ cmd_base() {
     git clone -q "$repo" "$d/repo" || die "clone impossible : $repo"
   fi
   prepare_base_home "$d/home"
+  repair_base_plugins "$name"
   echo "installeur de la base : $install (HOME=${d/#$HOME/\~}/home)"
   (cd "$d/repo" && in_base "$name" bash "$install" < /dev/null)
   rc=$?
