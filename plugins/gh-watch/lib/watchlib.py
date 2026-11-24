@@ -1,6 +1,6 @@
 """watchlib — mécanique commune des watchers GitHub de claude-tools (review-watch du plugin
 review, tidy-watch du plugin git-tidy) : config et état, clone et worktree, lancement d'une
-session Claude (herdr, ou analyse en fond reprise au clic), notifications, timer systemd,
+session Claude (app Herdr ou herdr, ou analyse en fond reprise au clic), notifications, timer systemd,
 commandes communes.
 
 Plugin gh-watch, dépendance déclarée de review et git-tidy. Chaque watcher se déclare
@@ -413,43 +413,109 @@ def slug(title):
 
 
 # --- herdr ------------------------------------------------------------------------------------
+# Deux interfaces : l'app Herdr (herdr-app ; ses terminaux vivent dans herdr-core, piloté par
+# `hc`) et herdr en terminal (serveur herdr). L'app passe d'abord quand sa fenêtre est ouverte.
+# Une session ouverte est notée {"mode": "app", "space", "terminal"} ou
+# {"mode": "herdr", "workspace", "pane"}.
+
+def app_running():
+    if not shutil.which("herdr-app"):
+        return False
+    try:
+        r = subprocess.run(["herdr-app", "status"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return r.returncode == 0
+
 
 def herdr_running():
     if not shutil.which("herdr"):
         return False
-    r = subprocess.run(["herdr", "status", "server"], capture_output=True, text=True, timeout=5)
+    try:
+        r = subprocess.run(["herdr", "status", "server"], capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
     return r.returncode == 0 and "status: running" in r.stdout
+
+
+def herdr_ui():
+    """Interface où ouvrir une session : "app", "herdr" (terminal) ou None."""
+    return "app" if app_running() else "herdr" if herdr_running() else None
 
 
 def herdr(*args):
     return json.loads(run(["herdr", *args]))["result"]
 
 
+def app_do(command, **args):
+    """herdr-app do <command> : les listes et booléens passent en JSON."""
+    argv = ["herdr-app", "do", command]
+    for k, v in args.items():
+        argv += [f"--{k}", v if isinstance(v, str) else json.dumps(v)]
+    res = json.loads(run(argv))
+    if "error" in res:
+        raise RuntimeError(f"herdr-app {command} : {res['error']}")
+    return res
+
+
 def herdr_alive(session):
-    if session.get("mode") != "herdr":
-        return False
+    """La session ouverte dans herdr a encore Claude (sinon : sortie, ou pane fermé)."""
     try:
-        herdr("agent", "get", session["pane"])  # échoue si Claude est sorti du pane
-        return True
+        if session.get("mode") == "app":
+            t = json.loads(run(["hc", "get", session["terminal"], "--json"]))
+            return t.get("state") == "live" and (t.get("status") or {}).get("app") == "claude-code"
+        if session.get("mode") == "herdr":
+            herdr("agent", "get", session["pane"])  # échoue si Claude est sorti du pane
+            return True
     except Exception:
-        return False
+        pass
+    return False
 
 
-def herdr_tell(pane, kind, n, at=None):
-    """Envoie S.tell[kind] à l'agent du pane. herdr refuse si l'agent attend une réponse
-    (question, permission) : rien n'est alors tapé dans la question. Retourne True si envoyé."""
+def herdr_tell(session, kind, n, at=None):
+    """Envoie S.tell[kind] à l'agent de la session. herdr (hc send dans l'app) refuse si
+    l'agent attend une réponse (question, permission) : rien n'est alors tapé dans la
+    question. Retourne True si envoyé."""
     when = f" ({parse(at).astimezone().strftime('%H:%M')})" if at else ""
+    text = S.tell[kind].format(n=n, when=when)
+    cmd = (["hc", "send", session["terminal"], text] if session.get("mode") == "app"
+           else ["herdr", "agent", "prompt", session["pane"], text])
     try:
-        r = subprocess.run(["herdr", "agent", "prompt", pane, S.tell[kind].format(n=n, when=when)],
-                           capture_output=True, text=True, timeout=10)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=90)  # hc : attend un brouillon
     except (OSError, subprocess.TimeoutExpired):
         return False
     return r.returncode == 0
 
 
-def herdr_open(clone, path, label):
-    """Pane dans un workspace herdr sur `path` : nouvel onglet si un workspace l'a déjà
-    ouvert, sinon workspace de worktree (herdr worktree open)."""
+def herdr_focus_cmd(session):
+    """argv qui montre la session (clic sur une notification) ; l'app vient au premier plan."""
+    if session.get("mode") == "app":
+        return ["sh", "-c", 'herdr-app do agent.focus --terminal "$1" >/dev/null; exec herdr-app',
+                "sh", session["terminal"]]
+    return ["herdr", "agent", "focus", session["pane"]]
+
+
+def app_space(path):
+    """Espace de l'app dont le dossier est `path`, ou None."""
+    try:
+        spaces = json.loads(run(["herdr-app", "ls"])).get("spaces", [])
+    except Exception:
+        return None
+    real = os.path.realpath(path)
+    return next((s["id"] for s in spaces if s.get("folder") and not s.get("machine")
+                 and os.path.realpath(s["folder"]) == real), None)
+
+
+def herdr_open(ui, clone, path, label, argv):
+    """Lance argv dans herdr sur `path`, sans changer ce qui est affiché. App : nouvel onglet
+    si un espace est déjà sur `path`, sinon nouvel espace (argv passe par un shell interactif,
+    qui reste après). Terminal : nouvel onglet si un workspace l'a déjà ouvert, sinon
+    workspace de worktree (herdr worktree open). Retourne la session (voir plus haut)."""
+    if ui == "app":
+        sp = app_space(path)
+        res = (app_do("tab.new", space=sp, name=label, folder=path, argv=argv, focus=False) if sp
+               else app_do("space.new", name=label, folder=path, argv=argv, focus=False))
+        return {"mode": "app", "space": res["space"], "terminal": res["terminal"]}
     try:
         listing = herdr("worktree", "list", "--cwd", clone)
         ws = next((w.get("open_workspace_id") for w in listing.get("worktrees", [])
@@ -461,7 +527,8 @@ def herdr_open(clone, path, label):
     else:
         res = herdr("worktree", "open", "--cwd", clone, "--path", path, "--label", label, "--no-focus")
     pane = res["root_pane"]
-    return pane["workspace_id"], pane["pane_id"]
+    run(["herdr", "pane", "run", pane["pane_id"], shlex.join(argv)])  # pas de JSON en retour
+    return {"mode": "herdr", "workspace": pane["workspace_id"], "pane": pane["pane_id"]}
 
 
 # --- notifications --------------------------------------------------------------------------
@@ -566,11 +633,17 @@ def catchup_run():
 
 def catchup_open(cfg):
     """Clic sur la notification du rattrapage : la liste des manquées (gh-watch board --all
-    --missed -i) dans un workspace herdr s'il tourne, sinon dans un terminal."""
+    --missed -i) dans un espace de l'app Herdr ou un workspace herdr s'il tourne, sinon dans
+    un terminal."""
     argv = [gh_watch_bin(), "board", "--all", "--missed", "-i"]
-    if herdr_running():
+    keep = ' || { printf "\\n(Entrée pour fermer) "; read x; }'  # une erreur reste lisible
+    ui = herdr_ui()
+    if ui == "app":
+        app_do("space.new", name="manquées", folder=HOME, argv=["sh", "-c", shlex.join(argv) + keep])
+        subprocess.run(["herdr-app"], capture_output=True, timeout=10)  # fenêtre au premier plan
+        return
+    if ui == "herdr":
         pane = herdr("workspace", "create", "--cwd", HOME, "--label", "manquées", "--focus")["root_pane"]["pane_id"]
-        keep = ' || { printf "\\n(Entrée pour fermer) "; read x; }'  # une erreur reste lisible
         run(["herdr", "pane", "run", pane, "exec sh -c " + shlex.quote(shlex.join(argv) + keep)])
         return
     cmd = terminal_cmd(cfg, HOME, argv)
@@ -595,18 +668,19 @@ def pid_alive(pid):
 
 
 def launch(cfg, state, repo, n, kind, at=None, background=False):
-    """Lance la session de `kind` sur la PR (`at` : date de l'événement) : herdr s'il tourne,
-    sinon analyse en fond (--prepare) reprise au clic de la notification. background :
-    préparer sans question (--prepare) — dans herdr s'il tourne (la session y reste ouverte
-    pour la validation), sinon en fond. Retourne une ligne de compte rendu."""
+    """Lance la session de `kind` sur la PR (`at` : date de l'événement) : herdr (app ou
+    terminal) s'il tourne, sinon analyse en fond (--prepare) reprise au clic de la
+    notification. background : préparer sans question (--prepare) — dans herdr s'il tourne
+    (la session y reste ouverte pour la validation), sinon en fond. Retourne une ligne de
+    compte rendu."""
     key = key_of(repo, n, kind)
     prev = state["sessions"].get(key)
     if prev and herdr_alive(prev):
-        told = herdr_tell(prev["pane"], kind, n, at)
+        told = herdr_tell(prev, kind, n, at)
         notify(f"Nouvelle activité sur {repo}#{n}",
                f"Session ({S.label[kind]}) déjà ouverte dans herdr : "
                + ("message envoyé" if told else "occupée, message non envoyé"),
-               ["herdr", "agent", "focus", prev["pane"]], "normal" if told else "critical")
+               herdr_focus_cmd(prev), "normal" if told else "critical")
         return f"{key} : session herdr déjà ouverte, " + ("message envoyé" if told else "message non envoyé")
     if prev and prev.get("status") == "running" and pid_alive(prev.get("pid")):
         return f"{key} : analyse déjà en cours"
@@ -619,7 +693,8 @@ def launch(cfg, state, repo, n, kind, at=None, background=False):
     if pr["state"] != "OPEN":
         return f"{key} : PR {pr['state'].lower()}"
     prompt = f"/{S.skill[kind]} {n}" + (" --prepare" if background else "")
-    if herdr_running():
+    ui = herdr_ui()
+    if ui:
         if kind in S.detached:
             run(["git", "-C", clone, "fetch", "-q", "origin", f"pull/{n}/head"], check=False)
             branch, base = f"agent/review-{n}-{slug(pr['title'])}", pr["headRefOid"]
@@ -627,16 +702,15 @@ def launch(cfg, state, repo, n, kind, at=None, background=False):
             run(["git", "-C", clone, "fetch", "-q", "origin", pr["headRefName"]], check=False)
             branch, base = pr["headRefName"], f"origin/{pr['headRefName']}"
         path = ensure_worktree(clone, branch, base, os.path.join(HOME, ".herdr", "worktrees"))
-        ws, pane = herdr_open(clone, path, f"{S.tab[kind]} #{n}")
-        run(["herdr", "pane", "run", pane, shlex.join([*claude_cmd(cfg), prompt])])  # pas de JSON en retour
-        state["sessions"][key] = {"mode": "herdr", "workspace": ws, "pane": pane, "dir": path,
+        session = herdr_open(ui, clone, path, f"{S.tab[kind]} #{n}", [*claude_cmd(cfg), prompt])
+        state["sessions"][key] = {**session, "dir": path,
                                   "url": pr["url"], "title": pr["title"], "launched": iso(now()),
                                   "event_at": at}
         what = "préparée" if background else "lancée"
         notify(f"{S.label[kind].capitalize()} {what} : {repo}#{n}",
                f"{pr['title']}\nherdr : {S.tab[kind]} #{n}"
                + ("\nsans question ; « Reprends à la validation » pour valider" if background else ""),
-               ["herdr", "agent", "focus", pane])
+               herdr_focus_cmd(session))
         return f"{key} : {what} dans herdr ({path})" + (", sans question jusqu'à la validation" if background else "")
     # Sans herdr : analyse en fond, reprise au clic
     if kind in S.detached:
@@ -896,7 +970,7 @@ def status_data(cfg, state):
     for k, s in sorted(state["sessions"].items(), key=lambda kv: kv[1].get("launched", "")):
         d = {"key": k, "mode": s["mode"], "dir": s.get("dir"), "url": s.get("url"),
              "title": s.get("title"), "launched": s.get("launched"), "event_at": s.get("event_at")}
-        if s["mode"] == "herdr":
+        if s["mode"] in ("app", "herdr"):
             d["status"] = "ouverte" if herdr_alive(s) else "fermée"
         else:
             d.update(status=s.get("status"), log=s.get("log"), finished=s.get("finished"))
@@ -932,9 +1006,9 @@ def cmd_status(cfg, state, as_json=False):
     if sessions:
         print("sessions :")
     for k, s in sorted(sessions.items(), key=lambda kv: kv[1].get("launched", "")):
-        if s["mode"] == "herdr":
+        if s["mode"] in ("app", "herdr"):
             st = "ouverte" if herdr_alive(s) else "fermée"
-            print(f"  {k}  herdr {st}  {s['dir']}")
+            print(f"  {k}  {'app Herdr' if s['mode'] == 'app' else 'herdr'} {st}  {s['dir']}")
         else:
             print(f"  {k}  fond {s.get('status')}  {s['dir']}  (log : {s.get('log')})")
 

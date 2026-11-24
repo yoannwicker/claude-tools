@@ -813,7 +813,9 @@ ajoute des alias.
 **Rôle** : base des watchers GitHub de claude-tools ([`review-watch`](#review) du plugin
 `review`, [`tidy-watch`](#git-tidy) du plugin `git-tidy`) — la mécanique qu'ils partagent
 (config et état, clone et worktree, lancement d'une session Claude dans herdr ou en fond
-reprise au clic, notifications, timer systemd, commandes communes) — leur supervision
+reprise au clic, notifications, timer systemd, commandes communes ; « herdr » y désigne
+l'[app Herdr](TOOLS.md#app-herdr) si sa fenêtre est ouverte, sinon herdr en terminal s'il
+tourne) — leur supervision
 (`gh-watch status` en terminal, `/gh-watch:auto-status` dans Claude) et le point sur les PR
 ouvertes qui me concernent (`gh-watch board`, `/gh-watch:board`), avec un rattrapage
 quotidien des actions manquées (`/gh-watch:board-auto`). Dépendance déclarée de
@@ -897,6 +899,7 @@ y penser.
   n'ayant pas `~/.local/bin`), limité aux dépôts où un watcher est en `auto`. Résultat retenu (fin, nombre, lignes, erreur) ; s'il y a des
   lignes, **une** notification « N actions manquées » (les 4 premières dans le texte).
 - Son clic (`<watcher> _catchup_open`) ouvre `gh-watch board --all --missed -i` : dans un
+  nouvel espace de l'app Herdr (« manquées », fenêtre ramenée au premier plan), sinon un
   nouveau workspace herdr (« manquées ») s'il tourne, sinon dans un terminal (`terminal` de
   la config du watcher, sinon `gnome-terminal`). Rien n'est lancé sans choix dans la liste.
 - `gh-watch catchup [--json]` (aussi en fin de `gh-watch status`, et dans
@@ -1001,8 +1004,9 @@ Agir sur une ligne :
   `x` écarter, `X` écarter jusqu'à la fermeture, `u` réintégrer, `r` rafraîchir (nouvel
   appel GitHub), `q`/`Échap` quitter. Le résultat s'affiche en bas et la ligne est
   annotée (lancée, préparée, écartée). Refusé avec `--json`. Sans terminal (lancé par
-  une session Claude) : ouverte dans un pane herdr sous celui de la session
-  (`HERDR_PANE_ID`), qui se ferme en quittant la liste ; sans herdr, refusé.
+  une session Claude) : ouverte sous la session, dans l'app Herdr (`HC_TERMINAL_ID` :
+  `herdr-app do pane.split` sous son pane ; le pane garde un shell après la liste), sinon
+  dans un pane herdr (`HERDR_PANE_ID`), qui se ferme en quittant la liste ; sans eux, refusé.
 - `/gh-watch:board … -i` : la liste interactive depuis Claude — dans un pane herdr sous
   la session ; sans herdr, le tableau puis une question par ligne sur laquelle agir (à
   moi, mentionnée, ou les lignes de `--auto`/`--missed`) : lancer (en fond, notification),
@@ -1059,10 +1063,10 @@ MCP Atlassian connecté (`claude.ai Atlassian Rovo` ou `claude.ai Atlassian MCP`
 seules la PR et les issues GitHub sont traitées (et aucun ticket n'est passé en
 validation). Plugin [`gh-watch`](#gh-watch) (dépendance déclarée, installé
 automatiquement : mécanique commune des watchers et supervision). Mode auto (`tidy-watch`) :
-`python3`, systemd utilisateur ; herdr facultatif (sinon analyse en fond, reprise dans
+`python3`, systemd utilisateur ; app Herdr ou herdr facultatifs (sinon analyse en fond, reprise dans
 `gnome-terminal`) ; `python3-gi` avec `Notify 0.7` pour le clic des notifications (sinon
 `notify-send`, sans clic). Tests : `bash plugins/git-tidy/tests/tidy-watch.test.sh` (faux
-`gh`, `claude`, `herdr`).
+`gh`, `claude`, `herdr`, `herdr-app`).
 
 #### Installation hors de ce dépôt
 
@@ -1260,12 +1264,14 @@ puis `*`.
 
 **Lancement**, comme `review-watch` pour un feedback (même mécanique, `lib/watchlib.py` du
 plugin [`gh-watch`](#gh-watch), qui supervise aussi `tidy-watch` : `gh-watch status`) :
-herdr tourne → la branche de la PR (son dossier si elle est déjà extraite, sinon un
-worktree sous `~/.herdr/worktrees/`), onglet « merge #n », `claude '/git-tidy:ready <n>'` ;
+app Herdr ouverte, sinon herdr en terminal qui tourne → la branche de la PR (son dossier si
+elle est déjà extraite, sinon un worktree sous `~/.herdr/worktrees/`), onglet « merge #n »
+(dans l'espace ou le workspace déjà ouvert sur ce dossier, sinon un nouveau, sans changer ce qui
+est affiché), `claude '/git-tidy:ready <n>'` ;
 sinon analyse en fond `claude -p '/git-tidy:ready <n> --prepare'` (outils en lecture
 seule) dans un worktree sous `~/.cache/claude-tools/tidy-worktrees/`, puis notification
 « prête à valider » dont le clic lance `tidy-watch resume`. Session herdr déjà ouverte sur
-la PR : message dans son pane. Journal : `~/.local/state/claude-tools/tidy-watch/logs/`.
+la PR : message dans son onglet (`hc send` dans l'app, `herdr agent prompt` en terminal). Journal : `~/.local/state/claude-tools/tidy-watch/logs/`.
 Le profil lancé (réglage `claude`) doit activer le plugin `git-tidy`.
 
 Config : section `watcher` de `~/.config/claude-tools/git-tidy.json` (le reste du fichier :
@@ -1284,8 +1290,8 @@ avec un timer arrêté.
 ### `notify`
 
 **Rôle** : notifications desktop GNOME aux événements de Claude Code (fin de tour, erreur,
-permission, question) ; un clic ramène la session au premier plan (fenêtre Herdr UI ou onglet
-gnome-terminal).
+permission, question) ; un clic ramène la session au premier plan (app Herdr, pane herdr ou
+onglet gnome-terminal).
 
 **Fichiers** : `plugins/notify/` (`hooks/hooks.json`,
 `scripts/{notify.sh,notify-click.sh,claude-notify.py}`, `setup.sh`, surcharge Cursor
@@ -1295,7 +1301,7 @@ gnome-terminal).
 **Activé dans** : tous les profils.
 
 **Prérequis** : GNOME Shell + gnome-terminal (X11 : `xprop`), `python3-gi` avec
-`Notify 0.7`, `gdbus`, `jq` ; herdr et Herdr UI facultatifs (voir [Sans et avec herdr](#sans-et-avec-herdr)). `setup/30-gnome.sh` signale ce qui manque.
+`Notify 0.7`, `gdbus`, `jq` ; app Herdr et herdr facultatifs (voir [Sans et avec herdr](#sans-et-avec-herdr)). `setup/30-gnome.sh` signale ce qui manque.
 Tests : `bash plugins/notify/tests/cursor-watch.test.sh` (surcharge Cursor ; faux herdr).
 
 **Cursor** : surcharge (`./install.sh plugin --cursor notify`), pour `cursor-agent` lancé dans
@@ -1326,10 +1332,10 @@ les notifications en attente de la session). Plugin à `false` dans un profil : 
 notification.
 
 Chaîne : `notify.sh` (lit le JSON de l'événement, construit titre et corps — titre de la
-session, dossier ou workspace herdr, branche — et rend la main tout de suite) →
+session, dossier, espace de l'app Herdr ou workspace herdr, branche — et rend la main tout de suite) →
 `claude-notify.py` (libnotify via `gi`, affiche, mémorise la notification comme *en
 attente* dans `~/.local/state/claude-notify/`, suit le clic) → `notify-click.sh` (`--open`
-ramène la fenêtre Herdr UI ou l'onglet gnome-terminal de la session au premier plan,
+ramène la session au premier plan : terminal de l'app Herdr, sinon onglet gnome-terminal,
 `--clear-session` / `--clear-all` ferment les notifications en attente). Permission et
 question restent à l'écran (urgence critique) ; `idle_prompt` et `auth_success` sont
 ignorées.
@@ -1345,27 +1351,27 @@ Les anciens liens `notify.sh`, `notify-click.sh`, `claude-notify.py` de `~/.clau
 
 #### Sans et avec herdr
 
-Le plugin marche seul ; dans un pane herdr (`HERDR_PANE_ID` posé), les scripts demandent en
-plus à herdr le contexte de la session et l'utilisent au clic. Binaire : `HERDR_BIN_PATH`,
-sinon `herdr` du PATH ; chaque appel est borné par `timeout 2`, un herdr injoignable ne
-bloque pas le hook (on retombe sur ce qu'il sait sans herdr).
+Le plugin marche seul. Dans un terminal de l'[app Herdr](TOOLS.md#app-herdr) (`HC_TERMINAL_ID`
+posé et terminal trouvé par `herdr-app ls`), ou à défaut dans un pane herdr en terminal
+(`HERDR_PANE_ID` posé), les scripts demandent en plus le contexte de la session et l'utilisent
+au clic. Binaire herdr : `HERDR_BIN_PATH`, sinon `herdr` du PATH ; chaque appel est borné par
+`timeout 2`, une app ou un herdr injoignable ne bloque pas le hook (on retombe sur ce qu'il sait
+sans eux).
 
-| | Sans herdr | Avec herdr |
-|---|---|---|
-| Titre : nom de la session | `customTitle` ou `aiTitle` du transcript, sinon nom du dossier | idem, sinon agent et titre du pane (`herdr pane get`) |
-| Corps : lieu | nom du dossier (`cwd`) | « label (#n) » du workspace (`herdr workspace get`) ; dossier s'il n'a pas de label |
-| Corps : branche | `git rev-parse` dans `cwd` (repli : transcript) | idem |
-| Silence | jamais | pane focalisé dans herdr et fenêtre X active = un terminal ou Herdr UI (`xprop` ne dit pas lequel) |
-| Gardé pour le clic (`~/.local/state/claude-notify/<id>.json`) | `tty` de l'onglet (plus haut ancêtre qui en a un), `where` | `pane_id`, `herdr`, `ws_label`, `ws_id`, `session_id` |
-| Clic : 1. se placer dans la session | — | `herdr agent focus <pane_id>` : workspace, onglet et pane ; pane disparu : le pane où tourne la session (`agent_session` de `herdr pane list`, session reprise ailleurs), sinon `herdr workspace focus <ws_id>` |
-| Clic : 2. Herdr UI | — | s'il tourne : `herdr-gpui window focus` sur sa fenêtre qui montre le workspace (elle suit le focus de herdr), sinon sa première fenêtre ; s'arrête là |
-| Clic : 3. trouver l'onglet gnome-terminal | titre marqueur `Claude Code · <dossier> (pts/N)` écrit sur le tty (OSC 2), onglet cherché par ce titre | onglet titré `*: <label du workspace atteint>`, titre écrit par herdr (`ui.window_title`) avec ~100 ms de retard après le focus, attendu jusqu'à 1 s avant de parcourir les onglets ; workspace sans label : étape sautée |
-| Clic : 4. repli | première fenêtre gnome-terminal | idem |
-| Événements, urgence, effacement, extension GNOME | identiques | identiques |
+| | Sans herdr | App Herdr | herdr (terminal) |
+|---|---|---|---|
+| Titre : nom de la session | `customTitle` ou `aiTitle` du transcript, sinon nom du dossier | idem | idem, sinon agent et titre du pane (`herdr pane get`) |
+| Corps : lieu | nom du dossier (`cwd`) | « espace / onglet » (`herdr-app ls`) ; onglet omis s'il n'a qu'un numéro | « label (#n) » du workspace (`herdr workspace get`) ; dossier s'il n'a pas de label |
+| Corps : branche | `git rev-parse` dans `cwd` (repli : transcript) | idem | idem |
+| Silence | jamais | pane focalisé dans l'app (`herdr-app status`) et fenêtre X active = l'app (`WM_CLASS` `herdr-app`) | pane focalisé dans herdr et fenêtre X active = un terminal (`xprop` ne dit pas lequel) |
+| Gardé pour le clic (`~/.local/state/claude-notify/<id>.json`) | `tty` de l'onglet (plus haut ancêtre qui en a un), `where` | `app_terminal` | `pane_id`, `herdr`, `ws_label`, `ws_id`, `session_id` |
+| Clic : 1. se placer dans la session | — | `herdr-app do agent.focus --terminal <t>`, puis `herdr-app` (sans argument : ramène la fenêtre ouverte) ; s'arrête là | `herdr agent focus <pane_id>` : workspace, onglet et pane ; pane disparu : le pane où tourne la session (`agent_session` de `herdr pane list`, session reprise ailleurs), sinon `herdr workspace focus <ws_id>` |
+| Clic : 2. trouver l'onglet gnome-terminal | titre marqueur `Claude Code · <dossier> (pts/N)` écrit sur le tty (OSC 2), onglet cherché par ce titre | — (app fermée : étape 3) | onglet titré `*: <label du workspace atteint>`, titre écrit par herdr (`ui.window_title`) avec ~100 ms de retard après le focus, attendu jusqu'à 1 s avant de parcourir les onglets ; workspace sans label : étape sautée |
+| Clic : 3. repli | première fenêtre gnome-terminal | idem | idem |
+| Événements, urgence, effacement, extension GNOME | identiques | identiques | identiques |
 
-Herdr UI ([TOOLS.md](TOOLS.md#herdr-ui), client graphique tiers de herdr) est détecté au clic, sans réglage : `herdr-gpui window list` échoue s'il n'est pas lancé,
-et on passe à gnome-terminal. Ses notifications système (`ui.toast.delivery = "system"`) restent
-coupées, pour la même raison que les toasts de herdr.
+Les toasts de herdr en terminal (`ui.toast.delivery`) restent coupés, pour ne pas doubler ces
+notifications.
 
 Le titre d'onglet que cherche le clic sous herdr vient de `ui.window_title`, fixé à
 `"{hostname}: {workspace}"` dans `home/.config/herdr/config.toml` (voir
@@ -1399,63 +1405,92 @@ et `sessionEnd` (`cursor/hooks/hooks.json`) démarrent et arrêtent
   distingue pas une question d'une validation, les deux donnent `blocked`.
 
 Le plugin [`herdr-session`](#herdr-session) ne change rien à ce tableau : herdr reconnaît
-Claude et son état en lisant l'écran du pane, l'intégration ne lui transmet que
-l'identifiant de session, pour la reprise après un redémarrage. `notify` n'utilise pas non
+Claude et son état en lisant l'écran du pane (dans l'app Herdr, par la séquence OSC 7501 que
+Claude émet lui-même), l'intégration ne lui transmet que l'identifiant de session, pour la
+reprise après un redémarrage. Cursor dans l'app Herdr : pas suivi (la surcharge ne connaît que
+herdr en terminal). `notify` n'utilise pas non
 plus les notifications propres à herdr (`ui.toast.delivery`, `off` par défaut : à laisser ainsi, sinon doublons).
 
 ### `herdr-session`
 
-**Rôle** : signaler la session Claude au pane herdr qui l'héberge, pour que herdr la reprenne
-après un redémarrage.
+**Rôle** : faire reprendre la session Claude (`claude --resume`) après un redémarrage, dans
+l'[app Herdr](TOOLS.md#app-herdr) comme dans herdr en terminal.
 
-**Fichiers** : `plugins/herdr-session/` (`hooks/hooks.json`, `setup.sh` : `status` note
-l'absence du script herdr) ; hors du plugin, le script
+**Fichiers** : `plugins/herdr-session/` (`hooks/hooks.json`, `scripts/herdr-session.sh`,
+`shell/herdr-session.sh`, `setup.sh`) ; hors du plugin, le lien
+`~/.config/shell/herdr-session.sh` posé par `setup.sh` (chargé par `~/.bash_aliases`), les
+notes de session `~/.local/state/herdr-session/<core>/<terminal>.json` (app), le script
 `~/.claude/hooks/herdr-agent-state.sh`, généré et réécrit par herdr (non versionné), et le
 ménage de `setup/20-herdr.sh`. **Activé dans** : tous les profils.
 
-**Prérequis** : herdr avec son intégration Claude (`herdr integration install claude`,
-version ≥ 6 pour la reprise ; `herdr integration status` → `claude: current`). Sans le
-script, ou hors d'un pane herdr, le hook ne fait rien. Pas de tests.
+**Prérequis** : app Herdr (`hc`, et `jq`), ou herdr en terminal avec son intégration Claude
+(`herdr integration install claude`, version ≥ 6 pour la reprise ; `herdr integration status`
+→ `claude: current`) ; bash pour la reprise dans l'app. Hors des deux, le hook ne fait rien.
+Pas de tests automatiques (reprise vérifiée à la main sur un herdr-core isolé : terminal tué,
+shell redonné, `claude --resume` relancé).
 
 **Cursor** : repris par Cursor, le hook n'y fait rien (`CURSOR_VERSION` posé) : il signalerait
-la session Cursor comme une session Claude. Pour Cursor, l'intégration de herdr :
-`herdr integration install cursor` (posée par `setup/20-herdr.sh` quand `cursor-agent` ou
+la session Cursor comme une session Claude. Pour Cursor dans herdr en terminal, l'intégration de
+herdr : `herdr integration install cursor` (posée par `setup/20-herdr.sh` quand `cursor-agent` ou
 `cursor` est là : hook `sessionStart` dans `~/.cursor/hooks.json`, script
-`~/.cursor/herdr-agent-state.sh`).
+`~/.cursor/herdr-agent-state.sh`). Pas de reprise de Cursor dans l'app.
 
 #### Installation hors de ce dépôt
 
-Le plugin ne dépend pas du reste de la config :
+Le plugin ne dépend pas du reste de la config ; la reprise dans l'app demande le lien du
+script shell, d'où le clone :
 
 ```bash
-herdr integration install claude                          # script ~/.claude/hooks/herdr-agent-state.sh
-claude plugin marketplace add yoannwicker/claude-tools   # ou un clone local
-claude plugin install herdr-session@claude-tools
+./install.sh plugin herdr-session        # plugin + ~/.config/shell/herdr-session.sh
+herdr integration install claude         # herdr en terminal seulement
 ```
 
-`herdr integration install claude` ajoute aussi son propre hook `SessionStart` (chemin
-absolu) dans `~/.claude/settings.json` : le retirer, sinon la session est signalée deux
-fois (à refaire après chaque réinstallation de l'intégration, ce que fait ici
-`setup/20-herdr.sh`).
+Sans le dépôt : `claude plugin install herdr-session@claude-tools`, puis faire charger
+`plugins/herdr-session/shell/herdr-session.sh` par le `~/.bashrc` (après la fonction `claude`
+du plugin [`profiles`](#profiles), s'il est là). `herdr integration install claude` ajoute
+aussi son propre hook `SessionStart` (chemin absolu) dans `~/.claude/settings.json` : le
+retirer, sinon la session est signalée deux fois (à refaire après chaque réinstallation de
+l'intégration, ce que fait ici `setup/20-herdr.sh`).
 
 #### Fonctionnement
 
-Un hook `SessionStart` (démarrage, reprise, `/clear`, compaction, fork ; `timeout` 10 s)
-lance `[ -z "${CURSOR_VERSION:-}" ] && [ -f "$HOME/.claude/hooks/herdr-agent-state.sh" ] && bash … session || true`. Le
-script de herdr ne fait rien hors d'un pane herdr (`HERDR_ENV`, `HERDR_PANE_ID`,
-`HERDR_SOCKET_PATH`) ni pour un sous-agent ; sinon il envoie au socket herdr
-`pane.report_agent_session` : agent `claude`, identifiant de session, chemin du transcript.
+Hooks `SessionStart` (démarrage, reprise, `/clear`, compaction, fork) et `SessionEnd`
+(`timeout` 10 s) : `scripts/herdr-session.sh start|end`, rien sous Cursor ni pour un
+sous-agent.
 
-herdr garde cette référence dans la session sauvegardée. Après un redémarrage du serveur
-herdr (ou de la machine), il restaure workspaces, onglets et panes, puis relance
-`claude --resume <id>` dans chaque pane signalé, une fois un client attaché
-(`[session] resume_agents_on_restore = true`, fixé dans `home/.config/herdr/config.toml` ;
-`startup_per_agent_delay_ms`, 100 ms par défaut, espace les relances). Plugin à `false`
-dans un profil : ses sessions ne sont pas signalées, herdr les restaure en simple shell.
+**App Herdr** (terminal de herdr-core : `HC_TERMINAL_ID` posé ; passe avant herdr en terminal).
+herdr-core garde ses terminaux (`keep`), mais un terminal perdu (redémarrage, plantage du core,
+déconnexion) revient avec la même adresse et **un simple shell** dans son dernier dossier : sa
+commande n'est jamais relancée, et l'app n'a pas de reprise d'agent.
+- `start` note la session du terminal dans
+  `~/.local/state/herdr-session/<core>/<terminal>.json` : `session_id`, `cwd`, et
+  `created_ms` du terminal (`hc get`), qui distingue le même terminal revenu d'un nouveau
+  terminal ayant repris son adresse. `<core>` : nom du socket (`HC_TERMINAL_SOCKET`, `default`).
+- `end` (sortie normale, `/clear`…) efface la note : rien à reprendre.
+- `~/.config/shell/herdr-session.sh`, au démarrage d'un bash interactif avec
+  `HC_TERMINAL_ID` : s'il y a une note, que ce shell est le programme racine du terminal
+  (`hc get` : `pid` = `$$`), lancé seul (`argv` réduit au shell, ce que donne herdr-core à
+  un terminal perdu, pas l'app à un onglet qui lance `claude`), et que `created_ms`
+  correspond, il retire la note, se place dans `cwd` et lance `claude --resume <id>` — par la
+  fonction `claude` du plugin [`profiles`](#profiles) s'il est là, qui reprend sur le dernier
+  profil de la conversation.
+- Claude planté sans `SessionEnd` : la note reste ; le shell racine n'est pas relancé pour
+  autant (il ne redémarre qu'avec le terminal), donc pas de reprise intempestive.
 
-Non vérifié : herdr relance `claude` sans `CLAUDE_CONFIG_DIR`, donc a priori sur le
-profil de référence (pas par `claude-profile run`, qui appliquerait le profil par défaut) ; la
-conversation est retrouvée (`projects/` est partagé entre profils).
+**herdr en terminal** (`HERDR_PANE_ID` posé) : `start` passe le JSON du hook à
+`~/.claude/hooks/herdr-agent-state.sh session` s'il existe. Le script de herdr ne fait rien
+hors d'un pane herdr (`HERDR_ENV`, `HERDR_PANE_ID`, `HERDR_SOCKET_PATH`) ni pour un
+sous-agent ; sinon il envoie au socket herdr `pane.report_agent_session` : agent `claude`,
+identifiant de session, chemin du transcript. herdr garde cette référence dans la session
+sauvegardée. Après un redémarrage du serveur herdr (ou de la machine), il restaure workspaces,
+onglets et panes, puis relance `claude --resume <id>` dans chaque pane signalé, une fois un
+client attaché (`[session] resume_agents_on_restore = true`, fixé dans
+`home/.config/herdr/config.toml` ; `startup_per_agent_delay_ms`, 100 ms par défaut, espace les
+relances). Non vérifié : herdr relance `claude` sans `CLAUDE_CONFIG_DIR`, donc a priori sur le
+profil de référence ; la conversation est retrouvée (`projects/` est partagé entre profils).
+
+Plugin à `false` dans un profil : ses sessions ne sont pas signalées, elles reviennent en simple
+shell.
 
 Ménage par `setup/20-herdr.sh` (rejoué par `dot` après `herdr update`), seulement si ce
 plugin est installé : tout hook `herdr-agent-state.sh` de `~/.claude/settings.json` (celui
@@ -1622,16 +1657,14 @@ y compris par [`review-watch`](#review-watch-reviewpr-auto-reviewfeedback-auto),
 `skills/{diff,pr,decisions,manual,feedback,pr-auto,feedback-auto}/SKILL.md`, `pr-expectations.md`, `validation.md` et
 `ticket.md` communs aux skills, `decisions.md` commun à `decisions`, `pr` et `diff`, `auto.md` commun à `pr-auto` et `feedback-auto`,
 `bin/{review-post,review-watch,review-map-html}`, `systemd/review-watch.{service,timer}`,
-`tests/{review-post,review-watch,review-map-html}.test.sh`, `herdr/{prompt.md,profile.sh}`, `setup.sh`) ;
+`tests/{review-post,review-watch,review-map-html}.test.sh`, `setup.sh`) ;
 hors du plugin, les liens `~/.local/bin/review-watch`,
 `~/.config/systemd/user/review-watch.{service,timer}` et
 `~/.config/claude-tools/watchers.d/review-watch` (déclaration auprès de
 [`gh-watch`](#gh-watch)) posés par `setup.sh`, le drop-in
 `review-watch.timer.d/interval.conf` écrit par `review-watch interval`, la config
 `~/.config/claude-tools/review.json` (section `watcher`) et l'état `~/.local/state/claude-tools/review-watch/`
-(non versionnés), et le profil Herdr UI facultatif
-`~/.config/agent-launcher/agents/custom-reviewer/prompt.md` (voir
-[Profil Herdr UI](#profil-herdr-ui)). **Activé dans** :
+(non versionnés). **Activé dans** :
 le profil de référence et `vidal` (pas `lean`).
 
 **Prérequis** : `git`, `python3` ; `gh` authentifié (`/review:pr`, `/review:feedback`) ;
@@ -1639,12 +1672,12 @@ plugin [`gh-watch`](#gh-watch) (dépendance déclarée, installé automatiquemen
 commune des watchers et supervision) ; plugin [`git-nav`](#git-nav) pour chercher une PR par mots-clés dans `/review:pr` (`gpr`).
 Lecture du ticket : MCP Atlassian (`getJiraIssue`) pour JIRA, `gh` pour une issue GitHub ;
 sans eux, la revue se fait sans le ticket. Outils IntelliJ utilisés par l'agent s'ils répondent (plugin [`intellij`](#intellij)),
-sinon recherche classique. Mode auto (`review-watch`) : systemd utilisateur ; herdr
-facultatif (sinon analyse en fond, reprise dans `gnome-terminal`) ; `python3-gi` avec
+sinon recherche classique. Mode auto (`review-watch`) : systemd utilisateur ; app Herdr ou herdr
+facultatifs (sinon analyse en fond, reprise dans `gnome-terminal`) ; `python3-gi` avec
 `Notify 0.7` pour le clic des notifications (sinon `notify-send`, sans clic). Tests :
 `bash plugins/review/tests/review-post.test.sh`, `bash plugins/review/tests/review-watch.test.sh` et
 `bash plugins/review/tests/review-map-html.test.sh`
-(faux `gh`, `claude`, `herdr`, rien n'est publié ni lancé) ; pas de mod : `claude plugin test` ne s'applique pas.
+(faux `gh`, `claude`, `herdr`, `herdr-app`, `hc`, rien n'est publié ni lancé) ; pas de mod : `claude plugin test` ne s'applique pas.
 
 **Cursor** : skills et agents (`reviewer`, `challenger`, `mapper`) repris tels quels par Cursor
 (`/review:pr` y est la skill `pr`, les agents des sous-agents) ; la surcharge
@@ -1897,7 +1930,7 @@ l'outil Bash) évite les deux échecs vus en publiant par `gh api` (constat 2 de
 commentaires facultatifs.
 
 Dernière étape, seulement si un worktree ou une branche a été créé pour la revue (par
-Herdr UI, [`/git-nav:pr`](#git-nav), `gh pr checkout`, à la main…) : un worktree lié à la
+l'app Herdr, `review-watch`, [`/git-nav:pr`](#git-nav), `gh pr checkout`, à la main…) : un worktree lié à la
 tête de la PR, ouvert dans la conversation ou à la branche au nom de revue
 (`agent/review-<n>-…`, `pr-<n>`…), sinon le skill demande ; et les branches de revue de
 cette PR restées sans worktree. Si le worktree est propre et que le commit de chaque
@@ -1990,8 +2023,8 @@ qui a lieu d'être.
   liste gardée.
 
 **Ouvrir la session** : `review-watch open [<owner/repo#n | n>] [--worktree]` lance
-`claude '/review:manual <n>'` dans un pane herdr s'il tourne (onglet « manuelle #n » du
-workspace du clone), sinon dans un terminal (réglage `terminal`, sinon `gnome-terminal`),
+`claude '/review:manual <n>'` dans l'app Herdr si sa fenêtre est ouverte, sinon dans un pane
+herdr s'il tourne (onglet « manuelle #n » de l'espace ou du workspace du clone), sinon dans un terminal (réglage `terminal`, sinon `gnome-terminal`),
 dans le dépôt courant s'il est celui de la PR, sinon dans son clone (comme `launch`). Sans
 PR : `/review:manual` sur la branche du dossier courant. Pas de worktree par défaut (la
 relecture lit le diff et l'API) ; `--worktree` en crée un, détaché sur la tête de la PR
@@ -2114,15 +2147,18 @@ qui en a un (dépôt, `owner/*`, `*`), puis dans les espaces de travail de `cl`,
 introuvable : notification « Clone introuvable ». `auto … off` qui retire l'entrée d'un
 dépôt garde son clone en mémoire.
 
-- **herdr tourne** (`herdr status server`) : worktree de la PR sous
-  `~/.herdr/worktrees/<dépôt>/`. Pour une revue, branche `agent/review-<n>-<titre>` sur la
-  tête de la PR (`pull/<n>/head`), le même nom que Herdr UI, ce qui permet à l'étape de
-  ménage de `/review:pr` de la retrouver. Pour un feedback, la branche de la PR (son
+- **app Herdr ouverte** (`herdr-app status` répond), **sinon herdr tourne** (`herdr status
+  server`) : worktree de la PR sous `~/.herdr/worktrees/<dépôt>/`. Pour une revue, branche
+  `agent/review-<n>-<titre>` sur la tête de la PR (`pull/<n>/head`), ce qui permet à l'étape
+  de ménage de `/review:pr` de la retrouver. Pour un feedback, la branche de la PR (son
   dossier si elle est déjà extraite quelque part, sinon un worktree qui suit `origin`).
-  Ouvert dans un workspace herdr (ou un nouvel onglet de celui qui l'a déjà) ; le pane lance
-  `claude '/review:pr <n>'` (ou `/review:feedback`) en interactif. Une notification
-  l'annonce (clic : `herdr agent focus`), puis le plugin [`notify`](#notify) signale la
-  question de validation.
+  Ouvert sans changer ce qui est affiché, dans un nouvel espace de l'app (`herdr-app do
+  space.new`, ou `tab.new` dans l'espace déjà sur ce dossier ; l'app lance `claude` par un shell
+  interactif, qui reste après) ou un workspace herdr (ou un nouvel onglet de celui qui l'a
+  déjà) ; il lance `claude '/review:pr <n>'` (ou `/review:feedback`) en interactif. La
+  session est notée (`mode` `app` et `terminal`, ou `herdr` et `pane`). Une notification
+  l'annonce (clic : `herdr-app do agent.focus` puis la fenêtre de l'app, ou `herdr agent
+  focus`), puis le plugin [`notify`](#notify) signale la question de validation.
 - **Sinon, analyse en fond** : `claude -p '/review:… <n> --prepare' --session-id <uuid>`,
   détaché. Une revue tourne dans le clone (`/review:pr` ne s'y place pas) ; un feedback
   tourne là où la branche est extraite, sinon dans un worktree sous
@@ -2138,10 +2174,11 @@ dépôt garde son clone en mémoire.
   aucune question, rien de posté ni corrigé ; le tableau de validation est préparé et la
   session s'arrête sur « Prêt pour la validation ». À la reprise, elle continue à la
   validation (dans herdr : « Reprends à la validation » dans le pane).
-- Une session herdr encore ouverte (Claude présent dans le pane) ou une analyse en cours
-  pour la même PR n'est pas doublée. Une session herdr ouverte reçoit un message dans son
-  pane (`herdr agent prompt` : « nouveaux retours sur la PR #n (HH:MM) », ou review
-  redemandée), mis en file si Claude travaille. herdr refuse si
+- Une session herdr encore ouverte (Claude présent : `hc get` → `status.app = claude-code`
+  dans l'app, `herdr agent get` en terminal) ou une analyse en cours pour la même PR n'est
+  pas doublée. Une session herdr ouverte reçoit un message (`hc send` dans l'app, `herdr
+  agent prompt` en terminal : « nouveaux retours sur la PR #n (HH:MM) », ou review
+  redemandée), mis en file si Claude travaille. L'un et l'autre refusent si
   Claude attend une réponse (question, permission) : rien n'est alors tapé dans la question,
   et la notification « Nouvelle activité » le dit (critique). L'événement est marqué traité
   dans les deux cas : `/review:feedback` relit de toute façon les fils avant d'agir.
@@ -2164,35 +2201,6 @@ timer n'est activé que par `review-watch enable`. `--remove` l'arrête et retir
 `KillMode=process`, pour que les analyses en fond et les notifications en attente de clic
 lui survivent. Il lui faut l'environnement de la session graphique (D-Bus), que GNOME donne
 au gestionnaire systemd utilisateur.
-
-#### Profil Herdr UI
-
-[Herdr UI](TOOLS.md#herdr-ui) (pas la TUI herdr) lit des profils de revue dans
-`~/.config/agent-launcher/agents/<nom>/prompt.md` (champ *PROMPT* de sa boîte de revue de PR) :
-le texte du profil est ajouté **après** son prompt intégré, qui donne la PR vérifiée (numéro,
-refs, SHA, commandes `gh`/`git` pour le diff) et impose la lecture seule (rien de posté).
-
-Le profil **custom-reviewer** y fait la même chose que `/review:pr` : Claude lit et suit
-`skills/pr/SKILL.md` du plugin (le skill a `disable-model-invocation`, l'outil Skill ne peut
-pas le lancer), étapes 1 à 3 telles quelles (PR de la même pile proposées en plus, agent
-`review:reviewer`, vérification, validation dans le pane). Au lieu de poster directement,
-il montre la ou les reviews prêtes et demande ; seul un « oui » explicite dans le pane la publie (`review-post`). L'étape de ménage
-est faite telle quelle : la boîte de revue ouvre la PR dans un worktree
-`~/.herdr/worktrees/<dépôt>/agent-review-<n>-…` (branche `agent/review-<n>-…`), que le skill
-propose de supprimer à la fin avec sa branche, son workspace et ce pane. Les `allowed-tools`
-du skill ne s'appliquent pas : les permissions sont celles de la session lancée par Herdr UI.
-
-Fichier écrit (pas un lien) depuis le gabarit `herdr/prompt.md`, avec le chemin absolu du
-plugin dans le dépôt, par `herdr/profile.sh install | remove | status` :
-- proposé (question `[O/n]` dans un terminal) par `./install.sh plugin review` si Herdr UI est
-  installé, et par `./setup/20-herdr.sh` si le plugin review est installé — `./install.sh`
-  installe les plugins avant `setup/`, donc souvent avant Herdr UI ;
-- refus retenu dans `~/.config/claude-tools/herdr-review-profile-declined` ; sans terminal ou
-  après un refus, seulement signalé. `REVIEW_HERDR_PROFILE=1 ./install.sh plugin review` le
-  pose sans demander et oublie le refus ;
-- profil déjà là mais différent (gabarit changé, retouché à la main) : sauvegardé en
-  `*.bak.<date>` puis réécrit ; `./install.sh status` le signale périmé ;
-- `./install.sh plugin --remove review` le retire s'il n'a pas été modifié (sinon gardé).
 
 ## Gabarit pour un nouveau plugin
 

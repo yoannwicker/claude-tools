@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests de tidy-watch : bash plugins/git-tidy/tests/tidy-watch.test.sh
-# Faux gh, claude et herdr (arrêté : analyse en fond) ; config, état et clone temporaires ;
+# Faux gh, claude, herdr et herdr-app (arrêtés : analyse en fond) ; config, état et clone temporaires ;
 # notifications écrites dans un fichier. Rien n'est lancé ni publié pour de vrai.
 set -u
 bin=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bin/tidy-watch
@@ -25,6 +25,7 @@ case "$1 $2" in
 esac
 EOF
 printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/fakebin/herdr"
+printf '#!/usr/bin/env bash\nexit 2\n' > "$tmp/fakebin/herdr-app"  # jamais la vraie app de la session
 cat > "$tmp/fakebin/claude" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$PWD $*" >> "$FAKE/claude-calls"
@@ -172,6 +173,36 @@ check "launch --background avec herdr : session herdr notée" "herdr w7:p1" \
   "$(jq -r '.sessions["o/r#79:pr_approved"] | "\(.mode) \(.pane)"' "$XDG_STATE_HOME/claude-tools/tidy-watch/state.json")"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/fakebin/herdr"
 
+# launch, app Herdr ouverte : elle passe avant herdr en terminal (qui tourne aussi ici)
+rm -f "$tmp/herdr.log" "$tmp/app.log"
+cat > "$tmp/fakebin/herdr" <<'EOF'
+#!/usr/bin/env bash
+echo "herdr $*" >> "$FAKE/herdr.log"
+[ "$1 $2" = "status server" ] && echo "status: running"
+EOF
+cat > "$tmp/fakebin/herdr-app" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE/app.log"
+case "$1 $2" in
+  "status ") echo '{}' ;;
+  "ls ") echo '{"spaces": []}' ;;
+  "do space.new") echo '{"space": "sp1", "tab": "tb1", "terminal": "t9"}' ;;
+  *) echo '{"error": "inattendu"}'; exit 1 ;;
+esac
+EOF
+"$bin" launch o/r#80 pr_approved >/dev/null 2>&1
+check "launch, app ouverte → nouvel espace avec claude, sans le montrer" \
+  "do space.new --name merge #80 --folder <worktree> --argv [\"claude\", \"/git-tidy:ready 80\"] --focus false" \
+  "$(grep '^do' "$tmp/app.log" | sed 's/--folder [^ ]* /--folder <worktree> /')"
+check "launch, app ouverte → pas herdr en terminal" 0 "$(cat "$tmp/herdr.log" 2>/dev/null | grep -c 'pane run')"
+check "launch, app ouverte : session notée" "app t9" \
+  "$(jq -r '.sessions["o/r#80:pr_approved"] | "\(.mode) \(.terminal)"' "$XDG_STATE_HOME/claude-tools/tidy-watch/state.json")"
+check "launch, app ouverte : clic de la notification → agent.focus t9 puis la fenêtre" \
+  'herdr-app do agent.focus --terminal "$1" >/dev/null; exec herdr-app|t9' \
+  "$(tail -1 "$tmp/notifs" | jq -r '"\(.action[2])|\(.action[4])"')"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/fakebin/herdr"
+printf '#!/usr/bin/env bash\nexit 2\n' > "$tmp/fakebin/herdr-app"
+
 # Rattrapage quotidien (gh-watch set board_auto on) : à la fin du premier poll de la journée,
 # gh-watch board --all --missed --json en détaché, une notification, une fois par jour
 export GH_WATCH_CONFIG=$tmp/gh-watch.json GH_WATCH_STATE=$tmp/gh-watch/state.json GH_WATCH_BIN=$tmp/fakebin/gh-watch
@@ -216,6 +247,17 @@ check "clic, herdr en marche → workspace" "herdr workspace create --cwd $HOME 
 check "… qui ouvre la liste des manquées" 1 \
   "$(grep -c "^herdr pane run w9:p1 exec sh -c '$GH_WATCH_BIN board --all --missed -i ||" "$tmp/herdr.log")"
 printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/fakebin/herdr"
+rm -f "$tmp/app.log"
+cat > "$tmp/fakebin/herdr-app" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "${1:-(fenêtre)} ${2:-}" >> "$FAKE/app.log"
+[ "${1:-}" = do ] && echo '{"space": "sp2", "tab": "tb2", "terminal": "t10"}'
+exit 0
+EOF
+"$bin" _catchup_open
+check "clic, app ouverte → espace « manquées » puis fenêtre au premier plan" \
+  "status |do space.new|(fenêtre) " "$(paste -sd'|' "$tmp/app.log")"
+printf '#!/usr/bin/env bash\nexit 2\n' > "$tmp/fakebin/herdr-app"
 printf '#!/usr/bin/env bash\necho "$*" > "$FAKE/term"\n' > "$tmp/fakebin/term" && chmod +x "$tmp/fakebin/term"
 jq --arg t "$tmp/fakebin/term" '.watcher.terminal = $t' "$cfg" > "$tmp/c" && mv "$tmp/c" "$cfg"
 "$bin" _catchup_open

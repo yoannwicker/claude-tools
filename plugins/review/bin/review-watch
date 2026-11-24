@@ -16,12 +16,13 @@ défaut : `interval` de la config) :
 Mode par dépôt et par événement, clés on_review_requested et on_feedback_received (section
 `watcher` de ~/.config/claude-tools/review.json, `watcher.repos` : le dépôt l'emporte sur son
 propriétaire, owner/*, qui l'emporte sur * ; rien de réglé : off) :
-  auto     la session est lancée : herdr (worktree + pane) s'il tourne, sinon analyse en
+  auto     la session est lancée : app Herdr, sinon herdr en terminal (worktree + onglet)
+           s'il tourne, sinon analyse en
            fond (claude -p … --prepare) puis notification, dont le clic reprend la session
            dans un terminal pour la validation
   notify   notification seulement ; son clic lance la session comme en auto
   off      rien
-Session herdr déjà ouverte sur la PR : message dans son pane (herdr agent prompt), sauf si
+Session herdr déjà ouverte sur la PR : message dans son onglet (hc send, herdr agent prompt), sauf si
 Claude y attend une réponse (notification critique à la place).
 Dans tous les cas, rien n'est posté sur GitHub sans validation dans la session.
 Mécanique commune (lancement, notifications, timer) : lib/watchlib.py du plugin gh-watch.
@@ -54,8 +55,8 @@ Mécanique commune (lancement, notifications, timer) : lib/watchlib.py du plugin
                                                session préparée en fond
   review-watch open [<owner/repo#n | n>] [--worktree]
                                                ouvre /review:manual (relecture guidée) dans une
-                                               session séparée : pane herdr s'il tourne, sinon
-                                               terminal. Sans PR : la branche du dossier courant.
+                                               session séparée : app Herdr, sinon herdr en
+                                               terminal s'il tourne, sinon terminal. Sans PR : la branche du dossier courant.
                                                Dans le dépôt courant, ou son clone. --worktree :
                                                worktree détaché sur la tête de la PR
                                                (agent/review-<n>-…), pour naviguer dans le code
@@ -174,7 +175,7 @@ def git_root(path="."):
 
 def open_manual(cfg, target, worktree=False):
     """Ouvre /review:manual dans une session séparée et indépendante. Retourne une ligne."""
-    here = git_root()
+    here, ui = git_root(), w.herdr_ui()
     if target:
         with w.State() as state:
             repo, n = w.split_target(target, state)
@@ -186,7 +187,7 @@ def open_manual(cfg, target, worktree=False):
         if worktree:
             pr = json.loads(w.run(["gh", "pr", "view", str(n), "--repo", repo, "--json", "title,headRefOid"]))
             w.run(["git", "-C", clone, "fetch", "-q", "origin", f"pull/{n}/head"], check=False)
-            root = os.path.join(w.HOME, ".herdr", "worktrees") if w.herdr_running() else w.S.worktrees
+            root = os.path.join(w.HOME, ".herdr", "worktrees") if ui else w.S.worktrees
             path = w.ensure_worktree(clone, f"agent/review-{n}-{w.slug(pr['title'])}", pr["headRefOid"], root)
     else:
         if worktree:
@@ -195,10 +196,9 @@ def open_manual(cfg, target, worktree=False):
             w.die("dossier courant : pas un dépôt git")
         prompt, label, clone, path = "/review:manual", "manuelle", here, here
     argv = [*w.claude_cmd(cfg), prompt]
-    if w.herdr_running():
-        _, pane = w.herdr_open(clone, path, label)
-        w.run(["herdr", "pane", "run", pane, shlex.join(argv)])  # pas de JSON en retour
-        return f"{prompt} ouvert dans herdr ({path}, onglet « {label} »)"
+    if ui:
+        w.herdr_open(ui, clone, path, label, argv)
+        return f"{prompt} ouvert dans {'l’app Herdr' if ui == 'app' else 'herdr'} ({path}, onglet « {label} »)"
     cmd = w.terminal_cmd(cfg, path, argv)
     if not cmd:
         return f"pas de terminal trouvé : lancer dans {path} : {shlex.join(argv)}"

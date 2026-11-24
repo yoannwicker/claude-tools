@@ -38,6 +38,7 @@ case "$1 $2" in
   *) exit 1 ;;
 esac
 EOF
+printf '#!/usr/bin/env bash\nexit 2\n' > "$tmp/fakebin/herdr-app"  # app fermée ; jamais la vraie
 cat > "$tmp/fakebin/claude" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$PWD $*" >> "$FAKE/claude-calls"
@@ -202,6 +203,24 @@ mine "30:6 minutes:COMMENTED:1" > "$tmp/mine.json"
 rm -f "$tmp/notifs"
 HERDR_PROMPT_RC=1 "$bin" poll >/dev/null
 check "agent en attente d'une réponse → notification critique" "occupée, message non envoyé critical" "$(body)"
+# … session ouverte dans l'app Herdr : Claude reconnu par herdr-core, message par hc send
+cat > "$tmp/fakebin/hc" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  get) echo '{"state": "live", "status": {"app": "claude-code", "state": "idle"}}' ;;
+  send) printf '%s\n' "$2 $3" >> "$FAKE/hc-sends" ;;
+  *) exit 1 ;;
+esac
+EOF
+chmod +x "$tmp/fakebin/hc"
+jq '.sessions["o/r#30:feedback_received"] = {mode: "app", terminal: "t30", dir: "d"}' "$st" > "$st.new" && mv "$st.new" "$st"
+mine "30:330 seconds:COMMENTED:3" > "$tmp/mine.json"
+rm -f "$tmp/notifs" "$tmp/claude-calls"
+"$bin" poll >/dev/null
+check "session ouverte dans l'app → hc send, rien de lancé" "t30 review-watch : nouveaux retours sur la PR #30|" \
+  "$(sed 's/ (.*//' "$tmp/hc-sends")|$(cat "$tmp/claude-calls" 2>/dev/null)"
+check "… clic : la session dans l'app" "t30" "$(jq -r '.action[4]' "$tmp/notifs")"
+rm "$tmp/fakebin/hc"
 
 # 10. L'auteur d'une PR que j'ai relue a réagi (answered) : pris en charge pour le rattrapage
 # de gh-watch (événement review_requested), jamais cherché par poll

@@ -13,7 +13,7 @@ du premier `poll` de la journée de l'un des watchers (`review-watch`, `tidy-wat
 seule fois par jour pour tous, `gh-watch board --all --missed --json` tourne en fond. S'il
 reste des actions manquées (événement jamais vu, lancement en échec, notifiée sans session
 lancée…), **une** notification « N actions manquées » ; son clic ouvre
-`gh-watch board --all --missed -i` dans un workspace herdr s'il tourne, sinon dans un
+`gh-watch board --all --missed -i` dans l'app Herdr, sinon un workspace herdr s'il tourne, sinon dans un
 terminal (réglage `terminal` du watcher). Rien n'est lancé sans choix dans la liste.
 
 `gh-watch` absent du `PATH` (`command -v gh-watch`) : dire qu'il s'installe avec le plugin

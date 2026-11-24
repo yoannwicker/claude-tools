@@ -12,7 +12,8 @@ Mode par dépôt, clé on_pr_approved (section `watcher` de ~/.config/claude-too
 `watcher.repos` : le dépôt l'emporte sur son propriétaire, owner/*, qui l'emporte sur * ; rien
 de réglé : off). Approbations attendues et réglages de /git-tidy:ready : hors de `watcher`,
 dans le même fichier, lus aussi par les skills de git-tidy.
-  auto     la session est lancée : herdr (worktree + pane) s'il tourne, sinon analyse en
+  auto     la session est lancée : app Herdr, sinon herdr en terminal (worktree + onglet)
+           s'il tourne, sinon analyse en
            fond (claude -p … --prepare) puis notification, dont le clic reprend la session
            dans un terminal pour la validation
   notify   notification seulement ; son clic lance la session comme en auto

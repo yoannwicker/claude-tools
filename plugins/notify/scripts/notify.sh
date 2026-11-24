@@ -43,8 +43,24 @@ for _ in $(seq 20); do
   p=$pp
 done
 
-# Inside herdr, name the workspace and the agent session instead of the dir
-if [ -n "$HERDR_PANE_ID" ]; then
+# In the Herdr app (terminal run by herdr-core), name the space and tab instead of the dir
+app_terminal=
+if [ -n "${HC_TERMINAL_ID:-}" ] && command -v herdr-app >/dev/null 2>&1 &&
+  loc=$(timeout 2 herdr-app ls 2>/dev/null | $jq -c --arg t "$HC_TERMINAL_ID" 'first(.spaces[] as $s
+    | $s.tabs[] as $tb | $tb.terminals[] | select(.terminal == $t)
+    | {space: $s.name, tab: $tb.name, pane}) // empty' 2>/dev/null) && [ -n "$loc" ]; then
+  app_terminal=$HC_TERMINAL_ID
+  # a tab nobody named is called by its number: not worth showing
+  where=$($jq -r '[.space, (.tab | select(test("^[0-9]+$") | not))] | map(select(. // "" != "")) | join(" / ")' <<<"$loc")
+  where=${where:-$(basename "$cwd")}
+  # Stay quiet when I am already looking at this terminal: focused in the app,
+  # and the app is the active X11 window
+  if [ "$(timeout 2 herdr-app status 2>/dev/null | $jq -r .focused_pane)" = "$($jq -r .pane <<<"$loc")" ]; then
+    win=$(xprop -root _NET_ACTIVE_WINDOW 2>/dev/null | awk '{print $NF}')
+    xprop -id "$win" WM_CLASS 2>/dev/null | grep -qi herdr-app && exit 0
+  fi
+# Inside herdr (terminal), name the workspace and the agent session instead of the dir
+elif [ -n "$HERDR_PANE_ID" ]; then
   herdr=${HERDR_BIN_PATH:-herdr}
   wsjson=$(timeout 2 "$herdr" workspace get "$HERDR_WORKSPACE_ID" 2>/dev/null)
   ws_label=$($jq -r '.result.workspace.label // empty' <<<"$wsjson" 2>/dev/null)
@@ -54,10 +70,10 @@ if [ -n "$HERDR_PANE_ID" ]; then
   where=${ws:-$where}
 
   # Stay quiet when I am already looking at this pane: shown in herdr and
-  # the active X11 window is a terminal or Herdr UI (xprop cannot tell which one).
+  # the active X11 window is a terminal (xprop cannot tell which one).
   if [ "$($jq -r '.result.pane.focused' <<<"$pane" 2>/dev/null)" = true ]; then
     win=$(xprop -root _NET_ACTIVE_WINDOW 2>/dev/null | awk '{print $NF}')
-    xprop -id "$win" WM_CLASS 2>/dev/null | grep -qiE 'terminal|herdr-gpui' && exit 0
+    xprop -id "$win" WM_CLASS 2>/dev/null | grep -qi terminal && exit 0
   fi
 fi
 
@@ -79,7 +95,7 @@ context="$where${branch:+ · $branch}"
 [ -z "$session_title" ] && [ -n "$agent" ] && session_title=$agent
 body=$(printf '%s\n%s' "$context" "$msg" | sed '/^$/d')
 $jq -n --arg title "$title · ${session_title:-$where}" --arg body "$body" --arg urgency "$urgency" \
-  --arg pane_id "$HERDR_PANE_ID" --arg herdr "${HERDR_BIN_PATH:-herdr}" --arg ws_label "$ws_label" \
+  --arg app_terminal "$app_terminal" --arg pane_id "$([ -z "$app_terminal" ] && echo "$HERDR_PANE_ID")" --arg herdr "${HERDR_BIN_PATH:-herdr}" --arg ws_label "$ws_label" \
   --arg ws_id "$HERDR_WORKSPACE_ID" \
   --arg tty "$tty" --arg where "$where" --arg session_id "$session_id" --arg event "$event" \
   '$ARGS.named' |

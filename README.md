@@ -8,7 +8,7 @@ installation plugin par plugin pour les plugins Claude Code (chacun avec ce qu'i
 lui).
 Le détail (fonctionnalités, prérequis, installation, configuration spécifique) est dans
 [CLAUDE-CODE.md](CLAUDE-CODE.md) pour Claude Code et ses plugins, et dans
-[TOOLS.md](TOOLS.md) pour les outils hors Claude (`cl`, extension GNOME, herdr, Herdr UI, mise).
+[TOOLS.md](TOOLS.md) pour les outils hors Claude (`cl`, extension GNOME, herdr, app Herdr, mise).
 
 ## Installer
 
@@ -30,7 +30,7 @@ cd ~/workspace_perso/claude-tools && ./install.sh
 | Plugin `git-tidy` (skills `/git-tidy:commits`, `/git-tidy:pr-sync`, `/git-tidy:ready` : commits remis au propre, rebase sur la base, PR et ticket JIRA en phase ; `/git-tidy:approved-auto` : lancer `ready` d'office quand la PR a ses approbations) | `./install.sh plugin git-tidy`, puis `tidy-watch enable` pour le mode auto | `git` ; `gh` authentifié ; MCP Atlassian pour JIRA ; `python3` et systemd utilisateur pour le mode auto |
 | Plugin `intellij` (MCP IntelliJ + consigne) | `./install.sh plugin intellij` | IntelliJ avec le serveur MCP sur le port 64342 |
 | Plugin `notify` (notifications desktop) | `./install.sh plugin notify` | `python3-gi`, `gdbus`, `xprop`, `jq`, gnome-terminal |
-| Plugin `herdr-session` (reprise des sessions par herdr) | `./install.sh plugin herdr-session` | herdr et son intégration Claude (`./setup/20-herdr.sh`) |
+| Plugin `herdr-session` (reprise des sessions par l'app Herdr ou herdr) | `./install.sh plugin herdr-session` | app Herdr, ou herdr et son intégration Claude (`./setup/20-herdr.sh`) |
 | Plugin `build-brief` (consigne et garde-fou Gradle) | `./install.sh plugin build-brief` | `build-brief` dans le PATH (installé par `./setup/10-mise.sh`), `python3` |
 | Plugin `session-analysis` (analyse des sessions avec AgentsView, qu'il installe) | `./install.sh plugin session-analysis` | `python3`, `curl` |
 | Plugin `review` (agents reviewer, challenger et mapper, skills `/review:diff`, `/review:pr`, `/review:decisions`, `/review:manual`, `/review:feedback` : relire son diff ou la PR d'un collègue, remettre en question leurs décisions, relire soi-même une PR guidé par sa carte, traiter les retours reçus ; `/review:pr-auto`, `/review:feedback-auto` : les lancer d'office depuis les notifications GitHub) | `./install.sh plugin review`, puis `review-watch enable` pour le mode auto | `git`, `python3` ; `gh` authentifié ; `git-nav` pour chercher une PR par mots-clés ; systemd utilisateur pour le mode auto |
@@ -49,7 +49,7 @@ désinstalle, liens compris. Activer un plugin installé dans un profil reste à
 | Outil | Commande | Prérequis |
 |---|---|---|
 | mise (outils globaux) | `./setup/10-mise.sh` | `curl` |
-| herdr (+ intégrations Claude, Copilot, Cursor ; au choix, client graphique Herdr UI) | `./setup/20-herdr.sh [--ui]` | `curl` ; Linux ou macOS ; sous Wayland, `wl-clipboard` pour copier. Herdr UI : glibc ≥ 2.39 et `sudo` (APT, DNF ou pacman), ou Homebrew |
+| herdr (+ intégrations Claude, Copilot, Cursor ; au choix, l'app Herdr, interface graphique) | `./setup/20-herdr.sh [--app]` | `curl` ; Linux ou macOS ; sous Wayland, `wl-clipboard` pour copier. App Herdr : `tar`, sans `sudo` (macOS : Apple Silicon) |
 | Lanceur `cl` (choix des espaces de travail) | `./install.sh link && ./setup/50-cl.sh` | `claude` |
 | Status line dans Cursor | `./install.sh link && ./setup/40-cursor.sh` | `cursor-agent`, `jq` |
 | Extension GNOME `claude-notify` (pastille des notifications du plugin `notify`) | `./install.sh link && ./install.sh plugin notify && ./setup/30-gnome.sh` | GNOME Shell ≥ 45 |
@@ -103,7 +103,7 @@ demander une déconnexion/reconnexion de session.
 - `/review:pr-auto` : lancer ces revues d'office à la demande de review ;
   `/review:feedback-auto` : lancer le plan de traitement au retour de revue reçu sur mes PR.
   Dépôt par dépôt (`on`/`off`, ou choix dans la liste) ; sinon une notification, dont le
-  clic lance la session. La session (herdr, ou analyse en fond reprise au clic) attend ma
+  clic lance la session. La session (app Herdr ou herdr, ou analyse en fond reprise au clic) attend ma
   validation avant de poster ou de répondre (`review-watch`, plugin `review`).
 - `/gh-watch:auto-status` (ou `gh-watch status` dans le terminal) : ce qui tourne — timers des
   watchers (`review-watch`, `tidy-watch`), dernier et prochain passage, dépôts suivis,
@@ -116,10 +116,10 @@ demander une déconnexion/reconnexion de session.
   depuis quand, action proposée ; `--missed` : les actions que les watchers ont manquées,
   à lancer ou écarter (`gh-watch launch`, `gh-watch skip`) ; `gh-watch board -i` : la même
   liste, interactive, pour lancer (ou préparer sans question, dans herdr s'il tourne) ou écarter ligne par ligne
-  (`/gh-watch:board -i` : dans un pane herdr, sinon par questions) (plugin `gh-watch`).
+  (`/gh-watch:board -i` : sous la session dans l'app Herdr ou herdr, sinon par questions) (plugin `gh-watch`).
 - `/gh-watch:board-auto on` : une fois par jour, après le premier passage d'un watcher, les
   actions manquées remontent en une seule notification « N actions manquées », dont le clic
-  ouvre cette liste interactive (herdr, sinon un terminal) ; `gh-watch status` rappelle
+  ouvre cette liste interactive (app Herdr ou herdr, sinon un terminal) ; `gh-watch status` rappelle
   celles qui attendent depuis plus d'un jour ouvré (plugin `gh-watch`).
 - `/session-analysis:report [projet…]` : rapport sur les 30 derniers jours d'usage des
   agents (AgentsView), rangé dans `docs/analyses-sessions/` pour ce dépôt ;
@@ -155,16 +155,16 @@ plugins/            plugins Claude Code, chacun avec son setup.sh s'il pose quel
                     git-tidy/ (skills /git-tidy:commits, :pr-sync, :ready et :approved-auto,
                     bin/tidy-watch, timer systemd tidy-watch),
                     notify/ (hooks et scripts des notifications desktop ; cursor/ : surcharge Cursor sous herdr),
-                    herdr-session/ (hook herdr),
+                    herdr-session/ (hooks et shell/herdr-session.sh : reprise des sessions dans l'app Herdr ou herdr),
                     build-brief/ (consigne et garde-fou Gradle), session-analysis/ (skills
                     /session-analysis:report et :session, bin/{agentsview-up,session-analysis-collect}),
                     review/ (agents reviewer, challenger et mapper, skills /review:diff, :pr, :decisions, :manual, :feedback, :pr-auto et :feedback-auto,
-                    bin/{review-post,review-watch,review-map-html}, timer systemd review-watch, profil Herdr UI)
+                    bin/{review-post,review-watch,review-map-html}, timer systemd review-watch)
 profiles/           profils (<nom>.json : surcharge des plugins actifs du profil de référence — lean — ou d'une base — vidal : harnais —, voir `claude-profile`)
 setup/              scripts idempotents des outils hors plugins : 10-mise, 20-herdr, 30-gnome, 40-cursor, 50-cl
 docs/               suivi de l'usage des agents : analyses-sessions/ (rapports datés et leurs indicateurs .json),
                     pistes-amelioration/ (pistes préfixées par leur priorité 1, 2, 3)
 CLAUDE-CODE.md      Claude Code : settings, profils, plugins
-TOOLS.md            outils hors Claude : cl, extension GNOME, herdr, Herdr UI, mise
+TOOLS.md            outils hors Claude : cl, extension GNOME, herdr, app Herdr, mise
 AGENTS.md           consignes pour les agents (CLAUDE.md l'importe)
 ```

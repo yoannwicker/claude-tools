@@ -22,9 +22,9 @@ lancé ou écarté. **Court** : la réponse tient sur un
 dépendent) et s'arrêter.
 
 0. `-i` dans l'argument (pas avec `--launch`) : `gh-watch board <argument>` tel quel.
-   - Réussi (« liste ouverte dans un pane herdr… ») : afficher ce message en une ligne et
+   - Réussi (« liste ouverte dans l'app Herdr… » ou « … dans un pane herdr… ») : afficher ce message en une ligne et
      s'arrêter — tout se fait dans la liste.
-   - « il faut un terminal (ou herdr) » : continuer sans `-i` (étapes 1 à 6), puis
+   - « il faut un terminal (ou l'app Herdr, ou herdr) » : continuer sans `-i` (étapes 1 à 6), puis
      l'étape 7 sur les lignes à agir : toutes celles de `--auto`/`--missed`, sinon
      `bucket` = `me` ou `state` = `mentioned`.
    - Autre erreur : l'afficher telle quelle et s'arrêter.

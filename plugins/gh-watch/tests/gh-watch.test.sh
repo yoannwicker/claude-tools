@@ -8,7 +8,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 export GH_WATCH_DIR=$tmp/watchers.d GH_WATCH_CONFIG=$tmp/gh-watch.json GH_WATCH_STATE=$tmp/gh-watch-state.json PATH=$tmp/fakebin:$PATH
 mkdir -p "$GH_WATCH_DIR" "$tmp/fakebin"
-unset HERDR_PANE_ID  # jamais le vrai herdr de la session qui lance les tests
+unset HERDR_PANE_ID HC_TERMINAL_ID  # jamais le vrai herdr ni l'app de la session qui lance les tests
 
 check() { # check <libellé> <attendu> <obtenu>
   if [ "$2" = "$3" ]; then printf 'ok    %s\n' "$1"
@@ -192,7 +192,7 @@ check "launch d'une ligne sans action → refus" "1|o/r#9 (à relire) : pas d'ac
 "$bin" board --missed --launch --background >/dev/null
 check "board --missed --launch --background" "a-watch launch o/r#7 approved --at 2026-11-04T11:00:00Z --background" "$(cat "$tmp/calls.log")"
 check "--background sans --launch → erreur" 1 "$("$bin" board --background >/dev/null 2>&1; echo $?)"
-check "board -i hors terminal, sans herdr → erreur" "gh-watch: board -i : il faut un terminal (ou herdr)" "$("$bin" board -i 2>&1 </dev/null)"
+check "board -i hors terminal, sans herdr → erreur" "gh-watch: board -i : il faut un terminal (ou l'app Herdr, ou herdr)" "$("$bin" board -i 2>&1 </dev/null)"
 cat > "$tmp/fakebin/herdr" <<EOF
 #!/usr/bin/env bash
 echo "herdr \$*" >> "$tmp/herdr.log"
@@ -207,7 +207,21 @@ check "board -i hors terminal, dans herdr → pane ouvert sous la session" \
   "liste ouverte dans un pane herdr sous la session (w1:p2) : q pour la fermer" "$out"
 check "… qui relance la liste avec les mêmes options" 1 \
   "$(grep -c "^herdr pane run w1:p2 exec sh -c '$bin board o/r --missed -i ||" "$tmp/herdr.log")"
-rm "$tmp/fakebin/herdr"
+cat > "$tmp/fakebin/herdr-app" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "$tmp/app.log"
+case "\$1" in
+  ls) echo '{"spaces": [{"tabs": [{"terminals": [{"terminal": "t3", "pane": "p3"}]}]}]}' ;;
+  do) echo '{"pane": "p4", "terminal": "t4"}' ;;
+esac
+EOF
+chmod +x "$tmp/fakebin/herdr-app"
+out=$(HC_TERMINAL_ID=t3 HERDR_PANE_ID=w1:p1 "$bin" board o/r --missed -i 2>&1 </dev/null)
+check "board -i hors terminal, dans l'app Herdr → split sous la session (avant herdr)" \
+  "liste ouverte dans l'app Herdr sous la session (t4) : q pour la quitter" "$out"
+check "… sous le pane de la session, avec les mêmes options" 1 \
+  "$(grep -c "^do pane.split --direction down --pane p3 --argv \\[\"sh\", \"-c\", \"$bin board o/r --missed -i ||" "$tmp/app.log")"
+rm "$tmp/fakebin/herdr" "$tmp/fakebin/herdr-app"
 check "board -i --json → erreur" 1 "$("$bin" board -i --json >/dev/null 2>&1; echo $?)"
 
 check "set board o off → dépôts écartés" "aucune PR ouverte qui te concerne (dépôts filtrés : gh-watch set board)" \

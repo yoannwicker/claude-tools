@@ -6,7 +6,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -z \"${CURSOR_VERSION:-}\" ] && [ -f \"$HOME/.claude/hooks/herdr-agent-state.sh\" ] && bash \"$HOME/.claude/hooks/herdr-agent-state.sh\" session || true",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/herdr-session.sh\" start || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/scripts/herdr-session.sh\" end || true",
             "timeout": 10
           }
         ]

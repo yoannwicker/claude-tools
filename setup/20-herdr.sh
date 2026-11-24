@@ -1,70 +1,51 @@
 #!/usr/bin/env bash
-# herdr : installe le binaire si absent, propose l'interface (terminal seul, ou avec Herdr UI),
-# pose les intégrations agents (claude, et copilot, cursor s'ils sont là), retire le hook Claude
-# de settings.json (il vient du plugin herdr-session, quand celui-ci est installé).
-#   --ui  installe Herdr UI sans demander (et oublie un refus)
-# Le choix est demandé dans un terminal tant que Herdr UI n'est ni installé ni refusé ; un refus est
-# retenu (~/.config/claude-tools/herdr-ui-declined). Sans terminal, il est seulement signalé.
-# Si le plugin review est installé, propose aussi son profil Herdr UI (plugins/review/herdr/profile.sh).
+# herdr : installe le binaire si absent, propose l'app Herdr (interface graphique, en plus de
+# herdr en terminal), pose les intégrations agents (claude, et copilot, cursor s'ils sont là),
+# retire le hook Claude de settings.json (il vient du plugin herdr-session, quand celui-ci est
+# installé).
+#   --app  installe l'app Herdr sans demander (et oublie un refus)
+# Le choix est demandé dans un terminal tant que l'app n'est ni installée ni refusée ; un refus est
+# retenu (~/.config/claude-tools/herdr-app-declined). Sans terminal, il est seulement signalé.
 set -eu
 if ! command -v herdr >/dev/null 2>&1 && [ ! -x "$HOME/.local/bin/herdr" ]; then
   curl -fsSL https://herdr.dev/install.sh | sh
 fi
 herdr=$(command -v herdr || echo "$HOME/.local/bin/herdr")
 
-# Herdr UI (penso/herdr-gpui) : client graphique tiers, branché sur le serveur herdr local. Il se met
-# à jour lui-même (panneau App Updates).
-herdr_ui() {
-  local declined=${XDG_CONFIG_HOME:-$HOME/.config}/claude-tools/herdr-ui-declined glibc answer
-  if command -v herdr-gpui >/dev/null 2>&1; then
-    echo "interface : terminal + Herdr UI (mis à jour par l'app)"
+# App Herdr (herdr-app ; ses terminaux vivent dans herdr-core, `hc`) : installeur officiel, sans
+# sudo (~/.local/share/herdr-app, herdr-core si absent) ; ensuite l'app se met à jour elle-même.
+# Rien à y poser : elle reconnaît Claude seule (OSC 7501), la reprise vient du plugin
+# herdr-session.
+herdr_app() {
+  local declined=${XDG_CONFIG_HOME:-$HOME/.config}/claude-tools/herdr-app-declined answer
+  if command -v herdr-app >/dev/null 2>&1 || [ -x "$HOME/.local/bin/herdr-app" ]; then
+    echo "app Herdr : installée (mise à jour par l'app)"
     return 0
   fi
-  case $(uname -s) in
-    Linux)
-      glibc=$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')
-      if [ -z "$glibc" ] || [ "$(printf '%s\n2.39\n' "$glibc" | sort -V | head -1)" != 2.39 ]; then
-        echo "interface : terminal (Herdr UI demande glibc ≥ 2.39, ici ${glibc:-inconnue})"
-        return 0
-      fi ;;
-    Darwin) ;;
-    *) echo "interface : terminal (Herdr UI non disponible sur $(uname -s))"; return 0 ;;
-  esac
-  if [ "${1:-}" != --ui ]; then
+  case $(uname -s) in Linux|Darwin) ;; *) echo "app Herdr : non disponible sur $(uname -s)"; return 0 ;; esac
+  if [ "${1:-}" != --app ]; then
     if [ -f "$declined" ] || [ ! -t 0 ]; then
-      echo "interface : terminal (./setup/20-herdr.sh --ui pour ajouter Herdr UI)"
+      echo "app Herdr : absente (./setup/20-herdr.sh --app pour l'ajouter)"
       return 0
     fi
-    echo "Interface de herdr :"
-    echo "  1) terminal seul (herdr)"
-    echo "  2) terminal + graphique (Herdr UI, client tiers, demande sudo)"
-    read -r -p "Choix [1] : " answer || answer=""
-    if [ "$answer" != 2 ]; then
-      mkdir -p "$(dirname "$declined")" && touch "$declined"
-      echo "interface : terminal (./setup/20-herdr.sh --ui pour ajouter Herdr UI)"
-      return 0
-    fi
+    read -r -p "Ajouter l'app Herdr (interface graphique de herdr) ? [o/N] " answer || answer=""
+    case $answer in
+      [oOyY]*) ;;
+      *) mkdir -p "$(dirname "$declined")" && touch "$declined"
+         echo "app Herdr : absente (./setup/20-herdr.sh --app pour l'ajouter)"
+         return 0 ;;
+    esac
   fi
   rm -f "$declined"
-  case $(uname -s) in
-    Linux) curl -fsSL https://herdrui.dev/install.sh | sh ;;
-    Darwin) brew install penso/tap/herdr-gpui ;;
-  esac
+  curl -fsSL https://releases.herdr.dev/app/install.sh | sh
 }
-herdr_ui "$@"
+herdr_app "$@"
 
 # Copie à la souris dans un pane shell : herdr passe par wl-copy sous Wayland, sinon par OSC 52,
 # que gnome-terminal ignore. Sans wl-clipboard, la copie se perd sans erreur.
 if [ "${XDG_SESSION_TYPE:-}" = wayland ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
   command -v wl-copy >/dev/null 2>&1 \
     || echo "wl-copy absent : la copie depuis herdr ne marchera pas (sudo apt install wl-clipboard)"
-fi
-
-# Profil Herdr UI du plugin review (/review:pr depuis la boîte de revue) : proposé ici aussi, car
-# ./install.sh installe les plugins avant setup/, donc souvent avant Herdr UI.
-if command -v herdr-gpui >/dev/null 2>&1 \
-  && claude plugin list --json 2>/dev/null | jq -e 'any(.[]; .id == "review@claude-tools")' >/dev/null 2>&1; then
-  "$(cd "$(dirname "$0")/.." && pwd)/plugins/review/herdr/profile.sh" install
 fi
 
 integrations="claude"

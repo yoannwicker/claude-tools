@@ -19,7 +19,7 @@ environnement de test). Une PR n'est relancée que pour une nouvelle série d'ap
 (après qu'elles ont été écartées), pas pour une approbation de plus ni pour un push.
 
 Par dépôt (`on_pr_approved`, section `watcher` de `~/.config/claude-tools/git-tidy.json`) :
-**auto** (session lancée d'office : worktree et pane herdr s'il tourne, sinon analyse en
+**auto** (session lancée d'office : worktree et onglet dans l'app Herdr ou herdr s'ils tournent, sinon analyse en
 fond `--prepare` puis notification dont le clic reprend la session), **notify**
 (notification, son clic lance la session) ou **off** (rien de réglé : off). Rien n'est réécrit, poussé ni publié sans validation dans la session.
 

@@ -8,7 +8,7 @@ d'un autre sur une de mes PR → `/review:feedback`). Ne toucher qu'à ce `<kind
 `review-watch` (dans le `bin/` du plugin) surveille GitHub (timer systemd, toutes les 5 min par
 défaut, `review-watch interval <min>` pour changer).
 Par dépôt et par événement (section `watcher` de `~/.config/claude-tools/review.json`) :
-**auto** (session lancée d'office : worktree et pane herdr s'il tourne, sinon analyse en
+**auto** (session lancée d'office : worktree et onglet dans l'app Herdr ou herdr s'ils tournent, sinon analyse en
 fond puis notification dont le clic reprend la session), **notify** (notification
 seulement, son clic lance la session) ou **off** (rien de réglé : off). Rien n'est jamais
 posté sans validation dans la session.

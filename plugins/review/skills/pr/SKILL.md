@@ -312,7 +312,7 @@ ou dont l'approbation a été choisie (lot : de bas en haut de la pile) :
 
 Toujours la dernière étape, même si rien n'a été posté. Lot : pour chaque PR (son `<n>`,
 `headRefOid`, `headRefName`), avec une seule question pour l'ensemble. Quel que soit l'outil qui les a
-créés (Herdr UI, `/git-nav:pr`, `gh pr checkout`, à la main…), un worktree et sa branche
+créés (app Herdr, review-watch, `/git-nav:pr`, `gh pr checkout`, à la main…), un worktree et sa branche
 ont pu être ouverts pour relire la PR et n'ont plus d'usage ensuite. La branche part avec
 le worktree, et seule si son worktree a déjà disparu (Herdr retire ses worktrees sans
 supprimer leur branche).
@@ -326,7 +326,7 @@ supprimer leur branche).
      `%(worktreepath)` vide), ou `headRefName` créée au cours de cette conversation.
 
    Créé pour la revue : ouvert au cours de cette conversation, ou branche au nom de revue
-   (`agent/review-<n>-…` de Herdr UI, `review/…`, `pr-<n>`…). Dans le doute, demander.
+   (`agent/review-<n>-…` de review-watch, `review/…`, `pr-<n>`…). Dans le doute, demander.
    Aucun : rien à faire, ne rien dire.
 2. **Rien à perdre** : worktree propre (`git -C <chemin> status --porcelain` vide), et
    commit de chaque branche sur `origin` (`git branch -r --contains <branche ou HEAD>` non

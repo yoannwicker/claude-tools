@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Brings the Herdr UI window or gnome-terminal tab hosting a Claude session to
-# the front, and clears pending notifications. Called by claude-notify.py on click and by
+# Brings the Herdr app window, herdr pane or gnome-terminal tab hosting a Claude
+# session to the front, and clears pending notifications. Called by claude-notify.py on click and by
 # the GNOME Shell extension (claude-notify@ywicker) from its menu, through the
 # ~/.local/bin/claude-notify-click link (./install.sh plugin notify).
 #   --open <state.json>          focus the session, close its notification
@@ -107,21 +107,22 @@ focus_herdr() {
   [ -n "$ws_id" ] && timeout 2 "$herdr" workspace get "$ws_id" 2>/dev/null | $jq -r '.result.workspace.label // empty'
 }
 
-# focus_gui <ws_id>: when Herdr UI runs, brings forward its window showing the
-# workspace (it follows herdr's focus), else its first window
-focus_gui() {
-  local id
-  id=$(timeout 2 herdr-gpui window list --json 2>/dev/null |
-    $jq -r --arg ws "$1" '(map(select(.workspace == $ws)) + .)[0].id // empty' 2>/dev/null)
-  [ -n "$id" ] && timeout 2 herdr-gpui window focus "$id" >/dev/null 2>&1
+# focus_app <terminal>: shows the terminal in the Herdr app (agent.focus) and
+# raises its window (a bare herdr-app raises the running one). Fails when the
+# app is not running.
+focus_app() {
+  timeout 2 herdr-app status >/dev/null 2>&1 || return 1
+  timeout 2 herdr-app do agent.focus --terminal "$1" >/dev/null 2>&1
+  timeout 5 herdr-app >/dev/null 2>&1
 }
 
-# focus_session <pane_id> <herdr_bin> <ws_label> <ws_id> <session_id> <tty> <where>
+# focus_session <app_terminal> <pane_id> <herdr_bin> <ws_label> <ws_id> <session_id> <tty> <where>
 focus_session() {
-  local pane_id=$1 herdr=$2 ws_label=$3 ws_id=$4 session_id=$5 tty=$6 where=$7 marker w label
-  if [ -n "$pane_id" ]; then
+  local app_terminal=$1 pane_id=$2 herdr=$3 ws_label=$4 ws_id=$5 session_id=$6 tty=$7 where=$8 marker w label
+  if [ -n "$app_terminal" ]; then
+    focus_app "$app_terminal" && return 0
+  elif [ -n "$pane_id" ]; then
     label=$(focus_herdr "$herdr" "$pane_id" "$ws_id" "$session_id")
-    focus_gui "$ws_id" && return 0
     # no workspace id (state written by an older notify.sh): keep the stored label
     [ -n "$ws_id" ] || [ -n "$label" ] || label=$ws_label
     [ -n "$label" ] && find_tab "*: $label" && return 0
@@ -147,11 +148,12 @@ case "$1" in
   --open)
     f=$2
     [ -f "$f" ] || exit 0
+    app_terminal=$($jq -r '.app_terminal // ""' "$f")
     pane_id=$($jq -r '.pane_id // ""' "$f"); herdr=$($jq -r '.herdr // "herdr"' "$f")
     ws_label=$($jq -r '.ws_label // ""' "$f"); ws_id=$($jq -r '.ws_id // ""' "$f")
     session_id=$($jq -r '.session_id // ""' "$f"); tty=$($jq -r '.tty // ""' "$f"); where=$($jq -r '.where // ""' "$f")
     clear_pending "$f"
-    focus_session "$pane_id" "$herdr" "$ws_label" "$ws_id" "$session_id" "$tty" "$where"
+    focus_session "$app_terminal" "$pane_id" "$herdr" "$ws_label" "$ws_id" "$session_id" "$tty" "$where"
     ;;
   --clear-session)
     for f in "$state_dir"/*.json; do

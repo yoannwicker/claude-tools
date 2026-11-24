@@ -91,8 +91,8 @@ c'est l'agent qui copie). `20-herdr.sh` signale son absence.
 
 **Installation** : `./setup/20-herdr.sh`, soit
 `curl -fsSL https://herdr.dev/install.sh | sh`, puis `herdr integration install claude`
-(et `copilot` si la CLI Copilot est présente, `cursor` si Cursor l'est). Le script propose aussi l'interface : terminal
-seul, ou terminal + [Herdr UI](#herdr-ui). Mise à jour : `herdr update` (fait par `dot`).
+(et `copilot` si la CLI Copilot est présente, `cursor` si Cursor l'est). Le script propose aussi
+l'[app Herdr](#app-herdr) (interface graphique). Mise à jour : `herdr update` (fait par `dot`).
 
 **Configuration spécifique** :
 - `onboarding = false` ; `[update] channel = "stable"`. Toute section ajoutée ensuite
@@ -115,38 +115,41 @@ seul, ou terminal + [Herdr UI](#herdr-ui). Mise à jour : `herdr update` (fait p
   session Cursor après un redémarrage, comme celle de Claude.
 - Vérifier : `herdr integration status` → `claude: current` (et `cursor: current`).
 
-## Herdr UI
+## App Herdr
 
-**Rôle** : client graphique natif de herdr ([penso/herdr-gpui](https://github.com/penso/herdr-gpui),
-projet tiers), branché sur le serveur herdr local : mêmes workspaces, panes et agents que la TUI.
-Facultatif.
+**Rôle** : interface graphique de herdr (`herdr-app`, [herdr.dev](https://herdr.dev)) : espaces,
+onglets et panes. Ses terminaux vivent dans **herdr-core** (`herdr-core`, alias `hc`), qui les
+garde en vie quand la fenêtre se ferme ; ce n'est pas le serveur de herdr en terminal : les deux
+ne voient pas les sessions de l'autre. Facultative ; quand sa fenêtre est ouverte, les outils du
+dépôt l'utilisent en priorité (app, sinon herdr en terminal, sinon un terminal).
 
-**Fichiers** : aucun versionné (choix et installation dans `setup/20-herdr.sh`). Restent locaux : le paquet système (`herdr-gpui`), la
-config de l'app (`config-gpui*.toml` dans `~/.config/herdr/`), la connexion GitHub (Secret
-Service), et le refus retenu `~/.config/claude-tools/herdr-ui-declined`.
+**Fichiers** : aucun versionné (choix et installation dans `setup/20-herdr.sh`). Restent locaux :
+l'app (`~/.local/share/herdr-app/`, lien `~/.local/bin/herdr-app`), herdr-core
+(`~/.local/bin/herdr-core` et `hc`), leur état et réglages (`~/.config/herdr-app/`,
+`~/.config/herdr-core/`), et le refus retenu `~/.config/claude-tools/herdr-app-declined`.
 
-**Prérequis** : herdr ; Linux x86_64/aarch64 avec APT, DNF ou pacman, glibc ≥ 2.39, `sudo`,
-pilotes Vulkan ; ou macOS avec Homebrew.
+**Prérequis** : Linux ou macOS (Apple Silicon), `curl`, `tar`. Pas de `sudo`.
 
 **Installation** : choix proposé par `./setup/20-herdr.sh` (lancé par `./install.sh` et `dot`) :
-dans un terminal, tant que Herdr UI n'est ni installé ni refusé, il demande l'interface
-(1 : terminal seul, par défaut ; 2 : terminal + Herdr UI) ; le refus est retenu. Sans terminal,
-ou après un refus, il le signale seulement. `./setup/20-herdr.sh --ui` l'installe sans demander
-(et oublie le refus). Installation : `curl -fsSL https://herdrui.dev/install.sh | sh` sur Linux (paquet de la dernière
-release GitHub, SHA-256 vérifié, installé par le gestionnaire de paquets via `sudo`),
-`brew install penso/tap/herdr-gpui` sur macOS. Mise à jour : par l'app (panneau *App Updates*),
-pas par `dot`. Désinstallation : `sudo apt remove herdr-gpui` (ou l'équivalent DNF/pacman/brew).
-Si le plugin `review` est installé, `20-herdr.sh` propose aussi son profil de revue
-`custom-reviewer` (`/review:pr` depuis la boîte de revue de PR) : voir
-[Profil Herdr UI](CLAUDE-CODE.md#profil-herdr-ui).
+dans un terminal, tant que l'app n'est ni installée ni refusée, il demande `[o/N]` ; le refus est
+retenu. Sans terminal, ou après un refus, il le signale seulement. `./setup/20-herdr.sh --app`
+l'installe sans demander (et oublie le refus). Installation :
+`curl -fsSL https://releases.herdr.dev/app/install.sh | sh` (l'app, et herdr-core s'il n'y en a
+pas). Mise à jour : par l'app (elle tient aussi herdr-core à jour), pas par `dot`.
 
-**Configuration spécifique** :
-- Connexion GitHub (onglets PR et issues) : par la GitHub App
-  [Herdr UI](https://github.com/apps/herdr-ui), qui ne lit que les dépôts des comptes où elle
-  est installée (l'installer aussi sur le compte perso pour ses dépôts), ou par **Use GitHub CLI
-  authentication** (token de `gh`).
+**Configuration spécifique** : aucune dans le dépôt. Intégration avec Claude :
+- Reconnaissance des agents : aucune intégration à poser. Claude Code signale lui-même son état
+  (`idle`, `working`, `done`, `blocked`…) par la séquence OSC 7501 que herdr-core lit
+  (`hc get <t>` : `status.app = claude-code`). `herdr integration install claude` ne concerne
+  que herdr en terminal.
+- Reprise après un redémarrage : herdr-core redonne un shell au terminal perdu, sans relancer
+  sa commande ; le plugin [`herdr-session`](CLAUDE-CODE.md#herdr-session) y relance
+  `claude --resume`.
 - Notifications : celles du plugin [`notify`](CLAUDE-CODE.md#sans-et-avec-herdr), dont le clic
-  amène la fenêtre Herdr UI au premier plan ; `ui.toast.delivery` reste `off` (sinon doublons).
+  montre le terminal dans l'app (`herdr-app do agent.focus`) et amène sa fenêtre au premier plan.
+- Sessions des watchers (`review-watch`, `tidy-watch`, `gh-watch board -i`) : ouvertes dans
+  l'app quand sa fenêtre est ouverte (voir [`gh-watch`](CLAUDE-CODE.md#gh-watch)).
+- Piloter l'app depuis un agent : `herdr-app --skill` et `hc --skill` (manuels intégrés).
 
 ## mise
 

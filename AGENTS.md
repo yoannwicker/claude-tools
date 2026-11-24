@@ -88,4 +88,5 @@ utilisateur), `~/.claude-profiles/` (dossiers de profils générés),
 `~/.claude/projects/` (transcripts, mémoire), `~/.claude/plugins/`,
 `~/.claude/skills/synced/`, `history.jsonl`, `~/.cursor/` (surcharges installées, état et
 authentification de Cursor), et dans `~/.config/herdr/` les `*.log`,
-`*.sock`, `session.json`, `config-gpui.lock`. Toujours `adopt` fichier par fichier, jamais un dossier.
+`*.sock`, `session.json` ; `~/.config/herdr-app/` et `~/.config/herdr-core/` (état et réglages
+de l'app Herdr). Toujours `adopt` fichier par fichier, jamais un dossier.

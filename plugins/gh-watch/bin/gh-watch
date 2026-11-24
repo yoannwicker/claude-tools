@@ -569,15 +569,26 @@ def interactive(d, args, repo, fallback):
 
 def open_pane():
     """board -i sans terminal (Bash d'une session Claude, skill /gh-watch:board -i) : ouvre
-    la liste dans un pane herdr sous celui de la session, qui se ferme en quittant la liste.
-    Retourne le message, None sans herdr."""
+    la liste sous la session — split dans l'app Herdr, sinon pane herdr (terminal) qui se
+    ferme en quittant la liste. Retourne le message, None hors des deux."""
+    cmd = shlex.join([os.path.realpath(sys.argv[0]), *sys.argv[1:]])
+    keep = ' || { printf "\\n(Entrée pour fermer) "; read x; }'  # une erreur reste lisible
+    term = os.environ.get("HC_TERMINAL_ID")
+    if term and w.app_running():
+        try:
+            spaces = json.loads(w.run(["herdr-app", "ls"])).get("spaces", [])
+        except Exception:
+            spaces = []
+        pane = next((t["pane"] for sp in spaces for tab in sp.get("tabs", [])
+                     for t in tab.get("terminals", []) if t.get("terminal") == term), None)
+        if pane:
+            new = w.app_do("pane.split", direction="down", pane=pane, argv=["sh", "-c", cmd + keep])
+            return f"liste ouverte dans l'app Herdr sous la session ({new.get('terminal')}) : q pour la quitter"
     pane = os.environ.get("HERDR_PANE_ID")
     if not pane or not w.herdr_running():
         return None
     new = w.herdr("pane", "split", pane, "--direction", "down", "--cwd", os.getcwd())["pane"]["pane_id"]
-    cmd = shlex.join([os.path.realpath(sys.argv[0]), *sys.argv[1:]])
-    # exec : le pane se ferme avec la liste ; une erreur reste lisible jusqu'à Entrée
-    keep = ' || { printf "\\n(Entrée pour fermer) "; read x; }'
+    # exec : le pane se ferme avec la liste
     w.run(["herdr", "pane", "run", new, "exec sh -c " + shlex.quote(cmd + keep)])
     subprocess.run(["herdr", "pane", "focus", "--pane", pane, "--direction", "down"], capture_output=True)
     return f"liste ouverte dans un pane herdr sous la session ({new}) : q pour la fermer"
@@ -844,7 +855,7 @@ def main():
         if args.interactive and not (sys.stdin.isatty() and sys.stdout.isatty()):
             msg = open_pane()
             if not msg:
-                die("board -i : il faut un terminal (ou herdr)")
+                die("board -i : il faut un terminal (ou l'app Herdr, ou herdr)")
             return print(msg)
         repo = None if args.all else repo_arg(args.repo) if args.repo else current_repo()
         fallback = not args.all and not args.repo and not repo
