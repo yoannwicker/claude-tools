@@ -1466,7 +1466,11 @@ commande n'est jamais relancée, et l'app n'a pas de reprise d'agent.
   `~/.local/state/herdr-session/<core>/<terminal>.json` : `session_id`, `cwd`, et
   `created_ms` du terminal (`hc get`), qui distingue le même terminal revenu d'un nouveau
   terminal ayant repris son adresse. `<core>` : nom du socket (`HC_TERMINAL_SOCKET`, `default`).
-- `end` (sortie normale, `/clear`…) efface la note : rien à reprendre.
+- `end` efface la note seulement sur une sortie voulue (`reason` du hook : `prompt_input_exit`
+  — `/exit`, ctrl+d — ou `logout`) : rien à reprendre. Sinon la note reste : à l'extinction de
+  la machine, Claude reçoit `SIGTERM`/`SIGHUP` et lance son `SessionEnd` (`reason` : `other`)
+  avant que herdr-core ne perde le terminal ; l'effacer ferait manquer la reprise. Après
+  `/clear` ou `/resume`, le `SessionStart` qui suit réécrit la note.
 - `~/.config/shell/herdr-session.sh`, au démarrage d'un bash interactif avec
   `HC_TERMINAL_ID` : s'il y a une note, que ce shell est le programme racine du terminal
   (`hc get` : `pid` = `$$`), lancé seul (`argv` réduit au shell, ce que donne herdr-core à

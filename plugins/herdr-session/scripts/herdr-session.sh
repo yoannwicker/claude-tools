@@ -5,7 +5,8 @@
 #   - app Herdr (terminal de herdr-core, HC_TERMINAL_ID posé) : note la session du terminal dans
 #     ~/.local/state/herdr-session/<core>/<terminal>.json ; ~/.config/shell/herdr-session.sh la
 #     reprend dans le shell que herdr-core redonne au terminal perdu. SessionEnd efface la note
-#     (sortie normale : rien à reprendre).
+#     seulement sur une sortie voulue (/exit, ctrl+d, /logout : rien à reprendre) ; un arrêt par
+#     signal (extinction de la machine, terminal tué : reason « other ») la garde pour la reprise.
 #   - herdr en terminal (HERDR_PANE_ID posé) : passe la main au script de l'intégration Claude
 #     de herdr (~/.claude/hooks/herdr-agent-state.sh), qui le dit au serveur herdr.
 # Rien sous Cursor (CURSOR_VERSION) ni pour un sous-agent.
@@ -32,6 +33,7 @@ if [ -n "${HC_TERMINAL_ID:-}" ]; then
       $jq -n --arg session_id "$sid" --arg cwd "$($jq -r '.cwd // empty' <<<"$in")" \
         --argjson created_ms "$created" '$ARGS.named' > "$f.tmp" && mv "$f.tmp" "$f" ;;
     end)
+      case $($jq -r '.reason // empty' <<<"$in") in prompt_input_exit|logout) ;; *) exit 0 ;; esac
       [ -f "$f" ] && [ "$($jq -r .session_id "$f" 2>/dev/null)" = "$sid" ] && rm -f "$f" ;;
   esac
   exit 0
