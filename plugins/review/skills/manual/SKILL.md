@@ -3,7 +3,7 @@ name: manual
 description: Relecture humaine guidée, dans une session séparée — d'une PR d'un collègue ou de son propre travail. L'agent mapper dresse la carte du diff ; la session affiche un résumé (endpoints, base et infra touchés, fonctionnalités par risque), puis le diff condensé pour une petite PR ou les axes d'analyse pour une grosse, et seulement ceux qui ont lieu d'être (fonctionnalité, use case et tests, refactoring, hors refactoring, SQL, Hibernate / infra, ticket) ; un menu prend mes retours à chaque étape. PR d'un collègue : mes remarques validées sont postées, avec un suivi séparé (<!-- review:suivi-manuel -->) qui bloque l'approbation de /review:pr tant qu'il est en cours. Mon travail : mes remarques deviennent des corrections ou une liste d'actions
 argument-hint: "[numéro | recherche] [--cancel]"
 disable-model-invocation: true
-allowed-tools: Bash(gpr list:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(difft:*), Bash(review-post:*), Bash(review-map-html:*), Bash(xdg-open:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, Skill
+allowed-tools: Bash(gpr list:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(difft:*), Bash(review-post:*), Bash(review-map-html:*), Bash(xdg-open:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Bash(acli jira workitem view:*), Bash(acli jira workitem comment list:*), Agent, Skill
 ---
 
 Arguments : `$ARGUMENTS`

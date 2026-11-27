@@ -282,7 +282,7 @@ recopiée au lancement suivant de chaque profil.
 |---|---|
 | Reprise des sessions par herdr | intégration de herdr pour Cursor (`herdr integration install cursor`, posée par `setup/20-herdr.sh` si Cursor est là), à la place de [`herdr-session`](#herdr-session) |
 | [Status line](#status-line) | le même `statusline-command.sh`, branché par `setup/40-cursor.sh` dans `~/.cursor/cli-config.json` |
-| JIRA dans `git-tidy` et `review` | pas de connecteur claude.ai dans Cursor : sans MCP Atlassian configuré dans Cursor, les skills le disent et continuent sans le ticket JIRA (issues GitHub inchangées) |
+| JIRA dans `git-tidy` et `review` | pas de connecteur claude.ai dans Cursor : sans MCP Atlassian configuré dans Cursor, les skills passent par `acli` s'il est connecté, sinon le disent et continuent sans le ticket JIRA (issues GitHub inchangées) |
 | Profils | Cursor ne lit que le profil de référence (`~/.claude/settings.json`), jamais `CLAUDE_CONFIG_DIR` |
 | Réglages (`settings.json` : modèle, permissions…) | `~/.cursor/cli-config.json`, état de Cursor non versionné (seule sa clé `statusLine` est posée par `setup/40-cursor.sh`) |
 | Lanceur `cl` | `claude` seulement, pas d'équivalent voulu |
@@ -361,6 +361,28 @@ exemples. Ensuite, `/profile show <nom>` pour choisir ses plugins, et au besoin
 `/profile <nom>` sans relance manuelle, charger
 `~/.config/shell/claude-profile.sh` (lien posé ci-dessus) depuis `~/.bashrc` (voir
 [Bascule depuis une session](#bascule-depuis-une-session)).
+
+#### Connexion (jeton longue durée)
+
+`switch`/`run` (donc la fonction `claude`, `cl`, les sessions des watchers ouvertes dans herdr et la reprise herdr)
+passent à claude le jeton longue durée de `~/.claude-profiles/.oauth-token`
+(`CLAUDE_CODE_OAUTH_TOKEN`), s'il existe et si la variable n'est pas déjà posée. Ce jeton
+(`claude setup-token`, valable un an, non versionné) n'a rien à renouveler : la connexion ne se
+perd plus au redémarrage ni quand des sessions de profils différents renouvellent le jeton
+`/login` chacune de leur côté (lien `.credentials.json` remplacé par un fichier, jeton invalidé
+pour les autres). Le profil vidal charge avec lui les réglages de l'organisation comme avec
+`/login`.
+
+Contrepartie : pas de connecteurs claude.ai (Atlassian, Drive, Docs, Meetings…). JIRA passe
+alors par la CLI Atlassian `acli` (skills de [`review`](#review) et [`git-tidy`](#git-tidy)).
+Pour une session avec les connecteurs : `claude-login` (fonction de
+`~/.config/shell/claude-profile.sh`, ou `CLAUDE_PROFILE_LOGIN=1 claude`), sur la connexion
+`/login` (à refaire si son jeton a expiré). Sans le fichier, rien ne change.
+
+Mise en place : `claude setup-token`, puis enregistrer le jeton affiché sans qu'il passe par
+l'historique : `(umask 077; read -rs t && printf '%s' "$t" > ~/.claude-profiles/.oauth-token)`.
+Le jeton est visible des commandes lancées par la session (variable d'environnement) ; le
+révoquer depuis les réglages du compte claude.ai.
 
 #### Dossiers de profil
 
@@ -1067,7 +1089,10 @@ par `tidy-watch`, `/git-tidy:approved-auto` et `/git-tidy:ready` sur accord) et 
 `~/.local/state/claude-tools/tidy-watch/`. **Activé dans** : tous les profils.
 
 **Prérequis** : `git` ; `gh` authentifié (base de la PR, `/git-tidy:pr-sync`) ; pour JIRA, un
-MCP Atlassian connecté (`claude.ai Atlassian Rovo` ou `claude.ai Atlassian MCP`) ; sans lui,
+MCP Atlassian connecté (`claude.ai Atlassian Rovo` ou `claude.ai Atlassian MCP`), sinon la CLI
+Atlassian `acli` connectée (`acli jira auth status` ; sessions sur le
+[jeton longue durée](#connexion-jeton-longue-durée), qui n'ont pas les connecteurs claude.ai) :
+lecture, commentaire, description, passage de statut ; sans l'un ni l'autre,
 seules la PR et les issues GitHub sont traitées (et aucun ticket n'est passé en
 validation). Plugin [`gh-watch`](#gh-watch) (dépendance déclarée, installé
 automatiquement : mécanique commune des watchers et supervision). Mode auto (`tidy-watch`) :
@@ -1158,7 +1183,7 @@ n'y a rien d'autre ou plusieurs candidats (sans PR : propose d'en créer une en 
   de fork.
 - **Ticket** : cherché dans les issues que la PR ferme, puis le nom de branche, le titre, la
   description et les commits (clé JIRA `ABC-123`, issue `#123`) ; demandé s'il y en a
-  plusieurs ou aucun. Lu par le MCP Atlassian (JIRA) ou `gh issue view`, puis comparé à la
+  plusieurs ou aucun. Lu par le MCP Atlassian ou `acli` (JIRA) ou `gh issue view`, puis comparé à la
   PR : critères couverts ou non, ajouts, décisions qui s'en écartent.
 - **PR** : titre et description réécrits au format du dépôt (modèle de PR, consignes,
   dernières PR mergées) — pourquoi, lien vers le ticket, changements par thème, points de
@@ -1682,8 +1707,10 @@ le profil de référence et `vidal` (pas `lean`).
 **Prérequis** : `git`, `python3` ; `gh` authentifié (`/review:pr`, `/review:feedback`) ;
 plugin [`gh-watch`](#gh-watch) (dépendance déclarée, installé automatiquement : mécanique
 commune des watchers et supervision) ; plugin [`git-nav`](#git-nav) pour chercher une PR par mots-clés dans `/review:pr` (`gpr`).
-Lecture du ticket : MCP Atlassian (`getJiraIssue`) pour JIRA, `gh` pour une issue GitHub ;
-sans eux, la revue se fait sans le ticket. Outils IntelliJ utilisés par l'agent s'ils répondent (plugin [`intellij`](#intellij)),
+Lecture du ticket : MCP Atlassian (`getJiraIssue`) pour JIRA, sinon la CLI Atlassian `acli`
+connectée (`acli jira workitem view --fields '*all'`, `comment list` ; sessions sur le
+[jeton longue durée](#connexion-jeton-longue-durée)), `gh` pour une issue GitHub ; sans eux,
+la revue se fait sans le ticket. Outils IntelliJ utilisés par l'agent s'ils répondent (plugin [`intellij`](#intellij)),
 sinon recherche classique. Mode auto (`review-watch`) : systemd utilisateur ; app Herdr ou herdr
 facultatifs (sinon analyse en fond, reprise dans `gnome-terminal`) ; `python3-gi` avec
 `Notify 0.7` pour le clic des notifications (sinon `notify-send`, sans clic). Tests :

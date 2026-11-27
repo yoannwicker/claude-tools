@@ -17,11 +17,15 @@ en une ligne (« pas de ticket trouvé ») et continuer sans.
 
 ## Le lire
 
-- JIRA : outil `getJiraIssue` du MCP Atlassian, **avec ses commentaires** ; si c'est une
-  sous-tâche, lire aussi l'US parente (description, critères d'acceptation).
+- JIRA, **avec ses commentaires** ; si c'est une sous-tâche, lire aussi l'US parente
+  (description, critères d'acceptation). Par l'outil `getJiraIssue` du MCP Atlassian s'il est
+  là, sinon par la CLI Atlassian `acli` (connexion à part, `acli jira auth status`) :
+  `acli jira workitem view <clé> --fields '*all' --json` (tous les champs : sans `--fields`,
+  ni l'US parente `fields.parent` ni les critères d'acceptation) et
+  `acli jira workitem comment list --key <clé> --json --paginate`.
 - Issue GitHub : `gh issue view <n> --comments`.
 
-Ticket introuvable ou outil absent (pas de MCP, pas d'accès) : le dire en une ligne et
+Ticket introuvable ou outil absent (ni MCP ni `acli`, pas d'accès) : le dire en une ligne et
 continuer sans.
 
 ## Le passer à l'agent

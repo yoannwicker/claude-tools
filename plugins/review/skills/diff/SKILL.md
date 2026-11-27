@@ -3,7 +3,7 @@ name: diff
 description: Relire son propre travail avant commit ou PR (commits de la branche depuis sa base + modifications non commitées) avec l'agent reviewer — code ajouté seulement, points priorisés et validés, puis corrections appliquées sans commit
 argument-hint: "[base] [--refacto \"<piste>\"] [--decisions]"
 disable-model-invocation: true
-allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr edit:*), Bash(review-watch open:*), Bash(gh repo view:*), Bash(gh issue view:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, Skill
+allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr edit:*), Bash(review-watch open:*), Bash(gh repo view:*), Bash(gh issue view:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Bash(acli jira workitem view:*), Bash(acli jira workitem comment list:*), Agent, Skill
 ---
 
 Arguments : `$ARGUMENTS`

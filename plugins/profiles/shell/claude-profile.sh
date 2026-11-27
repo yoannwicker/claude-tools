@@ -8,6 +8,8 @@
 claude() {
     if command -v claude-profile >/dev/null 2>&1; then claude-profile run "$@"; else command claude "$@"; fi
 }
+# Session sur la connexion /login au lieu du jeton longue durée : connecteurs claude.ai (Drive, Docs…).
+claude-login() { CLAUDE_PROFILE_LOGIN=1 claude "$@"; }
 cursor-agent() {
     if ! command -v claude-profile >/dev/null 2>&1; then command cursor-agent "$@"; return; fi
     case "${1:-}" in

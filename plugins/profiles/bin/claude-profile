@@ -21,6 +21,8 @@
 #   demande (request) puis quitte, et la boucle relance la même session dans <nom>. run hors
 #   profil part sur le profil du projet, sinon le profil par défaut, sinon le profil de référence ; une reprise
 #   (--continue, --resume <id>) part sur le dernier profil de la conversation (remember <session>).
+#   switch/run passent le jeton longue durée ~/.claude-profiles/.oauth-token s'il existe
+#   (CLAUDE_CODE_OAUTH_TOKEN) ; CLAUDE_PROFILE_LOGIN=1 garde la connexion /login (connecteurs claude.ai).
 set -u
 # Lancé depuis une session claude-profile cursor : HOME y est le HOME de liens du profil ; on
 # repart du vrai.
@@ -374,6 +376,17 @@ generate() {
     || echo "attention : $name n'active pas profiles@claude-tools, /profile n'y sera pas disponible" >&2
 }
 
+# Jeton longue durée (claude setup-token, valable un an) : ~/.claude-profiles/.oauth-token, passé à
+# claude par CLAUDE_CODE_OAUTH_TOKEN. Rien à renouveler, donc plus de connexion perdue (redémarrage,
+# profils qui renouvellent le jeton chacun de leur côté) ; mais pas de connecteurs claude.ai.
+# CLAUDE_PROFILE_LOGIN=1 (fonction shell claude-login) : sans lui, connexion /login et connecteurs.
+long_token() {
+  if [ "${CLAUDE_PROFILE_LOGIN:-}" = 1 ]; then unset CLAUDE_CODE_OAUTH_TOKEN; return 0; fi
+  [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ -s "$out_root/.oauth-token" ] || return 0
+  CLAUDE_CODE_OAUTH_TOKEN=$(tr -d '[:space:]' < "$out_root/.oauth-token")
+  export CLAUDE_CODE_OAUTH_TOKEN
+}
+
 # Lance claude, puis tant qu'une demande de bascule a été déposée (claude-profile request, depuis
 # /profile), relance la session demandée dans le profil demandé. $1 : profil à lancer, vide
 # pour garder l'environnement tel quel (claude-profile run dans une session de profil).
@@ -383,6 +396,7 @@ launch_loop() {
   req=${XDG_RUNTIME_DIR:-/tmp}/claude-profile-switch.$$
   export CLAUDE_PROFILE_SWITCH_FILE=$req
   rm -f "$req"
+  long_token
   while :; do
     case "$name" in
       "")      claude "$@" ;;

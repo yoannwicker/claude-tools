@@ -3,7 +3,7 @@ name: ready
 description: Préparer une PR pour le merge — remettre ses commits au propre (/git-tidy:commits), puis la rebaser sur sa base et mettre sa description et son ticket en phase (/git-tidy:pr-sync), les deux obligatoirement et dans cet ordre, puis demander la relecture si elle manque (relecteurs du dépôt classés par l'historique), ou, PR approuvée, passer le ticket JIRA en validation et rédiger le message Slack pour le testeur — toujours après accord
 argument-hint: "[numéro de PR] [--prepare]"
 disable-model-invocation: true
-allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh issue view:*), Bash(gh repo view:*), mcp__claude_ai_Atlassian_Rovo__getTransitionsForJiraIssue, mcp__claude_ai_Atlassian_Rovo__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_Rovo__getJiraIssue, mcp__claude_ai_Atlassian_Rovo__searchJiraIssuesUsingJql, mcp__claude_ai_Atlassian_MCP__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_MCP__getJiraIssue, mcp__claude_ai_Atlassian_MCP__searchJiraIssuesUsingJql
+allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh issue view:*), Bash(gh repo view:*), mcp__claude_ai_Atlassian_Rovo__getTransitionsForJiraIssue, mcp__claude_ai_Atlassian_Rovo__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_Rovo__getJiraIssue, mcp__claude_ai_Atlassian_Rovo__searchJiraIssuesUsingJql, mcp__claude_ai_Atlassian_MCP__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_MCP__getJiraIssue, mcp__claude_ai_Atlassian_MCP__searchJiraIssuesUsingJql, Bash(acli jira workitem view:*), Bash(acli jira workitem comment list:*)
 ---
 
 Argument : `$ARGUMENTS`
@@ -163,7 +163,8 @@ chaque PR ses approbations (même règle).
 **Tickets** : la clé JIRA de chaque PR, cherchée comme à l'étape 4 de `pr-sync` (déjà
 trouvée pour cette PR ; pour les autres PR de la pile : nom de branche, titre,
 description). Pour chaque ticket : `getJiraIssue` (résumé, statut, description) et ses
-PR. Pas de ticket JIRA (issue GitHub, rien) : pas de passage de statut, le message reste
+PR ; sans MCP Atlassian, `acli jira workitem view <clé> --fields '*all' --json` si `acli`
+est connecté. Pas de ticket JIRA (issue GitHub, rien) : pas de passage de statut, le message reste
 possible.
 
 **Statut** (`<statut>`) : `validation_status` des `<réglages>`, sinon `En validation`.
@@ -210,7 +211,8 @@ Montrer les tickets à passer (`<KEY>` : statut actuel → `<statut>`) et le mes
 - **Plus tard** → étape 6.
 
 Accord → `transitionJiraIssue` pour chaque ticket (un échec n'arrête pas les autres : le
-dire). Puis redonner le message final dans un bloc de code, prêt à copier ; si
+dire) ; sans MCP Atlassian, `acli jira workitem transition --key <clé> --status "<statut>"
+--yes` (pas de liste des transitions : un échec, le dire avec le statut actuel). Puis redonner le message final dans un bloc de code, prêt à copier ; si
 `wl-copy` ou `xclip` existe, proposer de le mettre dans le presse-papiers.
 
 ## 6. Fin

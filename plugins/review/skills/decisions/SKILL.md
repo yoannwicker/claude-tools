@@ -3,7 +3,7 @@ name: decisions
 description: Revue des décisions d'une PR ou de son propre travail — architecture, fonctionnel, écart au ticket, contrat et données, non-décisions — relevées par l'agent challenger ; seules celles qui font sujet sont présentées, avec un avis demandé point par point. PR d'un collègue : les retours validés sont postés en une review GitHub et suivis dans le commentaire de suivi de /review:pr. Son propre travail : chaque point est traité sur place (correction, ou justification ajoutée à la description de la PR dans « Choix assumés »). Aussi proposée par /review:pr et /review:diff, en même temps que leur revue
 argument-hint: "[numéro | recherche]"
 disable-model-invocation: true
-allowed-tools: Bash(gpr list:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Agent, Skill
+allowed-tools: Bash(gpr list:*), Bash(gh pr list:*), Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh issue view:*), Bash(gh api user:*), Bash(gh api graphql:*), Bash(gh repo view:*), Bash(git:*), Bash(review-post:*), mcp__claude_ai_Atlassian_Rovo__getJiraIssue, Bash(acli jira workitem view:*), Bash(acli jira workitem comment list:*), Agent, Skill
 ---
 
 Arguments : `$ARGUMENTS`

@@ -157,4 +157,18 @@ check 'générations simultanées : aucun lien écrit dans un dossier de ~/.clau
   test -z "$(find "$HOME/.claude" -mindepth 2 -maxdepth 2 -type l -lname "$HOME/.claude/*")"
 check 'verrou-dossier de ~/.claude vide' test -z "$(ls -A "$HOME/.claude/.oauth_refresh.lock")"
 
+# Jeton longue durée : switch/run le passent à claude (CLAUDE_CODE_OAUTH_TOKEN) ; CLAUDE_PROFILE_LOGIN=1
+# lance sans (connexion /login), même s'il était déjà posé ; sans fichier, rien.
+cat > "$tmp/fake/claude" <<'FAKE'
+#!/usr/bin/env bash
+echo "jeton=${CLAUDE_CODE_OAUTH_TOKEN:-aucun}" >> "$CALLS"
+FAKE
+token_seen() { : > "$CALLS"; env "$@" PATH="$tmp/fake:$PATH" "$cp_" switch lean >/dev/null 2>&1; cat "$CALLS"; }
+check 'sans fichier de jeton : rien de passé' test "$(token_seen)" = jeton=aucun
+printf 'sk-ant-oat01-test\n' > "$HOME/.claude-profiles/.oauth-token"
+check 'jeton du fichier passé à claude' test "$(token_seen)" = jeton=sk-ant-oat01-test
+check 'CLAUDE_PROFILE_LOGIN=1 : connexion /login, sans jeton' test "$(token_seen CLAUDE_PROFILE_LOGIN=1 CLAUDE_CODE_OAUTH_TOKEN=x)" = jeton=aucun
+check 'jeton déjà posé : gardé' test "$(token_seen CLAUDE_CODE_OAUTH_TOKEN=autre)" = jeton=autre
+rm "$HOME/.claude-profiles/.oauth-token"
+
 [ "$fails" -eq 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }

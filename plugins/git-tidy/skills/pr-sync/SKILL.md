@@ -3,7 +3,7 @@ name: pr-sync
 description: Mettre une PR GitHub à jour — rebase proposé si elle est en retard (sur sa base, sur une autre branche, ou toute la pile de PR), puis description en phase avec ce qui a réellement changé, raccordée au ticket JIRA ou à l'issue GitHub lié — mise à jour du ticket ou commentaire si besoin, toujours après accord
 argument-hint: "[numéro de PR]"
 disable-model-invocation: true
-allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh issue view:*), Bash(gh repo view:*), mcp__claude_ai_Atlassian_Rovo__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_Rovo__getJiraIssue, mcp__claude_ai_Atlassian_Rovo__searchJiraIssuesUsingJql, mcp__claude_ai_Atlassian_MCP__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_MCP__getJiraIssue, mcp__claude_ai_Atlassian_MCP__searchJiraIssuesUsingJql
+allowed-tools: Bash(git:*), Bash(gh pr view:*), Bash(gh pr list:*), Bash(gh issue view:*), Bash(gh repo view:*), mcp__claude_ai_Atlassian_Rovo__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_Rovo__getJiraIssue, mcp__claude_ai_Atlassian_Rovo__searchJiraIssuesUsingJql, mcp__claude_ai_Atlassian_MCP__getAccessibleAtlassianResources, mcp__claude_ai_Atlassian_MCP__getJiraIssue, mcp__claude_ai_Atlassian_MCP__searchJiraIssuesUsingJql, Bash(acli jira workitem view:*), Bash(acli jira workitem comment list:*)
 ---
 
 Argument : `$ARGUMENTS`
@@ -147,8 +147,11 @@ divergé ; pile : toutes en une fois, de bas en haut) / **Plus tard**.
 - **JIRA** : outils MCP Atlassian, quel que soit le serveur (`claude.ai Atlassian Rovo` ou
   `claude.ai Atlassian MCP`, selon le profil) (`getAccessibleAtlassianResources` pour le `cloudId`,
   puis `getJiraIssue`) : résumé, description, critères d'acceptation, statut, sous-tâches,
-  derniers commentaires. MCP Atlassian absent ou non authentifié : le dire, traiter la PR
-  seule.
+  derniers commentaires. Sans MCP Atlassian (session sur le jeton longue durée du plugin
+  profiles, Cursor…) : la CLI Atlassian `acli` si elle est connectée (`acli jira auth status`),
+  `acli jira workitem view <clé> --fields '*all' --json` et
+  `acli jira workitem comment list --key <clé> --json --paginate`. Ni l'un ni l'autre : le
+  dire, traiter la PR seule.
 - **Issue GitHub** : `gh issue view <n> --comments`.
 
 Comparer le ticket et la PR :
@@ -196,7 +199,9 @@ Puis `AskUserQuestion` (header « Publier »), une option par combinaison utile 
   scratchpad). Fichier des choix assumés repris dans la description publiée : le
   supprimer.
 - JIRA : `addCommentToJiraIssue` ou `editJiraIssue` (charger leur schéma via ToolSearch si
-  besoin) ; description en Markdown.
+  besoin) ; description en Markdown. Par `acli` : `acli jira workitem comment create --key <clé>
+  --body-file <fichier>` ou `acli jira workitem edit --key <clé> --description-file <fichier>
+  --yes` (texte simple : le Markdown n'y est pas mis en forme).
 - Issue GitHub : `gh issue comment <n> --body-file <fichier>` ou
   `gh issue edit <n> --body-file <fichier>`.
 
