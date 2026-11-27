@@ -304,14 +304,26 @@ repair_base_plugins() {
   ln -s "$c" "$p"
 }
 
-# Lien $2 -> $1 (cible résolue), sauf sur un vrai dossier, gardé.
+# Lien $2 -> $1 (cible résolue), sauf sur un vrai dossier, gardé. -n : si $2 est déjà un lien vers
+# un dossier (autre lancement en même temps), le remplacer au lieu d'écrire le lien dedans.
 link_entry() {
   if [ -d "$2" ] && [ ! -L "$2" ]; then
     echo "conservé (dossier propre au profil) : $2" >&2
     return
   fi
-  rm -f "$2"
-  ln -s "$(readlink -f "$1")" "$2"
+  ln -sfn "$(readlink -f "$1")" "$2"
+}
+
+# Verrous-dossiers de Claude Code (*.lock créé par mkdir, ex. .oauth_refresh.lock pendant le
+# renouvellement du jeton) : jamais liés. Claude libère un verrou par rmdir, qui échoue sur un
+# lien : un verrou relié restait pris pour toujours, et le jeton expiré ne se renouvelait plus.
+# Retire les liens de verrou d'un profil (vers un dossier ou morts ; daemon.lock, un fichier, reste).
+drop_lock_links() {
+  local l
+  for l in "$1"/*.lock "$1"/.*.lock; do
+    [ -L "$l" ] && [ ! -f "$l" ] && rm -f "$l"
+  done
+  return 0
 }
 
 generate() {
@@ -328,10 +340,12 @@ generate() {
   mkdir -p "$dir"
   repair_credentials "$dir"
   [ -n "$withbase" ] && repair_base_plugins "$name"
+  drop_lock_links "$dir"
   for e in "$base"/* "$base"/.[!.]*; do
     [ -e "$e" ] || [ -L "$e" ] || continue
     n=${e##*/}
     [ "$n" = settings.json ] && continue
+    [[ "$n" == *.lock ]] && [ -d "$e" ] && continue
     [ -n "$withbase" ] && [[ " $own_config " == *" $n "* ]] && { [ -L "$dir/$n" ] && rm -f "$dir/$n"; continue; }
     link_entry "$e" "$dir/$n"
   done

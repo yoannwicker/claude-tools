@@ -382,6 +382,14 @@ variable (nom réservé `reference`).
   par renommage, ce qui peut remplacer le lien par un fichier (jetons rafraîchis dans le
   profil). À chaque génération, un tel fichier plus récent que celui de `~/.claude` le
   remplace, puis le lien est reposé.
+- Verrous : les verrous-dossiers de `~/.claude` (`*.lock` créés par `mkdir`, comme
+  `.oauth_refresh.lock` pendant le renouvellement du jeton) ne sont jamais reliés, et un ancien
+  lien est retiré. Claude libère un verrou par `rmdir`, qui échoue sur un lien ; et des
+  générations simultanées (plusieurs sessions reprises au démarrage) écrivaient un lien dans le
+  verrou lié. Le verrou restait alors pris pour toujours : le jeton expiré ne se renouvelait
+  plus, et le profil vidal, qui doit charger les réglages de l'organisation au démarrage,
+  bloquait sur « couldn't verify your sign-in » jusqu'au `/login`. Les liens sont posés avec
+  `ln -sfn`, qui remplace un lien existant au lieu d'écrire dans le dossier qu'il vise.
 - Un `settings.json` modifié dans un profil (`/config`, `claude plugin enable`) est
   écrasé à la génération suivante : reporter le changement dans le profil de référence, ou dans
   `profiles/<nom>.json` pour les plugins.

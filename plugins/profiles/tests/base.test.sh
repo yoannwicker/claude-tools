@@ -144,4 +144,17 @@ expect 0 'plus anciens que ceux de la base' base vidal update
 check 'plugins du profil plus anciens : écartés, lien reposé' test "$(readlink -f "$d/plugins")" = "$bp" -a "$(cat "$bp/marque")" = profil
 check 'plugins du profil écartés gardés' test "$(cat "$HOME/.claude-profiles/.bases/vidal/plugins.old/installed_plugins.json")" = '{}'
 
+# Verrou-dossier de Claude (.oauth_refresh.lock) pris dans ~/.claude pendant la génération : jamais
+# relié (rmdir échoue sur un lien, le verrou ne se libérait plus), un ancien lien est retiré ;
+# daemon.lock (un fichier) reste lié. Générations simultanées : rien d'écrit dans un dossier lié.
+mkdir "$HOME/.claude/.oauth_refresh.lock"; echo 1 > "$HOME/.claude/daemon.lock"
+ln -s "$HOME/.claude/.oauth_refresh.lock" "$d/.oauth_refresh.lock"
+expect 0 'généré : vidal' generate vidal
+check 'verrou-dossier non relié dans le profil' test ! -e "$d/.oauth_refresh.lock" -a ! -L "$d/.oauth_refresh.lock"
+check 'daemon.lock (fichier) toujours lié' test -L "$d/daemon.lock"
+for i in 1 2 3 4 5 6; do PATH=$tmp/fake:$PATH "$cp_" generate vidal >/dev/null 2>&1 & done; wait
+check 'générations simultanées : aucun lien écrit dans un dossier de ~/.claude' \
+  test -z "$(find "$HOME/.claude" -mindepth 2 -maxdepth 2 -type l -lname "$HOME/.claude/*")"
+check 'verrou-dossier de ~/.claude vide' test -z "$(ls -A "$HOME/.claude/.oauth_refresh.lock")"
+
 [ "$fails" -eq 0 ] && echo "tous les tests passent" || { echo "$fails échec(s)"; exit 1; }
